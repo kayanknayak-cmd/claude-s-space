@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Epicycle Machine</title>
+<style>
+:root{--bg:#0b0d14;--fg:#e8e6df;--mute:#8a8c99;--acc:#f2b84b;--acc2:#5ec8d8;--ring:rgba(232,230,223,.16);--panel:#141824}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f6f3ec;--fg:#1b1d26;--mute:#6b6d78;--acc:#c46a12;--acc2:#1f7f8f;--ring:rgba(27,29,38,.14);--panel:#ebe6da}}
+:root[data-theme="dark"]{--bg:#0b0d14;--fg:#e8e6df;--mute:#8a8c99;--acc:#f2b84b;--acc2:#5ec8d8;--ring:rgba(232,230,223,.16);--panel:#141824}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 ui-sans-serif,system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:20px 16px 40px}
+h1{font:600 26px/1.1 Georgia,serif;margin:0 0 4px}
+p.sub{color:var(--mute);margin:0 0 14px}
+.stage{position:relative;background:var(--panel);border-radius:14px;overflow:hidden;touch-action:none}
+canvas{display:block;width:100%;height:auto;cursor:crosshair}
+.hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mute);pointer-events:none;font-size:17px;text-align:center;padding:16px}
+.bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin:14px 0}
+button{background:transparent;color:var(--fg);border:1px solid var(--ring);border-radius:999px;padding:6px 14px;font:inherit;cursor:pointer}
+button:hover{border-color:var(--acc)}
+label{display:flex;align-items:center;gap:8px;color:var(--mute)}
+input[type=range]{width:180px;accent-color:var(--acc)}
+.num{color:var(--acc);font-variant-numeric:tabular-nums;min-width:3ch}
+.math{color:var(--mute);font-size:14px;border-top:1px solid var(--ring);padding-top:12px}
+.math code{color:var(--acc2)}
+</style>
+</head>
+<body>
+<main>
+<h1>Epicycle Machine</h1>
+<p class="sub">Draw any closed loop. A stack of spinning circles will learn to redraw it. Then take circles away and watch the shape dissolve into its frequencies.</p>
+<div class="stage" id="stage"><canvas id="c" width="960" height="600"></canvas><div class="hint" id="hint">Click and drag to draw a shape</div></div>
+<div class="bar">
+  <label>Circles <input id="k" type="range" min="1" max="256" value="256"><span class="num" id="kv">256</span></label>
+  <label>Speed <input id="sp" type="range" min="1" max="20" value="6"></label>
+  <button data-p="heart">Heart</button><button data-p="star">Star</button><button data-p="inf">Infinity</button><button data-p="square">Square</button>
+  <button id="guess">Guess mode</button>
+</div>
+<div class="math" id="info">Each circle is one term of the discrete Fourier transform: <code>X<sub>k</sub> = Σ x<sub>n</sub> e<sup>−2πikn/N</sup></code>. Its radius is <code>|X<sub>k</sub>|/N</code>, its speed is the frequency <code>k</code>, and its starting angle is <code>arg X<sub>k</sub></code>. Chained tip to tail, largest first, they trace your drawing exactly.</div>
+</main>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height,N=256;
+const kIn=document.getElementById('k'),kv=document.getElementById('kv'),sp=document.getElementById('sp'),hint=document.getElementById('hint'),info=document.getElementById('info');
+let coefs=[],t=0,trail=[],drawing=false,raw=[],target=[],guess=null;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function resample(pts){ // equal arc-length spacing, closing the loop
+  const p=pts.concat([pts[0]]),d=[0];
+  for(let i=1;i<p.length;i++)d.push(d[i-1]+Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]));
+  const L=d[d.length-1],out=[];let j=0;
+  for(let i=0;i<N;i++){const s=i*L/N;while(d[j+1]<s)j++;const f=(s-d[j])/((d[j+1]-d[j])||1);
+    out.push([p[j][0]+f*(p[j+1][0]-p[j][0]),p[j][1]+f*(p[j+1][1]-p[j][1])]);}
+  return out;
+}
+function dft(x){
+  const out=[];
+  for(let k=0;k<N;k++){let re=0,im=0;
+    for(let n=0;n<N;n++){const a=-2*Math.PI*k*n/N;re+=x[n][0]*Math.cos(a)-x[n][1]*Math.sin(a);im+=x[n][0]*Math.sin(a)+x[n][1]*Math.cos(a);}
+    const f=k<=N/2?k:k-N; // signed frequency so circles spin both ways
+    out.push({f,r:Math.hypot(re,im)/N,ph:Math.atan2(im,re)});}
+  return out.sort((a,b)=>b.r-a.r);
+}
+function load(pts){
+  if(pts.length<3)return;
+  target=resample(pts);
+  const cx=W/2,cy=H/2;coefs=dft(target.map(([x,y])=>[x-cx,y-cy]));
+  t=0;trail=[];hint.style.display='none';
+}
+const presets={
+  heart:()=>Array.from({length:400},(_,i)=>{const s=i/400*2*Math.PI;return[W/2+14*16*Math.sin(s)**3,H/2-14*(13*Math.cos(s)-5*Math.cos(2*s)-2*Math.cos(3*s)-Math.cos(4*s))];}),
+  star:()=>Array.from({length:10},(_,i)=>{const a=-Math.PI/2+i*Math.PI/5,r=i%2?95:240;return[W/2+r*Math.cos(a),H/2+r*Math.sin(a)];}),
+  inf:()=>Array.from({length:400},(_,i)=>{const s=i/400*2*Math.PI,d=1+Math.sin(s)**2;return[W/2+330*Math.cos(s)/d,H/2+330*Math.sin(s)*Math.cos(s)/d];}),
+  square:()=>[[W/2-220,H/2-220],[W/2+220,H/2-220],[W/2+220,H/2+220],[W/2-220,H/2+220]]
+};
+document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{guess=null;load(presets[b.dataset.p]())});
+
+function pos(e){const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height];}
+cv.addEventListener('pointerdown',e=>{drawing=true;raw=[pos(e)];coefs=[];trail=[];hint.style.display='none';cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(drawing)raw.push(pos(e));});
+cv.addEventListener('pointerup',()=>{drawing=false;guess=null;load(raw);});
+kIn.oninput=()=>{kv.textContent=kIn.value;trail=[];};
+
+// Guess mode: show only the circles, hide your shape, reveal circle count slowly
+document.getElementById('guess').onclick=()=>{
+  const keys=Object.keys(presets),p=keys[Math.floor(Math.random()*keys.length)];
+  guess=p;load(presets[p]());kIn.value=1;kv.textContent=1;
+  info.innerHTML='Guess mode: a mystery shape is hidden. Drag the <b>Circles</b> slider up one notch at a time. How few circles do you need before you can name it? <button id="rev">Reveal</button>';
+  document.getElementById('rev').onclick=()=>{info.innerHTML='It was the <b>'+guess+'</b>. Heart and infinity are smooth, so they converge fast. The square has corners, which need high frequencies, so it ripples (the Gibbs phenomenon) until nearly every circle is in.';guess=null;};
+};
+
+function frame(){
+  const fg=css('--fg'),ring=css('--ring'),acc=css('--acc'),acc2=css('--acc2');
+  ctx.clearRect(0,0,W,H);
+  if(drawing&&raw.length>1){ctx.strokeStyle=acc2;ctx.lineWidth=2.5;ctx.beginPath();raw.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();}
+  if(coefs.length){
+    if(target.length&&!guess){ctx.strokeStyle=ring;ctx.lineWidth=1;ctx.beginPath();target.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.stroke();}
+    const K=+kIn.value;let x=W/2,y=H/2;
+    for(let i=0;i<K;i++){const c=coefs[i],a=c.f*t+c.ph,nx=x+c.r*Math.cos(a),ny=y+c.r*Math.sin(a);
+      if(c.r>0.6){ctx.strokeStyle=ring;ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,c.r,0,2*Math.PI);ctx.stroke();
+        ctx.strokeStyle=fg;ctx.globalAlpha=.55;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(nx,ny);ctx.stroke();ctx.globalAlpha=1;}
+      x=nx;y=ny;}
+    trail.push([x,y]);while(trail.length>Math.round(N*6/+sp.value))trail.shift();
+    ctx.strokeStyle=acc;ctx.lineWidth=2.5;ctx.lineCap='round';ctx.beginPath();trail.forEach(([px,py],i)=>i?ctx.lineTo(px,py):ctx.moveTo(px,py));ctx.stroke();
+    ctx.fillStyle=acc;ctx.beginPath();ctx.arc(x,y,4,0,2*Math.PI);ctx.fill();
+    t+=2*Math.PI/N*(+sp.value/6);
+  }
+  requestAnimationFrame(frame);
+}
+load(presets.heart());frame();
+</script>
+</body>
+</html>
