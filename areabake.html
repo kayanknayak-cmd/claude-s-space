@@ -232,7 +232,7 @@ kbd{font:400 11px/1 var(--mono);padding:2px 5px;border:1px solid var(--line);bor
   </aside>
 
   <div class="hud" id="hud" hidden aria-live="polite"></div>
-  <div class="ff" id="ff" hidden><span class="ff-ch" aria-hidden="true"><i></i><i></i><i></i></span><span>Fast-forward</span></div>
+  <div class="ff" id="ff" hidden aria-label="Fast-forward"><span class="ff-ch" aria-hidden="true"><i></i><i></i><i></i></span></div>
   <div class="card" id="card" hidden role="dialog" aria-labelledby="card-title">
     <div class="eyebrow">Level complete</div>
     <div class="card-title" id="card-title"></div>
@@ -1039,11 +1039,7 @@ function Slingshot() {
   }
   function retire(c) {
     if (c.fate === 'crash') { Sound.thud(); burst(c.x, c.y, '#ffb47a', 26); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); }
-    if (S.mode === 'level' && !S.won && current === X) {
-      if (c.fate === 'lost') hint('That one escaped. It is moving too fast to ever fall back. Throw again.');
-      else if (c.fate === 'loop') hint('That orbit just repeats forever, so it will never reach another target. Your throw.');
-      else if (c.fate === 'crash') hint('Burned up in a star. Throw again.');
-    }
+
     if (S.mode === 'level') { S.ghosts.push(c.trail); if (S.ghosts.length > 3) S.ghosts.shift(); }
   }
   function syncSpeed() {
@@ -1054,7 +1050,6 @@ function Slingshot() {
   function ffUI() {
     const el = $('#ff'), on = S.ffK > 1.6 && current === X;
     if (el.hidden === on) el.hidden = !on;
-    if (on) { const t = `Fast-forward ${Math.round(S.ffK)}×  ·  ${S.ffWhy}`; if (el.lastChild.textContent !== t) el.lastChild.textContent = t; }
   }
   function burst(x, y, color, n) {
     for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 0.2 + Math.random() * 0.6; S.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.5, age: 0, color }); }
@@ -1158,10 +1153,6 @@ function Slingshot() {
     const was = S.ff;
     S.ff = !!live && live.t - live.fresh > STALE;
     if (S.ff && !was) live.ffBase = live.novel || 0;
-    if (live && S.ff) {
-      const off = Math.abs(live.x) > 1.9 || Math.abs(live.y) > 1.2;
-      S.ffWhy = off ? 'it is on a long loop out and back' : 'this orbit only repeats';
-    }
     ffUI();
   }
   function preview(vx, vy, x, y) {
@@ -1428,7 +1419,7 @@ function Slingshot() {
           buttons([{ name: 'One star', on: () => loadSandbox() }, { name: 'Binary', on: () => { loadSandbox('binary'); S.sb.move = true; rebuildPanel(); } }, { name: 'Cluster', on: () => loadSandbox('cluster') }, { name: 'Empty', on: () => loadSandbox('empty') }, { name: 'Clear comets', on: () => { S.comets = []; hud(); } }])));
       }
       items.push(group('Time', slider('s-speed', 'Speed of time', 0.25, 4, 0.05, S.speed, () => fmtSpeed(), v => { S.speed = v; hud(); }),
-        note('Comets never stop. When one only repeats itself, time fast-forwards so you can see it would never reach anything new.')));
+        null));
       items.push(group('Aiming help', chips('s-assist', [{ id: 'off', name: 'Off' }, { id: 'short', name: 'Short' }, { id: 'long', name: 'Long' }], S.assist, it => S.assist = it.id)));
       items.push(group(null, toggle('s-sound', 'Sound', Sound.on, v => { Sound.on = v; if (v) Sound.wake(); })));
       return items;
@@ -1484,8 +1475,8 @@ function Attractor() {
   ];
   const COUNTS = [{ id: 18, name: '262K' }, { id: 19, name: '524K' }, { id: 20, name: '1M' }, { id: 21, name: '2M' }];
   const S = {
-    sys: SYS[0], prev: null, mix: 1, k: {}, style: 'streaks', pal: PALETTES[0], log2n: (window.__areabakeTest && window.__areabakeTest.log2n) || (matchMedia('(max-width: 760px)').matches ? 18 : 19), speed: 1, trails: false, glow: 1,
-    yaw: -0.55, pitch: 0.42, dist: 3.9, burst: [0, 0, 0, 0], burstT: 0, now: 0, dyeStart: 0, dyeReq: null, perf: 1 / 60, perfN: 0, userN: false, spin: !REDUCED, vyaw: 0, scatter: 0, seed: 7,
+    sys: SYS[0], prev: null, mix: 1, k: {}, style: 'points', pal: PALETTES[0], log2n: (window.__areabakeTest && window.__areabakeTest.log2n) || (matchMedia('(max-width: 760px)').matches ? 18 : 19), speed: 1, trails: false, glow: 1,
+    yaw: -0.55, pitch: 0.42, dist: 3.9, target: [0, 0, 0], frozen: false, fly: false, flyT: 0, burst: [0, 0, 0, 0], burstT: 0, now: 0, dyeStart: 0, dyeReq: null, perf: 1 / 60, perfN: 0, userN: false, spin: !REDUCED, vyaw: 0, scatter: 0, seed: 7,
   };
   SYS.forEach(s => S.k[s.id] = s.k);
   let upd, draw, fade, post, down, up, N = 0, bufs = [], vaos = [], cur = 0, tf, hdr = null, chain = [], drag = false, gest = null;
@@ -1534,7 +1525,7 @@ function Attractor() {
     }
     if (u_scatter > 1.5) {
       // butterfly effect: everyone starts inside one tiny ball
-      p = u_burst.xyz + normalize(r * 2.0 - 1.0 + 1e-6) * u_burst.w * pow(r.x, 0.333); w = u_now;
+      p = u_burst.xyz + normalize(r * 2.0 - 1.0 + 1e-6) * u_burst.w * pow(r.x, 0.333); w = -1e4;
     } else if (!dyed && (!(dot(p, p) < 7.0) || (roll < u_respawn && u_burst.w <= 0.0) || u_scatter > 0.5)) {
       p = (r * 2.0 - 1.0) * (u_scatter > 0.5 ? 1.25 : 0.7); w = -1e4;
     }
@@ -1682,12 +1673,18 @@ function Attractor() {
     gl.bindVertexArray(null);
     cur = dst;
   }
+  // a slow path that wanders through the middle of the swarm
+  const flyPath = t => [0.85 * Math.sin(t * 0.11), 0.85 * Math.sin(t * 0.083 + 1.3), 0.7 * Math.sin(t * 0.061 + 2.1)];
+  function eyeAndTarget() {
+    if (S.fly) return [flyPath(S.flyT), flyPath(S.flyT + 0.6)];
+    const cy = Math.cos(S.yaw), sy = Math.sin(S.yaw), cp = Math.cos(S.pitch), sp = Math.sin(S.pitch), T = S.target;
+    return [[T[0] + S.dist * cp * cy, T[1] + S.dist * cp * sy, T[2] + S.dist * sp], T];
+  }
   function mvp() {
-    const cy = Math.cos(S.yaw), sy = Math.sin(S.yaw), cp = Math.cos(S.pitch), sp = Math.sin(S.pitch);
-    const e = [S.dist * cp * cy, S.dist * cp * sy, S.dist * sp];
-    const z = norm(e), x = norm(cross([0, 0, 1], z)), y = cross(z, x);
+    const [eye, T] = eyeAndTarget();
+    const e = eye, z = norm([e[0] - T[0], e[1] - T[1], e[2] - T[2]]), x = norm(cross([0, 0, 1], z)), y = cross(z, x);
     const view = [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1];
-    const a = W / H, n = 0.05, fr = 50, fov = projY();
+    const a = W / H, n = 0.0005, fr = 60, fov = projY();
     const proj = [fov / a, 0, 0, 0, 0, fov, 0, 0, 0, 0, (fr + n) / (n - fr), -1, 0, 0, 2 * fr * n / (n - fr), 0];
     return mul(proj, view);
   }
@@ -1708,6 +1705,14 @@ function Attractor() {
     return P;
   }
   function dropDye(px, py) { S.dyeReq = pickWorld(px, py); S.burst = [0, 0, 0, 0]; coachDone('attractor'); }
+  function zoom(f) { S.dist = clamp(S.dist * f, 0.0008, 12); }
+  function panBy(dx, dy) {
+    // slide the point the camera circles, in the plane of the screen
+    const [e, T] = eyeAndTarget(), z = norm([e[0] - T[0], e[1] - T[1], e[2] - T[2]]), x = norm(cross([0, 0, 1], z)), y = cross(z, x);
+    const k = S.dist * 2 / (H / DPR) / projY();
+    S.target = S.target.map((v, i) => v - x[i] * dx * k + y[i] * dy * k);
+  }
+  function resetCam() { S.target = [0, 0, 0]; S.dist = W < H ? 3.45 : 3.9; S.yaw = -0.55; S.pitch = 0.42; S.fly = false; const t = $('#a-fly'); if (t) t.set(false); }
   function orbitBy(dx, dy, fling) {
     S.yaw -= dx * 0.006; S.pitch = clamp(S.pitch + dy * 0.005, -1.45, 1.45);
     if (fling) S.vyaw = -dx * 0.18;
@@ -1732,15 +1737,15 @@ function Attractor() {
   const X = {
     id: 'attractor', ready: false,
     title: 'Attractor', kicker: 'Strange attractors',
-    get blurb() { return `${(N || 524288).toLocaleString('en-US')} particles follow one set of equations. Each path is chaotic and never repeats, yet every particle is pulled onto the same shape: that shape is the attractor. Drop dye anywhere, even far away, and watch it get pulled in and smeared across the whole thing. Switch systems and the swarm migrates from one shape to the next.`; },
+    get blurb() { return `${(N || 524288).toLocaleString('en-US')} particles follow one set of equations. Each path is chaotic and never repeats, yet every particle is pulled onto the same shape: that shape is the attractor. Freeze time and zoom in as far as you like; each particle is a point of light with no size at all.`; },
     get eq() { return S.sys.eq; },
-    hint: TOUCH ? 'Tap anywhere to drop dye into the flow' : 'Click anywhere to drop glowing dye into the flow',
-    coach: true, panelOpen: true, aboutOpen: false,
-    legendRows: TOUCH ? [['touch', 'Tap or drag', 'to drop dye into the flow'], ['pinch', 'Two fingers', 'to orbit and zoom']] : [
-      ['left', 'Click or drag', 'drop glowing dye into the flow'],
-      ['right', 'Right-drag', 'orbit the camera', 'or Shift-drag, or two-finger scroll'],
-      ['wheel', 'Scroll', 'zoom', 'or pinch'],
-      ['key', '<kbd>[</kbd> <kbd>]</kbd>', 'change system', '<kbd>Space</kbd> scatter the swarm'],
+    hint: TOUCH ? 'Drag to orbit, pinch to zoom' : 'Drag to orbit, scroll to zoom',
+    coach: false, panelOpen: true, aboutOpen: false,
+    legendRows: TOUCH ? [['touch', 'Drag', 'to orbit'], ['pinch', 'Two fingers', 'to zoom and pan']] : [
+      ['left', 'Drag', 'orbit'],
+      ['right', 'Right-drag', 'pan', 'or Shift-drag, or two-finger scroll'],
+      ['wheel', 'Scroll', 'zoom, as far in as you like'],
+      ['key', '<kbd>F</kbd>', 'freeze time', '<kbd>0</kbd> reset the camera'],
     ],
     init() {
       upd = program(UPD_VS, UPD_FS, ['v_p']);
@@ -1760,7 +1765,7 @@ function Attractor() {
       if (!this.entered) { this.entered = true; if (W < H) S.dist = 3.45; }
       document.body.dataset.tone = 'dark';
       document.documentElement.style.setProperty('--accent', S.pal.accent);
-      canvas.className = '';
+      canvas.className = 'grab';
     },
     frame(t, dt) {
       // step the swarm down a size if this GPU cannot keep up
@@ -1771,9 +1776,11 @@ function Attractor() {
       }
       if (S.prev) { S.mix += dt / 2.6; if (S.mix >= 1) { S.mix = 1; S.prev = null; } }
       S.now += dt;
-      if (S.spin && !drag) S.yaw += dt * 0.11;
+      if (S.spin && !drag && !S.fly) S.yaw += dt * 0.11;
       S.yaw += S.vyaw * dt; S.vyaw *= Math.pow(0.04, dt);
-      step(dt);
+      if (S.fly) S.flyT += dt;
+      // flying through the swarm slows time to a crawl; freezing stops it
+      if (!S.frozen) step(S.fly ? dt * 0.08 : dt);
       if (S.burst[3] > 0 && (S.burstT += dt) > 40) S.burst = [0, 0, 0, 0];
 
       // splat particles into the HDR buffer
@@ -1796,10 +1803,10 @@ function Attractor() {
       gl.uniform3fv(draw.u.u_d0, dc[0]); gl.uniform3fv(draw.u.u_d1, dc[1]); gl.uniform3fv(draw.u.u_d2, dc[2]);
       gl.uniform1f(draw.u.u_now, S.now); gl.uniform1f(draw.u.u_life, 30); gl.uniform1f(draw.u.u_dyeGain, S.burst[3] > 0 ? 1.3 : 7);
       // keep brightness steady across screen sizes, zoom and particle counts
-      const ppu = (H / 2) * projY() / S.dist, size = Math.max(1, DPR * 0.85), perN = 524288 / N;
+      const ppu = (H / 2) * projY() / (S.fly ? 1.2 : S.dist), size = Math.max(1, DPR * 0.85), perN = 524288 / N;
       const gain = S.trails ? 0.0075 * (ppu / 288) ** 2 / (size * size)
-        : S.style === 'streaks' ? 0.0245 * (ppu / 288) : 0.0385 * (ppu / 288) ** 2 / (size * size);
-      gl.uniform1f(draw.u.u_gain, gain * perN * S.glow * (HAS_FLOAT ? 1 : 0.6));
+        : S.style === 'streaks' ? 0.0245 * (ppu / 288) : 0.068 * (ppu / 288) ** 2 / (size * size);
+      gl.uniform1f(draw.u.u_gain, Math.min(1.4, gain * perN * S.glow) * (HAS_FLOAT ? 1 : 0.6));
       gl.bindVertexArray(vaos[cur]);
       if (S.style === 'streaks') {
         gl.uniform1f(draw.u.u_tail, 0.05);
@@ -1837,34 +1844,36 @@ function Attractor() {
       if (pts.size === 2) { const [p, q] = [...pts.values()]; gest = { kind: 'pinch', d: Math.hypot(p[0] - q[0], p[1] - q[1]), m: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2] }; drag = true; return; }
       if (pts.size > 2) return;
       const secondary = e.button === 1 || e.button === 2 || e.shiftKey || e.altKey;
-      gest = { kind: secondary ? 'orbit' : 'dye', lx: x, ly: y };
-      if (secondary) { drag = true; canvas.className = 'grabbing'; } else dropDye(x, y);
+      gest = { kind: secondary ? 'pan' : 'orbit' }; drag = true; canvas.className = 'grabbing';
+      if (S.fly) { S.fly = false; const t = $('#a-fly'); if (t) t.set(false); }
     },
     move(e) {
       if (!pts.has(e.pointerId) || !gest) return;
       const x = e.clientX, y = e.clientY, prev = pts.get(e.pointerId); pts.set(e.pointerId, [x, y]);
       if (gest.kind === 'pinch' && pts.size === 2) {
         const [p, q] = [...pts.values()], d = Math.hypot(p[0] - q[0], p[1] - q[1]), m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-        S.dist = clamp(S.dist * gest.d / d, 1.2, 9); orbitBy(m[0] - gest.m[0], m[1] - gest.m[1]);
+        zoom(gest.d / d); panBy(m[0] - gest.m[0], m[1] - gest.m[1]);
         gest.d = d; gest.m = m;
       } else if (gest.kind === 'orbit') orbitBy(x - prev[0], y - prev[1], true);
-      else if (gest.kind === 'dye' && Math.hypot(x - gest.lx, y - gest.ly) > 9) { dropDye(x, y); gest.lx = x; gest.ly = y; }
+      else if (gest.kind === 'pan') panBy(x - prev[0], y - prev[1]);
     },
-    up(e) { pts.delete(e.pointerId); if (!pts.size) { gest = null; drag = false; canvas.className = ''; } else if (gest && gest.kind === 'pinch') gest = null; },
+    up(e) { pts.delete(e.pointerId); if (!pts.size) { gest = null; drag = false; canvas.className = 'grab'; } else if (gest && gest.kind === 'pinch') gest = null; },
     wheel(e, kind) {
-      if (kind === 'scroll') orbitBy(-e.deltaX * 0.7, -e.deltaY * 0.7);
-      else S.dist = clamp(S.dist * Math.exp(e.deltaY * (kind === 'pinch' ? 0.01 : e.deltaMode ? 0.05 : 0.001)), 1.2, 9);
+      if (kind === 'scroll') panBy(-e.deltaX, -e.deltaY);
+      else zoom(Math.exp(e.deltaY * (kind === 'pinch' ? 0.01 : e.deltaMode ? 0.05 : 0.0012)));
     },
-    pinchZoom(f) { S.dist = clamp(S.dist / f, 1.2, 9); },
+    pinchZoom(f) { zoom(1 / f); },
+    dbl() { resetCam(); },
     key(e) {
       if (e.key === ' ') { S.burst = [0, 0, 0, 0]; S.scatter = 1; return true; }
       if (e.key === 'b' || e.key === 'B') { butterfly(); return true; }
-      if (e.key === 'd' || e.key === 'D') { dropDye(cssW / 2, cssH / 2); return true; }
+      if (e.key === 'f' || e.key === 'F') { S.frozen = !S.frozen; const t = $('#a-freeze'); if (t) t.set(S.frozen); return true; }
+      if (e.key === '0') { resetCam(); return true; }
       if (e.key === '[' || e.key === ']') { const i = SYS.indexOf(S.sys) + (e.key === ']' ? 1 : -1); setSystem(SYS[(i + SYS.length) % SYS.length]); return true; }
       const o = { ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[e.key];
       if (o) { orbitBy(o[0], o[1]); return true; }
-      if (e.key === '+' || e.key === '=') { S.dist = clamp(S.dist * 0.88, 1.2, 9); return true; }
-      if (e.key === '-') { S.dist = clamp(S.dist / 0.88, 1.2, 9); return true; }
+      if (e.key === '+' || e.key === '=') { zoom(0.85); return true; }
+      if (e.key === '-') { zoom(1 / 0.85); return true; }
     },
     _butterfly() { butterfly(); },
     _state: S, _sys: SYS, _set(id) { setSystem(SYS.find(s => s.id === id)); }, _step(dt) { step(dt); }, _alloc(n) { allocParticles(n); }, _read() { const d = new Float32Array(N * 4); gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cur]); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, d); gl.bindBuffer(gl.ARRAY_BUFFER, null); return Array.from(d); },
@@ -1877,9 +1886,13 @@ function Attractor() {
           slider('a-k-' + s.id, `${s.kname}, ${s.klabel}`, s.kmin, s.kmax, s.kstep, S.k[s.id], v => v.toFixed(s.kstep < 0.001 ? 4 : s.kstep < 0.01 ? 3 : 2), v => S.k[s.id] = v),
           note(s.khelp, 'note tip'),
           buttons([{ name: `Reset ${s.kname}`, on: resetK }])),
+        group('Camera',
+          toggle('a-freeze', 'Freeze time', S.frozen, v => S.frozen = v),
+          toggle('a-fly', 'Fly through the swarm', S.fly, v => { S.fly = v; if (v) S.flyT = 0; }),
+          buttons([{ name: 'Reset camera', on: resetCam }])),
         group('Look',
           swatches('a-pal', PALETTES, S.pal.id, it => { S.pal = it; document.documentElement.style.setProperty('--accent', it.accent); }),
-          chips('a-exp', [{ id: 'streaks', name: 'Streaks' }, { id: 'points', name: 'Points' }, { id: 'long', name: 'Long exposure' }], S.trails ? 'long' : S.style, it => { S.trails = it.id === 'long'; S.style = it.id === 'streaks' ? 'streaks' : 'points'; })),
+          chips('a-exp', [{ id: 'points', name: 'Points' }, { id: 'streaks', name: 'Streaks' }, { id: 'long', name: 'Long exposure' }], S.trails ? 'long' : S.style, it => { S.trails = it.id === 'long'; S.style = it.id === 'streaks' ? 'streaks' : 'points'; })),
         more('More',
           group('Particles', chips('a-n', COUNTS, S.log2n, it => { S.userN = true; S.log2n = it.id; allocParticles(it.id); S.scatter = 1; placard(X); })),
           group(null,
