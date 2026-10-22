@@ -420,8 +420,12 @@ function burst(x, y, col, n) {
   for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 0.2 + Math.random() * 0.7; S.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.6, age: 0, col }); }
 }
 function award(c, name, pts) {
-  S.tricks.push([name, pts]); S.score += pts; Sound.trick();
-  S.labels.push({ x: c.x, y: c.y, text: `${name} +${pts}`, age: 0 });
+  // each trick pays once per level, and labels earned together queue up and stack instead of overprinting
+  const kind = name.split(' ×')[0];
+  if (S.tricks.some(q => q[0].split(' ×')[0] === kind)) return;
+  S.tricks.push([name, pts]); S.score += pts;
+  const k = S.labels.filter(l => l.age < 0.4).length;
+  S.labels.push({ x: c.x, y: c.y, text: `${name} +${pts}`, age: -0.4 * k, slot: k, chimed: false });
 }
 function stars() { const L = level(); return S.shots <= L.par ? 3 : S.shots <= L.par + 2 ? 2 : 1; }
 function win(c) {
@@ -516,7 +520,7 @@ function simulate(dt) {
   for (const p of S.dust) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; }
   for (const p of S.sparks) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; }
   for (const w of S.waves) w.age += dt;
-  for (const l of S.labels) l.age += dt;
+  for (const l of S.labels) { l.age += dt; if (l.age >= 0 && !l.chimed) { l.chimed = true; Sound.trick(); } }
   S.dust = S.dust.filter(p => p.age < p.life); S.sparks = S.sparks.filter(p => p.age < p.life);
   S.waves = S.waves.filter(w => w.age < 1); S.labels = S.labels.filter(l => l.age < 1.8);
   stepTitle(dt);
@@ -687,6 +691,12 @@ function draw() {
   // aiming
   if (S.aim) {
     const A = S.aim, sp = Math.hypot(A.v[0], A.v[1]), pw = sp / (PULL * SPEED);
+    // the spot the drag began is the cancel zone: slide back into it and let go to call the throw off
+    g.strokeStyle = `rgba(239,232,218,${A.cancel && A.moved ? 0.75 : 0.22})`; g.lineWidth = 1.2;
+    g.beginPath(); g.arc(A.sx, A.sy, CANCEL_R, 0, 7); g.stroke();
+    if (A.cancel) {
+      if (A.moved) { const q = 8; g.beginPath(); g.moveTo(A.sx - q, A.sy - q); g.lineTo(A.sx + q, A.sy + q); g.moveTo(A.sx + q, A.sy - q); g.lineTo(A.sx - q, A.sy + q); g.stroke(); }
+    } else {
     g.fillStyle = acc;
     A.path.forEach((p, i) => { if (i % 4) return; const [sx, sy] = toScr(p[0], p[1]); g.globalAlpha = 1 - i / A.path.length; g.beginPath(); g.arc(sx, sy, 2, 0, 7); g.fill(); });
     g.globalAlpha = 1;
@@ -695,12 +705,14 @@ function draw() {
     g.beginPath(); g.arc(lx, ly, 22, -Math.PI / 2, -Math.PI / 2 + pw * Math.PI * 2); g.stroke();
     g.strokeStyle = 'rgba(239,232,218,.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(A.sx, A.sy); g.lineTo(A.cx, A.cy); g.stroke();
     g.fillStyle = 'rgba(239,232,218,.5)'; g.beginPath(); g.arc(A.cx, A.cy, 16, 0, 7); g.fill();
+    }
   }
   // trick labels drift up slowly and fade
   g.font = '500 15px "IBM Plex Mono", ui-monospace, monospace'; g.textAlign = 'center';
   for (const l of S.labels) {
+    if (l.age < 0) continue;
     const [sx, sy] = toScr(l.x, l.y), a = l.age < 0.2 ? l.age / 0.2 : 1 - Math.max(0, l.age - 1.1) / 0.7;
-    g.fillStyle = `rgba(255,211,110,${a})`; g.fillText(l.text, sx, sy - 26 - l.age * 22);
+    g.fillStyle = `rgba(255,211,110,${a})`; g.fillText(l.text, sx, sy - 26 - l.slot * 22 - l.age * 22);
   }
   if (CLIP) { g.font = '500 13px Jost, system-ui, sans-serif'; g.fillStyle = 'rgba(239,232,218,.6)'; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
   g.textAlign = 'start';
@@ -708,19 +720,24 @@ function draw() {
 
 /* ======================= input ======================= */
 let pointer = null;
+const CANCEL_R = 34;
 cvs.addEventListener('contextmenu', e => e.preventDefault());
 cvs.addEventListener('pointerdown', e => {
   Sound.wake();
   if (S.won) { if (S.time - S.wonAt > 1.2 && !S.replay) next(); return; }
-  if (S.replay || pointer) return;
+  // a second finger while aiming cancels the throw
+  if (pointer !== null) { S.aim = null; pointer = null; buzz(6); return; }
+  if (S.replay) return;
   releaseTitle();
   cvs.setPointerCapture(e.pointerId);
   pointer = e.pointerId;
-  S.aim = { sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, v: [0, 0], path: [] };
+  S.aim = { sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, v: [0, 0], path: [], cancel: true, moved: false };
 });
 cvs.addEventListener('pointermove', e => {
   if (e.pointerId !== pointer || !S.aim) return;
   const A = S.aim; A.cx = e.clientX; A.cy = e.clientY;
+  const was = A.cancel; A.cancel = Math.hypot(A.cx - A.sx, A.cy - A.sy) < CANCEL_R;
+  if (!A.cancel) A.moved = true; else if (!was && A.moved) buzz(6);
   // a drag of about 40% of the arena height is full power; pulling back throws forward
   const k = 0.55 / G.s;
   let px = -(A.cx - A.sx) * k, py = (A.cy - A.sy) * k;
@@ -730,7 +747,7 @@ cvs.addEventListener('pointermove', e => {
 const release = e => {
   if (e.pointerId !== pointer) return;
   pointer = null; const A = S.aim; S.aim = null;
-  if (A && e.type === 'pointerup' && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1]);
+  if (A && e.type === 'pointerup' && !A.cancel && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1]);
 };
 cvs.addEventListener('pointerup', release); cvs.addEventListener('pointercancel', release);
 document.addEventListener('gesturestart', e => e.preventDefault());
