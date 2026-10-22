@@ -1,4 +1,4 @@
-<title>Strange Gardens</title>
+<title>areabake</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="Three living mathematical exhibits: reaction-diffusion, Julia sets and strange attractors, rendered on the GPU.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -51,9 +51,10 @@ body.bare .ui{opacity:0;pointer-events:none}
   background:radial-gradient(ellipse at 0 0,var(--scrim) 0%,var(--scrim) 30%,transparent 72%);transition:background .6s}
 .placard{position:fixed;top:calc(env(safe-area-inset-top,0px) + 22px);left:calc(var(--gut) + 8px);
   width:min(25rem,calc(100vw - 2*var(--gut) - 16px));pointer-events:none;display:grid;gap:10px}
-.brand{font:500 10.5px/1 var(--body);letter-spacing:.32em;text-transform:uppercase;color:var(--mist);
-  display:flex;align-items:center;gap:10px}
-.brand::before{content:"";width:22px;height:1px;background:var(--accent)}
+.brand{display:flex;align-items:baseline;gap:10px;color:var(--mist)}
+.brand .mark{font:500 15px/1 var(--body);letter-spacing:.06em;color:var(--paper)}
+.brand .mark::after{content:"";display:inline-block;width:5px;height:5px;margin-left:3px;border-radius:50%;background:var(--accent);vertical-align:1px}
+.brand .tag{font:400 italic 15px/1 var(--display);color:var(--mist)}
 .placard h1{margin:4px 0 0;font:300 italic clamp(44px,6.4vw,76px)/.92 var(--display);letter-spacing:-.01em;text-wrap:balance}
 .kicker{font:500 11px/1.2 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
 .blurb{margin:0;max-width:24rem;color:var(--paper);opacity:.86;font-size:15px}
@@ -207,7 +208,7 @@ kbd{font:400 11px/1 var(--mono);padding:2px 5px;border:1px solid var(--line);bor
 <div class="ui">
   <div class="scrim"></div>
   <header class="placard" id="placard">
-    <div class="brand">Strange Gardens</div>
+    <div class="brand"><span class="mark">areabake</span><span class="tag">fresh math, baked on your GPU</span></div>
     <h1 id="title">Morphogen</h1>
     <div class="kicker" id="kicker"></div>
     <p class="blurb" id="blurb"></p>
@@ -265,7 +266,7 @@ const TOUCH = matchMedia('(pointer: coarse)').matches;
 const canvas = $('#gl');
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
 if (!gl) {
-  document.body.insertAdjacentHTML('beforeend', '<div class="fail">This garden grows on WebGL 2, which this browser has turned off. Try a recent Chrome, Firefox, Safari or Edge.</div>');
+  document.body.insertAdjacentHTML('beforeend', '<div class="fail">areabake bakes its images with WebGL 2, which this browser has turned off. Try a recent Chrome, Firefox, Safari or Edge.</div>');
   throw new Error('WebGL2 unavailable');
 }
 const HAS_FLOAT = !!gl.getExtension('EXT_color_buffer_float');
@@ -706,14 +707,14 @@ function Morphogen() {
       ['left', 'Drag', 'seed growth'],
       ['right', 'Right-drag', 'erase', 'or Alt-drag'],
       ['wheel', 'Scroll', 'change the brush size'],
-      ['key', '<kbd>Space</kbd>', 'reseed the garden'],
+      ['key', '<kbd>Space</kbd>', 'bake a fresh batch'],
     ],
     init() {
       if (!HAS_HALF) throw new Error('This exhibit needs floating-point render targets.');
       fmt = HAS_FLOAT ? gl.RGBA32F : gl.RGBA16F;
       sim = program(QUAD_VS, SIM_FS); disp = program(QUAD_VS, DISP_FS); copy = program(QUAD_VS, COPY_FS);
       alloc(Math.max(48, Math.round(cssW / CELL)), Math.max(48, Math.round(cssH / CELL)));
-      upload(seedData('garden'));
+      upload(seedData('mixed'));
       steps(REDUCED ? 600 : 260, null);
       S.warm = REDUCED ? 0 : 2.2;
       this.ready = true;
@@ -764,7 +765,7 @@ function Morphogen() {
     out() { hoverAt = null; clearOverlay(); },
     wheel(e, kind) { setBrush(S.brush * Math.exp(-e.deltaY * (kind === 'pinch' ? 0.02 : e.deltaMode ? 0.1 : 0.0025))); },
     pinchZoom(f) { setBrush(S.brush * f); },
-    key(e) { if (e.key === ' ') { upload(seedData(S.map ? 'map' : 'garden')); S.warm = 1.5; return true; } },
+    key(e) { if (e.key === ' ') { upload(seedData(S.map ? 'map' : 'mixed')); S.warm = 1.5; return true; } },
     _steps(n) { steps(n, null); },
     _state: S, _species: SPECIES, _seed(kind) { upload(seedData(kind)); },
     panel() {
@@ -774,7 +775,7 @@ function Morphogen() {
           chips('m-sp', SPECIES.map(s => ({ ...s, dot: s.col })), S.species.id, it => { S.species = it; hint(`Painting with ${it.name}: f = ${it.f}, k = ${it.k}`); }),
           buttons([
             { name: 'Fill canvas', title: 'Reseed everything as the chosen species', on: () => { S.map = false; $('#axes').hidden = true; $('#probe').hidden = true; upload(seedData('flood')); S.warm = 1.5; } },
-            { name: 'Reseed garden', on: () => { S.map = false; $('#axes').hidden = true; $('#probe').hidden = true; upload(seedData('garden')); S.warm = 2.2; } },
+            { name: 'Fresh batch', on: () => { S.map = false; $('#axes').hidden = true; $('#probe').hidden = true; upload(seedData('mixed')); S.warm = 2.2; } },
             { name: 'Clear', on: () => { S.map = false; $('#axes').hidden = true; $('#probe').hidden = true; upload(seedData('clear')); } },
           ])),
         group('Parameter space',
@@ -1233,7 +1234,7 @@ function Attractor() {
   ];
   const COUNTS = [{ id: 18, name: '262K' }, { id: 19, name: '524K' }, { id: 20, name: '1M' }, { id: 21, name: '2M' }];
   const S = {
-    sys: SYS[0], prev: null, mix: 1, k: {}, style: 'streaks', pal: PALETTES[0], log2n: (window.__gardenTest && window.__gardenTest.log2n) || (matchMedia('(max-width: 760px)').matches ? 18 : 19), speed: 1, trails: false, glow: 1,
+    sys: SYS[0], prev: null, mix: 1, k: {}, style: 'streaks', pal: PALETTES[0], log2n: (window.__areabakeTest && window.__areabakeTest.log2n) || (matchMedia('(max-width: 760px)').matches ? 18 : 19), speed: 1, trails: false, glow: 1,
     yaw: -0.55, pitch: 0.42, dist: 3.9, burst: [0, 0, 0, 0], burstT: 0, now: 0, dyeStart: 0, dyeReq: null, perf: 1 / 60, perfN: 0, userN: false, spin: !REDUCED, vyaw: 0, scatter: 0, seed: 7,
   };
   SYS.forEach(s => S.k[s.id] = s.k);
@@ -1749,18 +1750,18 @@ window.addEventListener('keydown', e => {
   if (current && current.key && current.key(e)) e.preventDefault();
 });
 window.addEventListener('resize', resize);
-canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); hint('The graphics context was lost. Reload the page to replant the garden.'); });
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); hint('The graphics context was lost. Reload the page to bake it again.'); });
 
 let last = performance.now(), failed = false;
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000)); last = now;
-  if (!current || document.hidden || window.__garden.paused) return;
+  if (!current || document.hidden || window.__areabake.paused) return;
   try { current.frame(now / 1000, dt); }
   catch (err) { if (!failed) { failed = true; console.error(err); hint('Something went wrong drawing this exhibit. Try another one, or reload.'); } }
 }
 resize();
-window.__garden = { exhibits, show: id => swap(exhibits[id]) };
+window.__areabake = { exhibits, show: id => swap(exhibits[id]) };
 show((location.hash || '').slice(1) || 'morphogen');
 requestAnimationFrame(loop);
 </script>

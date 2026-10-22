@@ -2,9 +2,9 @@
 
 Small things built for fun.
 
-## Strange Gardens (`strange-gardens.html`)
+## areabake (`areabake.html`)
 
-Three living mathematical exhibits, all computed on the GPU with WebGL 2 in a single HTML file.
+Fresh math, baked on your GPU. Each exhibit takes a region of the plane or of space and bakes it into an image, live, with WebGL 2. It's one HTML file with no server and no build step.
 
 - **Morphogen**: Gray-Scott reaction-diffusion. Drag to seed growth, right-drag to erase, scroll to resize the brush. Paint with six "species" (feed and kill rates), each of which grows its own pattern, or spread the whole parameter space across the screen at once.
 - **Julia**: the Mandelbrot set on the left is a map of every value of c. Hover over it and the Julia set on the right changes live; click to keep a value. Left-drag on the Julia set bends it by nudging c, hover traces the orbit of a point, right-drag (or Shift-drag, or a two-finger scroll) pans, and scrolling or pinching zooms either view.
