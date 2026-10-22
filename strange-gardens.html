@@ -1,0 +1,1484 @@
+<title>Strange Gardens</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Three living mathematical exhibits: reaction-diffusion, Julia sets and strange attractors, rendered on the GPU.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,300;1,400;1,500&family=Jost:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one full-bleed GPU canvas per exhibit, with a museum placard top-left,
+   an instrument panel top-right and a gallery switcher along the bottom edge. */
+:root{
+  color-scheme:dark;
+  --ink:#07080d;          /* gallery wall */
+  --paper:#ece5d6;        /* placard text */
+  --mist:#9d9aa9;         /* secondary text, violet-grey */
+  --line:rgba(236,229,214,.14);
+  --glass:rgba(9,10,16,.62);
+  --scrim:rgba(5,6,10,.78);
+  --halo:rgba(5,6,10,.9);
+  --accent:#8fe3cf;       /* set per exhibit */
+  --display:"Cormorant Garamond","Cormorant",Garamond,"Times New Roman",serif;
+  --body:"Jost","Futura","Century Gothic","Avenir Next",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --gut:max(16px,env(safe-area-inset-left,0px));
+  --gutR:max(16px,env(safe-area-inset-right,0px));
+}
+/* Light exhibits (a porcelain or vellum palette) flip the placard to ink on paper. */
+body[data-tone="light"]{
+  --paper:#1b1d28; --mist:#5d5a68; --line:rgba(27,29,40,.16);
+  --glass:rgba(246,242,233,.72); --scrim:rgba(244,240,231,.82); --halo:rgba(244,240,231,.95);
+}
+html,body{height:100%}
+body{
+  margin:0;background:var(--ink);color:var(--paper);font:300 15px/1.55 var(--body);
+  overflow:hidden;-webkit-font-smoothing:antialiased;
+  padding-left:var(--gut);padding-right:var(--gutR);
+}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none;cursor:crosshair;touch-action:none}
+#gl.grab{cursor:grab}#gl.grabbing{cursor:grabbing}
+#gl{transition:opacity .26s ease}#gl.dim{opacity:0}
+#orbit{position:fixed;inset:0;width:100%;height:100%;pointer-events:none}
+#gl.dim+#orbit{opacity:0}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.placard.rise>*{animation:rise .8s cubic-bezier(.2,.7,.2,1) both}
+.placard.rise>:nth-child(2){animation-delay:.06s}.placard.rise>:nth-child(3){animation-delay:.14s}
+.placard.rise>:nth-child(4){animation-delay:.2s}.placard.rise>:nth-child(5){animation-delay:.28s}
+.ui{transition:opacity .5s ease}
+body.bare .ui{opacity:0;pointer-events:none}
+
+/* Placard */
+.scrim{position:fixed;left:0;top:0;width:min(52rem,100vw);height:min(34rem,75vh);pointer-events:none;
+  background:radial-gradient(ellipse at 0 0,var(--scrim) 0%,var(--scrim) 30%,transparent 72%);transition:background .6s}
+.placard{position:fixed;top:calc(env(safe-area-inset-top,0px) + 22px);left:calc(var(--gut) + 8px);
+  width:min(25rem,calc(100vw - 2*var(--gut) - 16px));pointer-events:none;display:grid;gap:10px}
+.brand{font:500 10.5px/1 var(--body);letter-spacing:.32em;text-transform:uppercase;color:var(--mist);
+  display:flex;align-items:center;gap:10px}
+.brand::before{content:"";width:22px;height:1px;background:var(--accent)}
+.placard h1{margin:4px 0 0;font:300 italic clamp(44px,6.4vw,76px)/.92 var(--display);letter-spacing:-.01em;text-wrap:balance}
+.kicker{font:500 11px/1.2 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+.blurb{margin:0;max-width:24rem;color:var(--paper);opacity:.86;font-size:15px}
+.eq{display:grid;gap:2px;margin-top:4px;font:400 italic 21px/1.35 var(--display);color:var(--paper)}
+.eq span{white-space:nowrap}
+.eq sub,.eq sup{font-size:.62em;line-height:0}
+.eq .up{font-style:normal}
+.eq .nabla{display:inline-block;width:.6em;height:.62em;margin:0 .04em 0 .1em;vertical-align:-.02em;transform:skewX(-14deg);overflow:visible}
+.eq .nabla path{fill:none;stroke:currentColor;stroke-width:.75;stroke-linejoin:round}
+
+/* Instrument panel */
+.panel{position:fixed;top:calc(env(safe-area-inset-top,0px) + 18px);right:calc(var(--gutR) + 2px);width:272px;
+  max-height:calc(100% - 140px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overflow:auto;
+  background:var(--glass);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);
+  border:1px solid var(--line);border-radius:16px;padding:6px 16px 16px;scrollbar-width:thin}
+.panel-head{display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px}
+.panel-head span{font:500 10.5px/1 var(--body);letter-spacing:.24em;text-transform:uppercase;color:var(--mist)}
+.grp{display:grid;gap:9px;padding:13px 0 12px;border-top:1px solid var(--line)}
+.grp:first-of-type{border-top:0}
+.grp h3{margin:0;font:500 10.5px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--mist)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;color:inherit}
+.chip,.ghost{appearance:none;border:1px solid var(--line);background:transparent;border-radius:999px;
+  padding:5px 11px;font:400 13px/1.2 var(--body);cursor:pointer;color:var(--paper);transition:border-color .2s,background .2s,color .2s}
+.chip:hover,.ghost:hover{border-color:color-mix(in srgb,var(--accent) 60%,transparent)}
+.chip[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 18%,transparent);border-color:var(--accent);color:var(--paper)}
+.chip .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.ghost{border-style:dashed}
+.row{display:flex;flex-wrap:wrap;gap:6px}
+.sw{display:flex;gap:9px;flex-wrap:wrap}
+.swatch{appearance:none;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);cursor:pointer;padding:0;position:relative}
+.swatch[aria-pressed="true"]{outline:1.5px solid var(--accent);outline-offset:3px}
+.sl{display:grid;gap:4px}
+.sl-top{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.sl-val{font:400 12px/1 var(--mono);color:var(--accent);font-variant-numeric:tabular-nums}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-moz-range-track{height:2px;background:var(--line);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);margin-top:-6px;border:2px solid var(--ink);box-shadow:0 0 0 1px var(--accent)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid var(--ink)}
+.note{margin:0;font-size:13.5px;line-height:1.5;color:var(--mist)}
+.note b{font-weight:500;color:var(--paper)}
+.read{font:400 12.5px/1.5 var(--mono);color:var(--paper);font-variant-numeric:tabular-nums}
+.read em{font-style:normal;color:var(--accent)}
+:focus-visible{outline:1.5px solid var(--accent);outline-offset:2px}
+
+/* Gallery switcher */
+.switcher{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);
+  display:flex;gap:2px;padding:5px;border-radius:999px;background:var(--glass);border:1px solid var(--line);
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+.switcher button{appearance:none;border:0;background:transparent;cursor:pointer;padding:7px 18px 8px;border-radius:999px;
+  font:400 italic 21px/1 var(--display);color:var(--mist);transition:color .25s,background .25s}
+.switcher button:hover{color:var(--paper)}
+.switcher button[aria-current="true"]{color:var(--paper);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 78px);
+  font:400 12px/1.3 var(--mono);color:var(--paper);white-space:nowrap;pointer-events:none;
+  padding:6px 12px;border-radius:999px;background:var(--glass);border:1px solid var(--line);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);transition:opacity 1.2s}
+.hint.gone{opacity:0}
+.corner{position:fixed;right:calc(var(--gutR) + 2px);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);display:flex;gap:6px}
+.icon{appearance:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--glass);cursor:pointer;
+  display:grid;place-items:center;color:var(--paper);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+.icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5}
+#show{position:fixed;right:calc(var(--gutR) + 2px);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);opacity:0;pointer-events:none;transition:opacity .5s}
+body.bare #show{opacity:.55;pointer-events:auto}
+body.bare #show:hover{opacity:1}
+#panelToggle{display:none}
+
+/* Julia's map of c */
+.cmap{position:fixed;left:calc(var(--gut) + 8px);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);display:grid;gap:7px}
+.cmap canvas{display:block;width:244px;height:170px;border-radius:12px;border:1px solid var(--line);cursor:crosshair;touch-action:none;background:#050609}
+.cmap .cap{font:400 12px/1.35 var(--mono);color:var(--paper);font-variant-numeric:tabular-nums;text-shadow:0 0 6px var(--halo),0 0 2px var(--halo)}
+.cmap .cap em{font-style:normal;color:var(--accent)}
+.cmap .lbl{font:500 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--mist)}
+
+/* Morphogen's parameter-map axes */
+.axes{position:fixed;inset:0;pointer-events:none;font:400 11px/1 var(--mono);color:var(--paper)}
+.axes span{position:absolute;padding:4px 7px;border-radius:6px;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.ax-k{left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 120px)}
+.ax-f{left:calc(var(--gut) + 6px);bottom:calc(env(safe-area-inset-bottom,0px) + 170px)}
+.probe{position:fixed;pointer-events:none;font:400 11.5px/1.3 var(--mono);color:var(--paper);padding:4px 7px;border-radius:6px;
+  background:var(--glass);border:1px solid var(--line);transform:translate(14px,14px);white-space:nowrap}
+
+.fail{position:fixed;inset:0;display:grid;place-items:center;text-align:center;padding:24px;font-size:16px;color:var(--paper)}
+
+@media (max-width:760px){
+  .placard{gap:6px;top:calc(env(safe-area-inset-top,0px) + 14px)}
+  .placard h1{font-size:44px}
+  .blurb{display:none}
+  .placard.open .blurb{display:block}
+  .eq{font-size:17px}
+  .scrim{height:min(22rem,55vh)}
+  #panelToggle{display:grid}
+  .panel{top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 74px);right:var(--gutR);left:var(--gut);width:auto;
+    max-height:52vh;transform:translateY(calc(100% + 120px));transition:transform .35s ease}
+  .panel.open{transform:none}
+  .switcher{left:var(--gut);transform:none;bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
+  .switcher button{padding:7px 11px 8px;font-size:18px}
+  .corner{bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}
+  .hint{bottom:calc(env(safe-area-inset-bottom,0px) + 70px);left:var(--gut);transform:none;white-space:normal;max-width:calc(100vw - 2*var(--gut))}
+  .cmap{bottom:calc(env(safe-area-inset-bottom,0px) + 124px)}
+  .cmap canvas{width:168px;height:117px}
+  .ax-k{bottom:calc(env(safe-area-inset-bottom,0px) + 112px)}
+  .ax-f{bottom:calc(env(safe-area-inset-bottom,0px) + 146px)}
+}
+@media (max-width:420px){.switcher button{padding:7px 8px 8px;font-size:17px}}
+@media (prefers-reduced-motion:reduce){.ui,.panel,.hint,#gl{transition:none}.placard.rise>*{animation:none}}
+</style>
+
+<canvas id="gl" tabindex="0" aria-label="Interactive mathematical artwork"></canvas>
+<canvas id="orbit" aria-hidden="true"></canvas>
+
+<div class="ui">
+  <div class="scrim"></div>
+  <header class="placard" id="placard">
+    <div class="brand">Strange Gardens</div>
+    <h1 id="title">Morphogen</h1>
+    <div class="kicker" id="kicker"></div>
+    <p class="blurb" id="blurb"></p>
+    <div class="eq" id="eq"></div>
+  </header>
+
+  <aside class="panel" id="panel" aria-label="Controls">
+    <div class="panel-head"><span id="panelTitle">Instruments</span></div>
+    <div id="panelBody"></div>
+  </aside>
+
+  <div class="cmap" id="cmap" hidden>
+    <span class="lbl">The map of c</span>
+    <canvas id="mini" aria-label="Mandelbrot set. Drag to choose c."></canvas>
+    <div class="cap" id="ccap"></div>
+  </div>
+
+  <div class="axes" id="axes" hidden>
+    <span class="ax-k">kill rate k &nbsp;0.045 → 0.070</span>
+    <span class="ax-f">feed rate f &nbsp;0.010 → 0.090 ↑</span>
+  </div>
+  <div class="probe" id="probe" hidden></div>
+
+  <div class="hint" id="hint"></div>
+
+  <nav class="switcher" id="switcher" aria-label="Exhibits">
+    <button type="button" data-x="morphogen">Morphogen</button>
+    <button type="button" data-x="julia">Julia</button>
+    <button type="button" data-x="attractor">Attractor</button>
+  </nav>
+
+  <div class="corner">
+    <button class="icon" id="panelToggle" type="button" aria-label="Show controls" aria-expanded="false">
+      <svg viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6" fill="currentColor"/><circle cx="11" cy="8" r="1.6" fill="currentColor"/><circle cx="7" cy="12" r="1.6" fill="currentColor"/></svg>
+    </button>
+    <button class="icon" id="hide" type="button" aria-label="Hide interface (H)" title="Hide interface (H)">
+      <svg viewBox="0 0 16 16"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>
+    </button>
+  </div>
+</div>
+<button class="icon" id="show" type="button" aria-label="Show interface (H)" title="Show interface (H)">
+  <svg viewBox="0 0 16 16"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>
+</button>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const TOUCH = matchMedia('(pointer: coarse)').matches;
+
+const canvas = $('#gl');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
+if (!gl) {
+  document.body.insertAdjacentHTML('beforeend', '<div class="fail">This garden grows on WebGL 2, which this browser has turned off. Try a recent Chrome, Firefox, Safari or Edge.</div>');
+  throw new Error('WebGL2 unavailable');
+}
+const HAS_FLOAT = !!gl.getExtension('EXT_color_buffer_float');
+const HAS_HALF = HAS_FLOAT || !!gl.getExtension('EXT_color_buffer_half_float');
+gl.getExtension('OES_texture_float_linear');
+
+/* ---------- GL plumbing ---------- */
+function shader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s);
+    console.error(log + '\n' + src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n'));
+    throw new Error(log);
+  }
+  return s;
+}
+function program(vs, fs, varyings) {
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fs));
+  if (varyings) gl.transformFeedbackVaryings(p, varyings, gl.INTERLEAVED_ATTRIBS);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) {
+    const a = gl.getActiveUniform(p, i);
+    u[a.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, a.name);
+  }
+  return { p, u };
+}
+function texture(w, h, ifmt, fmt, type, filter, data = null, wrap = gl.CLAMP_TO_EDGE) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, fmt, type, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+  return t;
+}
+function framebuffer(t) {
+  const f = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  const st = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  if (st !== gl.FRAMEBUFFER_COMPLETE) throw new Error('framebuffer incomplete ' + st);
+  return f;
+}
+function target(w, h, ifmt, fmt, type, filter, data) {
+  const t = texture(w, h, ifmt, fmt, type, filter, data);
+  return { t, f: framebuffer(t), w, h };
+}
+function freeTarget(x) { if (x) { gl.deleteTexture(x.t); gl.deleteFramebuffer(x.f); } }
+const emptyVAO = gl.createVertexArray();
+function fullscreen() { gl.bindVertexArray(emptyVAO); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+function bindOut(t, w, h) { gl.bindFramebuffer(gl.FRAMEBUFFER, t ? t.f : null); gl.viewport(0, 0, w, h); }
+
+const QUAD_VS = `#version 300 es
+out vec2 v_uv;
+void main(){
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  v_uv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+const HASH = `
+uint hashu(uint x){ x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+float hash2(vec2 p){ return float(hashu(uint(p.x) * 1973u + uint(p.y) * 9277u + 26699u)) / 4294967295.0; }`;
+
+/* ---------- canvas sizing ---------- */
+let DPR = 1, W = 1, H = 1, cssW = 1, cssH = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  cssW = Math.max(1, canvas.clientWidth); cssH = Math.max(1, canvas.clientHeight);
+  W = Math.round(cssW * DPR); H = Math.round(cssH * DPR);
+  canvas.width = W; canvas.height = H;
+  for (const x of Object.values(exhibits)) if (x.ready) x.resize();
+}
+
+/* ---------- panel builder ---------- */
+const panelBody = $('#panelBody');
+function group(label, ...kids) {
+  const g = el('section', 'grp');
+  if (label) { const h = el('h3'); h.textContent = label; g.append(h); }
+  g.append(...kids.filter(Boolean));
+  return g;
+}
+function chips(id, items, value, onPick) {
+  const w = el('div', 'chips');
+  for (const it of items) {
+    const b = el('button', 'chip'); b.type = 'button'; b.id = id + '-' + it.id;
+    if (it.dot) { const d = el('span', 'dot'); d.style.background = it.dot; b.append(d); }
+    b.append(it.name);
+    if (it.title) b.title = it.title;
+    b.setAttribute('aria-pressed', String(it.id === value));
+    b.onclick = () => { w.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === b))); onPick(it); };
+    w.append(b);
+  }
+  return w;
+}
+function toggle(id, label, on, onChange) {
+  const b = el('button', 'chip'); b.type = 'button'; b.id = id; b.textContent = label;
+  b.setAttribute('aria-pressed', String(on));
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(v)); onChange(v); };
+  b.set = v => b.setAttribute('aria-pressed', String(v));
+  return b;
+}
+function slider(id, label, min, max, step, value, fmt, onInput) {
+  const w = el('label', 'sl'); w.htmlFor = id;
+  const top = el('span', 'sl-top'), name = el('span'), val = el('output', 'sl-val');
+  name.textContent = label; val.textContent = fmt(value);
+  const r = el('input'); r.type = 'range'; r.id = id; r.min = min; r.max = max; r.step = step; r.value = value;
+  r.oninput = () => { const v = +r.value; val.textContent = fmt(v); onInput(v); };
+  top.append(name, val); w.append(top, r);
+  w.set = v => { r.value = v; val.textContent = fmt(v); };
+  return w;
+}
+function swatches(id, items, value, onPick) {
+  const w = el('div', 'sw');
+  for (const it of items) {
+    const b = el('button', 'swatch'); b.type = 'button'; b.id = id + '-' + it.id;
+    b.title = it.name; b.setAttribute('aria-label', it.name + ' palette');
+    b.style.background = it.css;
+    b.setAttribute('aria-pressed', String(it.id === value));
+    b.onclick = () => { w.querySelectorAll('.swatch').forEach(x => x.setAttribute('aria-pressed', String(x === b))); onPick(it); };
+    w.append(b);
+  }
+  return w;
+}
+function buttons(items) {
+  const w = el('div', 'row');
+  for (const it of items) { const b = el('button', 'ghost'); b.type = 'button'; b.textContent = it.name; b.onclick = it.on; if (it.title) b.title = it.title; w.append(b); }
+  return w;
+}
+function note(html, cls = 'note') { const p = el('p', cls); p.innerHTML = html; return p; }
+
+/* ---------- hint ---------- */
+let hintTimer = 0;
+function hint(text) {
+  const h = $('#hint'); h.textContent = text; h.classList.remove('gone');
+  clearTimeout(hintTimer); hintTimer = setTimeout(() => h.classList.add('gone'), 6500);
+}
+
+/* =====================================================================
+   MORPHOGEN: Gray-Scott reaction-diffusion with a painted species field
+   ===================================================================== */
+function Morphogen() {
+  const CELL = 2;          // css px per simulation cell
+  const SPECIES = [
+    { id: 'coral',   name: 'Coral',     f: .0545, k: .062,  col: '#ef7d62', title: 'f 0.0545 · k 0.0620  branching growth' },
+    { id: 'mitosis', name: 'Mitosis',   f: .0367, k: .0649, col: '#63cdb9', title: 'f 0.0367 · k 0.0649  spots that split in two' },
+    { id: 'maze',    name: 'Labyrinth', f: .029,  k: .057,  col: '#e8c06e', title: 'f 0.0290 · k 0.0570  winding corridors' },
+    { id: 'worms',   name: 'Worms',     f: .078,  k: .061,  col: '#86a6ea', title: 'f 0.0780 · k 0.0610  short drifting worms' },
+    { id: 'holes',   name: 'Holes',     f: .039,  k: .058,  col: '#c993c4', title: 'f 0.0390 · k 0.0580  a sheet full of holes' },
+    { id: 'chaos',   name: 'Turbulence',f: .026,  k: .051,  col: '#b2d685', title: 'f 0.0260 · k 0.0510  never settles' },
+  ];
+  const PALETTES = [
+    { id: 'specimen', name: 'Specimen', css: 'conic-gradient(#ef7d62 0 33%,#63cdb9 0 66%,#e8c06e 0)', mode: 0, bg: '#080a11', lo: '#000000', hi: '#000000', gl: '#fff6e6', tone: 'dark', accent: '#8fe3cf' },
+    { id: 'isoline',  name: 'Isoline',  css: 'repeating-radial-gradient(circle at 50% 50%,#0a0c14 0 3px,#63cdb9 3px 4px)', mode: 1, bg: '#05060b', lo: '#000000', hi: '#000000', gl: '#ffffff', tone: 'dark', accent: '#8fe3cf' },
+    { id: 'lacquer',  name: 'Lacquer',  css: 'radial-gradient(circle at 35% 35%,#ffd479,#c2311f 50%,#120406)', mode: 3, bg: '#0b0405', lo: '#5e120f', hi: '#e9973f', gl: '#fff0c8', tone: 'dark', accent: '#f0a24a' },
+    { id: 'porcelain',name: 'Porcelain',css: 'radial-gradient(circle at 35% 35%,#fbf8f1,#e9e3d6 50%,#1f3f93 51%)', mode: 2, bg: '#f1ece1', lo: '#9fb3dc', hi: '#173a8c', gl: '#ffffff', tone: 'light', accent: '#2b55b8' },
+  ];
+  const S = { tool: 'seed', species: SPECIES[0], pal: PALETTES[1], tempo: 10, brush: 7, map: false, warm: 0 };
+  let sim, disp, copy, A = null, B = null, w = 0, h = 0, fmt;
+  let drag = null, seed = 1;
+
+  const SIM_FS = `#version 300 es
+  precision highp float; precision highp int;
+  uniform sampler2D u_s; uniform vec4 u_seg; uniform float u_rad; uniform int u_brush;
+  uniform vec2 u_sp; uniform float u_seed, u_pdiff;
+  out vec4 o;
+  ${HASH}
+  void main(){
+    ivec2 sz = textureSize(u_s, 0); ivec2 p = ivec2(gl_FragCoord.xy);
+    #define T(dx,dy) texelFetch(u_s, (p + ivec2(dx,dy) + sz) % sz, 0)
+    vec4 c = T(0,0);
+    vec4 lap = 0.2*(T(1,0)+T(-1,0)+T(0,1)+T(0,-1)) + 0.05*(T(1,1)+T(-1,1)+T(1,-1)+T(-1,-1)) - c;
+    float A = c.r, B = c.g; vec2 fk = c.ba + u_pdiff * lap.ba;
+    float r = A*B*B;
+    A += 1.0*lap.r - r + fk.x*(1.0 - A);
+    B += 0.5*lap.g + r - (fk.y + fk.x)*B;
+    if (u_brush > 0) {
+      vec2 q = gl_FragCoord.xy, a = u_seg.xy, ab = u_seg.zw - u_seg.xy;
+      float t = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
+      float d = length(q - a - ab*t);
+      if (u_brush == 1) {
+        float m = 1.0 - smoothstep(u_rad*0.55, u_rad, d);
+        float n = hash2(q + vec2(u_seed*7.0, u_seed*13.0));
+        if (m > 0.0) { B = mix(B, 0.35 + 0.3*n, m*0.35); A = mix(A, 0.45, m*0.25); }
+        float m2 = 1.0 - smoothstep(u_rad*1.4, u_rad*3.2, d);
+        fk = mix(fk, u_sp, m2*0.18);
+      } else {
+        float m = 1.0 - smoothstep(u_rad*1.5, u_rad*2.0, d);
+        B = mix(B, 0.0, m); A = mix(A, 1.0, m);
+      }
+    }
+    o = vec4(clamp(A, 0.0, 1.0), clamp(B, 0.0, 1.0), fk);
+  }`;
+
+  const DISP_FS = `#version 300 es
+  precision highp float; precision highp int;
+  uniform sampler2D u_s; uniform int u_mode; uniform vec3 u_bg, u_lo, u_hi, u_gl;
+  uniform vec2 u_sp[6]; uniform vec3 u_spc[6]; uniform float u_time, u_cellpx;
+  in vec2 v_uv; out vec4 o;
+  ${HASH}
+  vec4 S(vec2 g){
+    ivec2 sz = textureSize(u_s, 0);
+    g -= 0.5; vec2 i = floor(g), f = g - i; ivec2 a = ivec2(i);
+    vec4 t00 = texelFetch(u_s, (a + sz) % sz, 0);
+    vec4 t10 = texelFetch(u_s, (a + ivec2(1,0) + sz) % sz, 0);
+    vec4 t01 = texelFetch(u_s, (a + ivec2(0,1) + sz) % sz, 0);
+    vec4 t11 = texelFetch(u_s, (a + ivec2(1,1) + sz) % sz, 0);
+    return mix(mix(t00, t10, f.x), mix(t01, t11, f.x), f.y);
+  }
+  vec3 speciesTint(vec2 fk){
+    vec3 acc = vec3(0); float ws = 1e-5;
+    for (int i = 0; i < 6; i++) {
+      vec2 d = (fk - u_sp[i]) / vec2(0.007, 0.0022);
+      float wgt = exp(-dot(d, d));
+      acc += u_spc[i] * wgt; ws += wgt;
+    }
+    return acc / ws;
+  }
+  void main(){
+    vec2 res = vec2(textureSize(u_s, 0));
+    vec2 g = v_uv * res;
+    vec4 c = S(g);
+    float B = c.g;
+    float hx = S(g + vec2(1,0)).g - S(g - vec2(1,0)).g;
+    float hy = S(g + vec2(0,1)).g - S(g - vec2(0,1)).g;
+    vec2 grad = 0.5 * vec2(hx, hy);
+    float gl = length(grad) + 1e-5;
+    vec3 tint = (u_mode == 0 || u_mode == 1) ? speciesTint(c.ba) : u_hi;
+    vec3 L = normalize(vec3(-0.55, 0.62, 0.72));
+    vec2 q = v_uv - 0.5;
+    vec3 col;
+    if (u_mode == 1) {
+      // isolines of the B concentration, drawn with constant screen width
+      float lines = 0.0;
+      for (int k = 1; k <= 5; k++) {
+        float iso = 0.045 * float(k);
+        float d = abs(B - iso) / gl * u_cellpx;
+        lines += exp(-d*d / 1.6) * (k == 3 ? 1.0 : 0.5);
+      }
+      float fill = smoothstep(0.08, 0.3, B);
+      vec3 bg = u_bg + tint * 0.025;
+      col = bg + tint * fill * 0.09 + tint * lines * 0.95 + vec3(1.0) * pow(lines, 3.0) * 0.12;
+    } else {
+      float hn = smoothstep(0.04, 0.30, B);
+      vec3 n = normalize(vec3(-hx * 6.0, -hy * 6.0, 1.0));
+      float diff = dot(n, L) * 0.5 + 0.5;
+      float spec = pow(max(dot(n, normalize(L + vec3(0,0,1))), 0.0), 28.0);
+      // cast shadow: is the surface higher a few cells toward the light?
+      float above = S(g + L.xy * 3.5).g;
+      float shadow = smoothstep(0.0, 0.16, above - B) * (1.0 - hn);
+      vec3 deep = u_mode == 3 ? u_lo : tint * 0.42;
+      vec3 crest = mix(tint, vec3(1.0), 0.32);
+      vec3 base = u_bg;
+      if (u_mode == 2) { deep = u_lo; crest = u_hi * 0.8; }
+      col = mix(base, deep, smoothstep(0.0, 0.3, hn));
+      col = mix(col, tint, smoothstep(0.25, 0.75, hn));
+      col = mix(col, crest, smoothstep(0.78, 1.0, hn) * 0.55);
+      col *= mix(1.0, 0.55 + 0.6 * diff, hn);
+      col += u_gl * spec * hn * (u_mode == 2 ? 0.35 : 0.16);
+      col *= 1.0 - shadow * (u_mode == 2 ? 0.22 : 0.55);
+    }
+    col *= 1.0 - (u_mode == 2 ? 0.22 : 0.55) * dot(q, q);
+    col += (hash2(gl_FragCoord.xy + vec2(u_time*61.0, u_time*37.0)) - 0.5) / 160.0;
+    o = vec4(col, 1.0);
+  }`;
+
+  const COPY_FS = `#version 300 es
+  precision highp float;
+  uniform sampler2D u_s; in vec2 v_uv; out vec4 o;
+  void main(){ o = texture(u_s, v_uv); }`;
+
+  function noise2(w, h, cellsX) {
+    // value noise on a coarse lattice, smoothly interpolated
+    const gx = Math.max(2, Math.round(cellsX)), gy = Math.max(2, Math.round(cellsX * h / w));
+    const lat = Array.from({ length: (gx + 2) * (gy + 2) }, Math.random);
+    return (x, y) => {
+      const u = x / w * gx, v = y / h * gy, i = Math.floor(u), j = Math.floor(v);
+      let fx = u - i, fy = v - j; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+      const L = (a, b) => lat[b * (gx + 2) + a];
+      return lerp(lerp(L(i, j), L(i + 1, j), fx), lerp(L(i, j + 1), L(i + 1, j + 1), fx), fy);
+    };
+  }
+  function seedData(kind) {
+    const d = new Float32Array(w * h * 4);
+    const nz = noise2(w, h, w / 110), nz2 = noise2(w, h, w / 40);
+    const sp = [SPECIES[0], SPECIES[2], SPECIES[1]];
+    const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      let f, k;
+      if (kind === 'map') { f = lerp(0.01, 0.09, y / (h - 1)); k = lerp(0.045, 0.07, x / (w - 1)); }
+      else if (kind === 'flood') { f = S.species.f; k = S.species.k; }
+      else {
+        const n = nz(x, y) * 0.8 + nz2(x, y) * 0.2;
+        const a = sm(0.36, 0.42, n), b = sm(0.58, 0.64, n);
+        f = lerp(lerp(sp[0].f, sp[1].f, a), sp[2].f, b);
+        k = lerp(lerp(sp[0].k, sp[1].k, a), sp[2].k, b);
+      }
+      d[i] = 1; d[i + 1] = 0; d[i + 2] = f; d[i + 3] = k;
+    }
+    if (kind !== 'clear') {
+      const count = Math.round(w * h / (kind === 'map' ? 260 : 1700));
+      for (let s = 0; s < count; s++) {
+        const cx = Math.random() * w, cy = Math.random() * h, r = 1.5 + Math.random() * (kind === 'map' ? 2.5 : 4.5);
+        for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+          if ((x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
+          const xx = (x + w) % w, yy = (y + h) % h, i = (yy * w + xx) * 4;
+          d[i] = 0.5; d[i + 1] = 0.25 + Math.random() * 0.1;
+        }
+      }
+    }
+    return d;
+  }
+  function upload(d) {
+    gl.bindTexture(gl.TEXTURE_2D, A.t);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.FLOAT, d);
+  }
+  function alloc(nw, nh) {
+    const mk = () => target(nw, nh, fmt, gl.RGBA, gl.FLOAT, gl.NEAREST, null);
+    const nA = mk(), nB = mk();
+    if (A) {
+      gl.useProgram(copy.p); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, A.t);
+      gl.uniform1i(copy.u.u_s, 0); bindOut(nA, nw, nh); fullscreen();
+      freeTarget(A); freeTarget(B);
+    }
+    A = nA; B = nB; w = nw; h = nh;
+    return !!A;
+  }
+  function steps(n, brush) {
+    gl.useProgram(sim.p);
+    gl.uniform1i(sim.u.u_s, 0);
+    gl.uniform1f(sim.u.u_pdiff, S.map ? 0 : 0.015);
+    gl.uniform2f(sim.u.u_sp, S.species.f, S.species.k);
+    gl.uniform1f(sim.u.u_rad, S.brush);
+    gl.activeTexture(gl.TEXTURE0);
+    for (let i = 0; i < n; i++) {
+      gl.uniform1i(sim.u.u_brush, brush ? brush.mode : 0);
+      if (brush) gl.uniform4f(sim.u.u_seg, brush.x0, brush.y0, brush.x1, brush.y1);
+      gl.uniform1f(sim.u.u_seed, (seed = (seed * 16807) % 2147483647) % 1000);
+      gl.bindTexture(gl.TEXTURE_2D, A.t);
+      bindOut(B, w, h); fullscreen();
+      [A, B] = [B, A];
+    }
+  }
+  function applyPalette() {
+    document.body.dataset.tone = S.pal.tone;
+    document.documentElement.style.setProperty('--accent', S.pal.accent);
+  }
+  function toSim(cx, cy) { return [cx / cssW * w, (1 - cy / cssH) * h]; }
+
+  const X = {
+    id: 'morphogen', ready: false,
+    title: 'Morphogen', kicker: 'Gray-Scott reaction-diffusion',
+    blurb: 'Two chemicals spread across a surface at different speeds, and one feeds on the other. That is the whole rule. Out of it grow coral, labyrinths and cells that split in two: the kind of mechanism Alan Turing proposed in 1952 for the spots and stripes on animals.',
+    eq: '<span>∂<i>A</i>/∂<i>t</i> = <i>D<sub>A</sub></i><svg class="nabla" viewBox="0 0 10 10" aria-label="nabla"><path d="M.8 1.2h8.4L5 9.4z"/><path d="M2.1 1.7 5 7.9" style="stroke-width:1.2"/></svg>²<i>A</i> − <i>AB</i>² + <i>f</i> (1 − <i>A</i>)</span><span>∂<i>B</i>/∂<i>t</i> = <i>D<sub>B</sub></i><svg class="nabla" viewBox="0 0 10 10" aria-label="nabla"><path d="M.8 1.2h8.4L5 9.4z"/><path d="M2.1 1.7 5 7.9" style="stroke-width:1.2"/></svg>²<i>B</i> + <i>AB</i>² − (<i>k</i> + <i>f</i>) <i>B</i></span>',
+    hint: TOUCH ? 'Drag to seed growth  ·  pick a species, or Erase, in the controls' : 'Drag to seed growth  ·  right-drag to erase  ·  pick a species to paint with it',
+    init() {
+      if (!HAS_HALF) throw new Error('This exhibit needs floating-point render targets.');
+      fmt = HAS_FLOAT ? gl.RGBA32F : gl.RGBA16F;
+      sim = program(QUAD_VS, SIM_FS); disp = program(QUAD_VS, DISP_FS); copy = program(QUAD_VS, COPY_FS);
+      alloc(Math.max(48, Math.round(cssW / CELL)), Math.max(48, Math.round(cssH / CELL)));
+      upload(seedData('garden'));
+      steps(REDUCED ? 600 : 260, null);
+      S.warm = REDUCED ? 0 : 2.2;
+      this.ready = true;
+    },
+    resize() {
+      const nw = Math.max(48, Math.round(cssW / CELL)), nh = Math.max(48, Math.round(cssH / CELL));
+      if (Math.abs(nw - w) > 2 || Math.abs(nh - h) > 2) alloc(nw, nh);
+    },
+    enter() { applyPalette(); canvas.className = ''; $('#axes').hidden = !S.map; },
+    leave() { $('#axes').hidden = true; $('#probe').hidden = true; },
+    frame(t, dt) {
+      let n = S.tempo;
+      if (S.warm > 0) { S.warm -= dt; n = Math.round(lerp(S.tempo, 34, clamp(S.warm / 2.2, 0, 1))); }
+      let brush = null;
+      if (drag) {
+        brush = { mode: drag.mode, x0: drag.px, y0: drag.py, x1: drag.x, y1: drag.y };
+        drag.px = drag.x; drag.py = drag.y;
+      }
+      steps(n, brush);
+      gl.useProgram(disp.p);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, A.t);
+      gl.uniform1i(disp.u.u_s, 0);
+      gl.uniform1i(disp.u.u_mode, S.pal.mode);
+      gl.uniform3fv(disp.u.u_bg, hex(S.pal.bg)); gl.uniform3fv(disp.u.u_lo, hex(S.pal.lo));
+      gl.uniform3fv(disp.u.u_hi, hex(S.pal.hi)); gl.uniform3fv(disp.u.u_gl, hex(S.pal.gl));
+      gl.uniform2fv(disp.u.u_sp, SPECIES.flatMap(s => [s.f, s.k]));
+      gl.uniform3fv(disp.u.u_spc, SPECIES.flatMap(s => hex(s.col)));
+      gl.uniform1f(disp.u.u_time, t % 100);
+      gl.uniform1f(disp.u.u_cellpx, W / w);
+      bindOut(null, W, H); fullscreen();
+    },
+    down(e) {
+      const [x, y] = toSim(e.clientX, e.clientY);
+      const erase = e.button === 2 || e.altKey || S.tool === 'erase';
+      drag = { mode: erase ? 2 : 1, x, y, px: x, py: y };
+    },
+    move(e) {
+      if (drag) { const [x, y] = toSim(e.clientX, e.clientY); drag.x = x; drag.y = y; }
+      if (S.map) {
+        const p = $('#probe'); p.hidden = false;
+        const fx = clamp(e.clientX / cssW, 0, 1), fy = clamp(1 - e.clientY / cssH, 0, 1);
+        p.textContent = `f ${lerp(0.01, 0.09, fy).toFixed(4)}  k ${lerp(0.045, 0.07, fx).toFixed(4)}`;
+        p.style.left = e.clientX + 'px'; p.style.top = e.clientY + 'px';
+      }
+    },
+    up() { drag = null; },
+    key(e) { if (e.key === ' ') { upload(seedData(S.map ? 'map' : 'garden')); S.warm = 1.5; return true; } },
+    _steps(n) { steps(n, null); },
+    _state: S, _species: SPECIES, _seed(kind) { upload(seedData(kind)); },
+    panel() {
+      return [
+        group('Tool', chips('m-tool', [{ id: 'seed', name: 'Seed' }, { id: 'erase', name: 'Erase' }], S.tool, it => S.tool = it.id)),
+        group('Species to paint',
+          chips('m-sp', SPECIES.map(s => ({ ...s, dot: s.col })), S.species.id, it => { S.species = it; hint(`Painting with ${it.name}: f = ${it.f}, k = ${it.k}`); }),
+          buttons([
+            { name: 'Fill canvas', title: 'Reseed everything as the chosen species', on: () => { S.map = false; $('#axes').hidden = true; $('#probe').hidden = true; upload(seedData('flood')); S.warm = 1.5; } },
+            { name: 'Reseed garden', on: () => { S.map = false; $('#axes').hidden = true; $('#probe').hidden = true; upload(seedData('garden')); S.warm = 2.2; } },
+            { name: 'Clear', on: () => { S.map = false; $('#axes').hidden = true; $('#probe').hidden = true; upload(seedData('clear')); } },
+          ])),
+        group('Parameter space',
+          note('Spread every species across the screen at once: kill rate grows to the right, feed rate grows upward. Hover to read the values.'),
+          buttons([{ name: 'Show the map', on: () => { S.map = true; $('#axes').hidden = false; upload(seedData('map')); S.warm = 2.5; hint('Each point runs its own (f, k). The border regions are where the life is.'); } }])),
+        group('Palette', swatches('m-pal', PALETTES, S.pal.id, it => { S.pal = it; applyPalette(); })),
+        group(null,
+          slider('m-tempo', 'Tempo', 1, 30, 1, S.tempo, v => v + ' steps/frame', v => S.tempo = v),
+          slider('m-brush', 'Brush', 2, 24, 1, S.brush, v => v * CELL + ' px', v => S.brush = v)),
+      ];
+    },
+  };
+  return X;
+}
+
+/* =====================================================================
+   JULIA: quadratic Julia sets, chosen from a live map of the Mandelbrot set
+   ===================================================================== */
+function Julia() {
+  const PRESETS = [
+    { id: 'rabbit',   name: 'Douady rabbit', c: [-0.122561, 0.744862] },
+    { id: 'basilica', name: 'Basilica',      c: [-1, 0] },
+    { id: 'siegel',   name: 'Siegel disk',   c: [-0.390541, -0.586788] },
+    { id: 'dendrite', name: 'Dendrite',      c: [0, 1] },
+    { id: 'seahorse', name: 'Seahorse',      c: [-0.745, 0.113] },
+    { id: 'dragon',   name: 'Dragon',        c: [-0.8, 0.156] },
+  ];
+  const PALETTES = [
+    { id: 'ember',  name: 'Ember',  css: 'linear-gradient(135deg,#2a0f3d,#c23b6b,#f6a85c,#fff1cf)', stops: ['#2a0f3d', '#c23b6b', '#f6a85c', '#fff1cf'], bg: '#05040a', light: 0, tone: 'dark', accent: '#f4a96b' },
+    { id: 'nacre',  name: 'Nacre',  css: 'linear-gradient(135deg,#132a4a,#4f9bb5,#e8d7f2,#f6c9a6)', stops: ['#132a4a', '#4f9bb5', '#e8d7f2', '#f6c9a6'], bg: '#04070c', light: 0, tone: 'dark', accent: '#a9d6e6' },
+    { id: 'verdigris', name: 'Verdigris', css: 'linear-gradient(135deg,#062521,#1f8f74,#c5e0ab,#f3efdc)', stops: ['#08302a', '#21957a', '#c5e0ab', '#f3efdc'], bg: '#030807', light: 0, tone: 'dark', accent: '#9fdcb8' },
+    { id: 'vellum', name: 'Vellum', css: 'linear-gradient(135deg,#f3ecdd 50%,#2b2140 50%)', stops: ['#3a2a55', '#8d2f4a', '#1d4d6b', '#2c2140'], bg: '#f3ecdd', light: 1, tone: 'light', accent: '#8d2f4a' },
+  ];
+  const S = { trace: !TOUCH, c: [-0.125, 0.6495], center: [0, 0], scale: 3.5, drift: !REDUCED, theta: 2.09, tDrift: 0, pal: PALETTES[0], density: 1, detail: 1, rs: 1, aa: 1, slow: 0, fast: 0, dirty: true, idle: 0, hq: false };
+  let prog, fbo = null, mini, miniBase = null, miniView = null;
+  const pts = new Map(); let pinch = null;
+
+  const FS = `#version 300 es
+  precision highp float; precision highp int;
+  uniform vec2 u_res, u_c, u_center; uniform float u_scale, u_density, u_light; uniform int u_iter, u_aa;
+  uniform vec3 u_p0, u_p1, u_p2, u_p3, u_bg;
+  out vec4 o;
+  vec3 grad(float t){
+    t = fract(t) * 4.0; float f = fract(t); f = f*f*(3.0 - 2.0*f);
+    if (t < 1.0) return mix(u_p0, u_p1, f);
+    if (t < 2.0) return mix(u_p1, u_p2, f);
+    if (t < 3.0) return mix(u_p2, u_p3, f);
+    return mix(u_p3, u_p0, f);
+  }
+  vec3 shade(vec2 z){
+    vec2 dz = vec2(1.0, 0.0); float m2 = dot(z, z); float trap = 1e9; int n = 0;
+    for (int i = 0; i < 4000; i++) {
+      if (i >= u_iter) break;
+      dz = 2.0 * vec2(z.x*dz.x - z.y*dz.y, z.x*dz.y + z.y*dz.x);
+      z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + u_c;
+      m2 = dot(z, z);
+      trap = min(trap, abs(m2 - 0.36));
+      n = i;
+      if (m2 > 1e8) break;
+    }
+    float px = u_scale / min(u_res.x, u_res.y);
+    if (m2 <= 1e8) {
+      float t = sqrt(trap);
+      vec3 inner = mix(u_p0, u_p1, 0.35 + 0.35 * sin(t * 9.0 * u_density));
+      float a = exp(-t * 6.0);
+      return u_light > 0.5 ? mix(u_bg, inner, 0.06 + 0.12*a) : u_bg * 0.6 + inner * (0.05 + 0.22*a);
+    }
+    float sn = float(n) + 1.0 - log2(0.5 * log(m2));
+    float de = 0.25 * sqrt(m2) * log(m2) / length(dz);
+    float dp = de / px;
+    vec3 hue = grad(log2(sn + 2.0) * 0.55 * u_density + 0.05);
+    float edge = exp(-dp * 0.9);
+    float glow = pow(clamp(1.0 - log2(1.0 + dp) / 8.5, 0.0, 1.0), 3.2);
+    if (u_light > 0.5) {
+      float ink = clamp(pow(glow, 1.6) * 0.45 + edge, 0.0, 1.0);
+      return mix(u_bg, hue * 0.85, ink);
+    }
+    return u_bg + hue * (glow * 1.05) + mix(hue, vec3(1.0), 0.55) * edge * 0.85;
+  }
+  void main(){
+    vec3 col = vec3(0);
+    for (int j = 0; j < 3; j++) for (int i = 0; i < 3; i++) {
+      if (i >= u_aa || j >= u_aa) continue;
+      vec2 off = (vec2(float(i), float(j)) + 0.5) / float(u_aa);
+      vec2 p = (gl_FragCoord.xy - 0.5 + off - 0.5*u_res) / min(u_res.x, u_res.y) * u_scale + u_center;
+      col += shade(p);
+    }
+    col /= float(u_aa * u_aa);
+    vec2 q = gl_FragCoord.xy / u_res - 0.5;
+    if (u_light < 0.5) col *= 1.0 - 0.45 * dot(q, q);
+    o = vec4(col, 1.0);
+  }`;
+
+  function cOnPath(th, t) {
+    const r = 1.0 + 0.035 * Math.sin(t * 0.21) + 0.012 * Math.sin(t * 0.53);
+    const ex = Math.cos(th) * r, ey = Math.sin(th) * r;
+    const e2x = ex * ex - ey * ey, e2y = 2 * ex * ey;
+    return [0.5 * ex - 0.25 * e2x, 0.5 * ey - 0.25 * e2y];
+  }
+  function inM(cx, cy) {
+    let x = 0, y = 0;
+    for (let i = 0; i < 1500; i++) { const t = x * x - y * y + cx; y = 2 * x * y + cy; x = t; if (x * x + y * y > 4) return false; }
+    return true;
+  }
+  function iterations() {
+    const zoom = Math.max(0, Math.log2(3.5 / S.scale));
+    return Math.round((260 + 70 * zoom) * S.detail);
+  }
+  function fmtC(c) {
+    const s = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(4);
+    return `${s(c[0])} ${c[1] < 0 ? '−' : '+'} ${Math.abs(c[1]).toFixed(4)}i`;
+  }
+
+  /* the little map: drawn once on the CPU, then decorated with c */
+  function buildMini() {
+    mini = $('#mini');
+    const rw = Math.round(mini.clientWidth * DPR), rh = Math.round(mini.clientHeight * DPR);
+    if (!rw || !rh) return;
+    mini.width = rw; mini.height = rh;
+    const spanX = 3.05, x0 = -2.2, ySpan = spanX * rh / rw;
+    miniView = { x0, spanX, y0: -ySpan / 2, ySpan, rw, rh };
+    const ctx = mini.getContext('2d'), img = ctx.createImageData(rw, rh), d = img.data;
+    const acc = hex(S.pal.light ? '#f4a96b' : S.pal.accent).map(v => v * 255);
+    const px = spanX / rw;
+    for (let j = 0; j < rh; j++) for (let i = 0; i < rw; i++) {
+      const cx = x0 + (i + 0.5) * px, cy = miniView.y0 + ySpan - (j + 0.5) * px;
+      let x = 0, y = 0, dx = 0, dy = 0, m2 = 0, n = 0;
+      for (; n < 400; n++) {
+        const ndx = 2 * (x * dx - y * dy) + 1, ndy = 2 * (x * dy + y * dx);
+        dx = ndx; dy = ndy;
+        const t = x * x - y * y + cx; y = 2 * x * y + cy; x = t;
+        m2 = x * x + y * y; if (m2 > 1e6) break;
+      }
+      const k = (j * rw + i) * 4;
+      if (n >= 400) { d[k] = 26; d[k + 1] = 24; d[k + 2] = 34; }
+      else {
+        const de = 0.5 * Math.sqrt(m2) * Math.log(m2) * 0.5 / Math.hypot(dx, dy), dp = de / px;
+        const g = Math.pow(clamp(1 - Math.log2(1 + dp) / 6, 0, 1), 2.4), e = Math.exp(-dp * 1.2);
+        d[k] = 5 + acc[0] * g * 0.8 + 200 * e; d[k + 1] = 6 + acc[1] * g * 0.8 + 190 * e; d[k + 2] = 9 + acc[2] * g * 0.8 + 170 * e;
+      }
+      d[k + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    miniBase = document.createElement('canvas'); miniBase.width = rw; miniBase.height = rh;
+    miniBase.getContext('2d').drawImage(mini, 0, 0);
+  }
+  function drawMini() {
+    if (!miniBase) return;
+    const ctx = mini.getContext('2d'), v = miniView;
+    ctx.drawImage(miniBase, 0, 0);
+    const toPx = (cx, cy) => [(cx - v.x0) / v.spanX * v.rw, (v.y0 + v.ySpan - cy) / v.ySpan * v.rh];
+    if (S.drift) {
+      ctx.beginPath();
+      for (let i = 0; i <= 180; i++) { const [x, y] = toPx(...cOnPath(i / 180 * Math.PI * 2, S.tDrift)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.strokeStyle = 'rgba(236,229,214,.28)'; ctx.setLineDash([2 * DPR, 4 * DPR]); ctx.lineWidth = DPR; ctx.stroke(); ctx.setLineDash([]);
+    }
+    const [x, y] = toPx(...S.c);
+    ctx.lineWidth = 1.5 * DPR; ctx.strokeStyle = '#fff';
+    ctx.beginPath(); ctx.arc(x, y, 5.5 * DPR, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#fff';
+    ctx.beginPath(); ctx.arc(x, y, 2 * DPR, 0, Math.PI * 2); ctx.fill();
+  }
+  function caption() {
+    const conn = inM(...S.c);
+    $('#ccap').innerHTML = `c = <em>${fmtC(S.c)}</em><br>${conn ? 'inside the set · connected' : 'outside the set · dust'}`;
+  }
+  function setC(c) { S.c = c; S.dirty = true; drawMini(); caption(); }
+  function miniPick(e) {
+    const r = mini.getBoundingClientRect(), v = miniView;
+    const cx = v.x0 + (e.clientX - r.left) / r.width * v.spanX;
+    const cy = v.y0 + v.ySpan - (e.clientY - r.top) / r.height * v.ySpan;
+    if (S.drift) { S.drift = false; const t = $('#j-drift'); if (t) t.set(false); }
+    setC([cx, cy]);
+  }
+  function applyPalette() {
+    document.body.dataset.tone = S.pal.tone;
+    document.documentElement.style.setProperty('--accent', S.pal.accent);
+    S.dirty = true;
+  }
+  /* orbit tracer: the path of one starting point under z -> z^2 + c */
+  const orbitCv = $('#orbit');
+  let hover = null;
+  function clearOrbit() { const g = orbitCv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, orbitCv.width, orbitCv.height); }
+  function drawOrbit() {
+    if (orbitCv.width !== W || orbitCv.height !== H) { orbitCv.width = W; orbitCv.height = H; }
+    clearOrbit();
+    if (!hover || !S.trace || pts.size) return;
+    const g = orbitCv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const px = S.scale / Math.min(cssW, cssH);
+    const toScr = (x, y) => [cssW / 2 + (x - S.center[0]) / px, cssH / 2 - (y - S.center[1]) / px];
+    let x = S.center[0] + (hover[0] - cssW / 2) * px, y = S.center[1] - (hover[1] - cssH / 2) * px;
+    const pts2 = [[x, y]]; let fate = 0;
+    for (let i = 0; i < 160; i++) {
+      const t = x * x - y * y + S.c[0]; y = 2 * x * y + S.c[1]; x = t;
+      pts2.push([x, y]);
+      if (x * x + y * y > 4) { fate = i + 1; break; }
+    }
+    const light = S.pal.light > 0.5, ink = light ? '27,29,40' : '236,229,214';
+    const acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    g.lineWidth = 1; g.lineJoin = 'round';
+    for (let i = 1; i < pts2.length; i++) {
+      const a = toScr(...pts2[i - 1]), b = toScr(...pts2[i]);
+      g.strokeStyle = `rgba(${ink},${0.75 * Math.pow(0.975, i)})`;
+      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+    }
+    g.fillStyle = acc;
+    for (let i = 1; i < pts2.length; i++) {
+      const [sx, sy] = toScr(...pts2[i]);
+      g.globalAlpha = Math.max(0.15, Math.pow(0.97, i));
+      g.beginPath(); g.arc(sx, sy, i < 4 ? 2.4 : 1.6, 0, Math.PI * 2); g.fill();
+    }
+    g.globalAlpha = 1;
+    const [ox, oy] = toScr(...pts2[0]);
+    g.strokeStyle = acc; g.lineWidth = 1.5; g.beginPath(); g.arc(ox, oy, 5, 0, Math.PI * 2); g.stroke();
+    const label = fate ? `escapes after ${fate} step${fate > 1 ? 's' : ''}` : 'stays bounded';
+    g.font = '400 11.5px "IBM Plex Mono", ui-monospace, monospace';
+    const tw = g.measureText(label).width, lx = Math.min(ox + 12, cssW - tw - 22), ly = oy - 12;
+    g.fillStyle = light ? 'rgba(246,242,233,.85)' : 'rgba(9,10,16,.72)';
+    g.beginPath(); if (g.roundRect) g.roundRect(lx - 7, ly - 13, tw + 14, 20, 6); else g.rect(lx - 7, ly - 13, tw + 14, 20); g.fill();
+    g.fillStyle = `rgb(${ink})`; g.fillText(label, lx, ly + 1);
+  }
+  function ensureFbo() {
+    const rw = Math.max(1, Math.round(W * S.rs)), rh = Math.max(1, Math.round(H * S.rs));
+    if (S.rs >= 0.999) { freeTarget(fbo); fbo = null; return; }
+    if (!fbo || fbo.w !== rw || fbo.h !== rh) { freeTarget(fbo); fbo = target(rw, rh, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR); }
+  }
+  function zoomAt(cx, cy, f) {
+    const px = S.scale / Math.min(cssW, cssH);
+    const zx = S.center[0] + (cx - cssW / 2) * px, zy = S.center[1] - (cy - cssH / 2) * px;
+    S.scale = clamp(S.scale * f, 2e-5, 6);
+    const npx = S.scale / Math.min(cssW, cssH);
+    S.center = [zx - (cx - cssW / 2) * npx, zy + (cy - cssH / 2) * npx];
+    S.dirty = true;
+  }
+
+  const X = {
+    id: 'julia', ready: false,
+    title: 'Julia', kicker: 'Quadratic Julia sets',
+    blurb: 'Square a number, add c, repeat. Some starting points stay close forever and some fly off to infinity. The border between them is a Julia set, and every c draws a different one. Inside the dark shape on the map, the Mandelbrot set, the border is one connected piece. Step outside and it breaks into dust.',
+    eq: '<span><i>z</i><sub class="up">n+1</sub> = <i>z</i><sub class="up">n</sub>² + <i>c</i></span>',
+    hint: TOUCH ? 'Drag on the map to choose c  ·  pinch to zoom' : 'Drag the ring on the map to choose c  ·  drag to pan  ·  scroll to zoom',
+    init() {
+      prog = program(QUAD_VS, FS);
+      this.ready = true;
+    },
+    resize() { S.dirty = true; if (!$('#cmap').hidden) { buildMini(); drawMini(); } },
+    enter() {
+      applyPalette(); canvas.className = 'grab';
+      $('#cmap').hidden = false;
+      buildMini(); drawMini(); caption();
+      if (!mini.dataset.wired) {
+        mini.dataset.wired = '1';
+        mini.addEventListener('pointerdown', e => { mini.setPointerCapture(e.pointerId); miniPick(e); });
+        mini.addEventListener('pointermove', e => { if (mini.hasPointerCapture(e.pointerId)) miniPick(e); });
+      }
+      S.dirty = true;
+    },
+    leave() { $('#cmap').hidden = true; hover = null; clearOrbit(); },
+    frame(t, dt) {
+      if (S.drift) {
+        S.tDrift += dt; S.theta += dt * 0.045;
+        S.c = cOnPath(S.theta, S.tDrift); S.dirty = true; drawMini();
+        if ((S.tDrift * 4 | 0) !== ((S.tDrift - dt) * 4 | 0)) caption();
+      }
+      // adapt the render scale to keep the frame rate smooth
+      if (S.dirty) {
+        if (dt > 0.03) { S.slow++; S.fast = 0; } else if (dt < 0.019) { S.fast++; S.slow = 0; }
+        if (S.slow > 6) { if (S.aa > 1) S.aa = 1; else S.rs = Math.max(0.4, S.rs * 0.85); S.slow = 0; }
+        if (S.fast > 40) { if (S.rs < 1) S.rs = Math.min(1, S.rs / 0.85); else if (S.aa < 2 && DPR < 1.5) S.aa = 2; S.fast = 0; }
+        S.idle = 0; S.hq = false;
+      } else {
+        S.idle += dt;
+        if (S.idle > 0.35 && !S.hq) { S.hq = true; this.render(true); }
+        return;
+      }
+      this.render(false);
+      S.dirty = false;
+      drawOrbit();
+    },
+    render(hq) {
+      const rs = hq ? 1 : S.rs;
+      const saved = S.rs; S.rs = rs; ensureFbo(); S.rs = saved;
+      const rw = fbo ? fbo.w : W, rh = fbo ? fbo.h : H;
+      gl.useProgram(prog.p);
+      gl.uniform2f(prog.u.u_res, rw, rh);
+      gl.uniform2f(prog.u.u_c, S.c[0], S.c[1]);
+      gl.uniform2f(prog.u.u_center, S.center[0], S.center[1]);
+      gl.uniform1f(prog.u.u_scale, S.scale);
+      gl.uniform1f(prog.u.u_density, S.density);
+      gl.uniform1f(prog.u.u_light, S.pal.light);
+      gl.uniform1i(prog.u.u_iter, iterations());
+      gl.uniform1i(prog.u.u_aa, hq ? (DPR > 1.5 ? (TOUCH ? 1 : 2) : 3) : S.aa);
+      const st = S.pal.stops.map(hex);
+      gl.uniform3fv(prog.u.u_p0, st[0]); gl.uniform3fv(prog.u.u_p1, st[1]);
+      gl.uniform3fv(prog.u.u_p2, st[2]); gl.uniform3fv(prog.u.u_p3, st[3]);
+      gl.uniform3fv(prog.u.u_bg, hex(S.pal.bg));
+      bindOut(fbo, rw, rh); fullscreen();
+      if (fbo) {
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo.f); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+        gl.blitFramebuffer(0, 0, rw, rh, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+      }
+    },
+    down(e) { pts.set(e.pointerId, [e.clientX, e.clientY]); canvas.className = 'grabbing'; pinch = null; },
+    move(e) {
+      if (e.pointerType === 'mouse') { hover = [e.clientX, e.clientY]; if (!S.dirty) drawOrbit(); }
+      if (!pts.has(e.pointerId)) return;
+      const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pts.size === 1) {
+        const px = S.scale / Math.min(cssW, cssH);
+        S.center = [S.center[0] - (e.clientX - prev[0]) * px, S.center[1] + (e.clientY - prev[1]) * px];
+        S.dirty = true;
+      } else if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+        if (pinch) zoomAt(mx, my, pinch / d);
+        pinch = d;
+      }
+    },
+    up(e) { pts.delete(e.pointerId); pinch = null; if (!pts.size) canvas.className = 'grab'; },
+    out() { hover = null; clearOrbit(); },
+    wheel(e) { zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * (e.deltaMode ? 0.05 : 0.0015))); },
+    dbl() { S.center = [0, 0]; S.scale = 3.5; S.dirty = true; },
+    _state: S, _presets: PRESETS, _setC(c) { setC(c); },
+    key(e) {
+      const step = e.shiftKey ? 0.01 : 0.0015;
+      const m = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[e.key];
+      if (m) { if (S.drift) { S.drift = false; const t = $('#j-drift'); if (t) t.set(false); } setC([S.c[0] + m[0], S.c[1] + m[1]]); return true; }
+      if (e.key === '+' || e.key === '=') { zoomAt(cssW / 2, cssH / 2, 0.7); return true; }
+      if (e.key === '-') { zoomAt(cssW / 2, cssH / 2, 1 / 0.7); return true; }
+      if (e.key === ' ') { S.drift = !S.drift; const t = $('#j-drift'); if (t) t.set(S.drift); drawMini(); return true; }
+    },
+    panel() {
+      return [
+        group('Famous values of c',
+          chips('j-pre', PRESETS, null, it => { S.drift = false; $('#j-drift').set(false); S.center = [0, 0]; S.scale = 3.5; setC(it.c.slice()); }),
+          toggle('j-drift', 'Drift along the cardioid', S.drift, v => { S.drift = v; if (v) { S.center = [0, 0]; S.scale = 3.5; } drawMini(); }),
+          TOUCH ? null : toggle('j-trace', 'Trace orbits under the cursor', S.trace, v => { S.trace = v; drawOrbit(); })),
+        group('Palette', swatches('j-pal', PALETTES, S.pal.id, it => { S.pal = it; applyPalette(); buildMini(); drawMini(); })),
+        group(null,
+          slider('j-dens', 'Color bands', 0.3, 3, 0.05, S.density, v => v.toFixed(2) + '×', v => { S.density = v; S.dirty = true; }),
+          slider('j-det', 'Detail', 0.4, 3, 0.05, S.detail, v => iterations() + ' iter', v => { S.detail = v; S.dirty = true; })),
+        group('Fine tuning',
+          note('Arrow keys nudge <b>c</b> by 0.0015 (hold Shift for 0.01). Space toggles drift. Double-click resets the view.'),
+          buttons([{ name: 'Reset view', on: () => X.dbl() }])),
+      ];
+    },
+  };
+  return X;
+}
+
+/* =====================================================================
+   ATTRACTOR: half a million particles integrated on the GPU
+   ===================================================================== */
+function Attractor() {
+  // map: native = world / s + c, so every system fills roughly the unit ball
+  const SYS = [
+    { id: 'lorenz', name: 'Lorenz', k: 28, kmin: 14, kmax: 48, kstep: 0.1, kname: 'ρ', rate: 0.55, hmax: 0.005, ref: 3.4,
+      map: k => ({ c: [0, 0, k - 3.2], s: 1.13 / k }),
+      eq: '<span><i>ẋ</i> = σ (<i>y</i> − <i>x</i>)</span><span><i>ẏ</i> = <i>x</i> (ρ − <i>z</i>) − <i>y</i></span><span><i>ż</i> = <i>xy</i> − β<i>z</i></span>',
+      note: 'Edward Lorenz, 1963: a stripped-down model of air rising and falling. Turn <b>ρ</b> below about 24 and the butterfly drains into two still points. Turn it back up and the chaos returns.' },
+    { id: 'aizawa', name: 'Aizawa', k: 0.95, kmin: 0.6, kmax: 1.05, kstep: 0.005, kname: 'a', rate: 1.1, hmax: 0.01, ref: 1.3,
+      map: () => ({ c: [0, 0, 0.75], s: 0.57 }),
+      eq: '<span><i>ẋ</i> = (<i>z</i> − <i>b</i>) <i>x</i> − <i>dy</i></span><span><i>ẏ</i> = <i>dx</i> + (<i>z</i> − <i>b</i>) <i>y</i></span><span><i>ż</i> = <i>c</i> + <i>az</i> − <i>z</i>³⁄3 − (<i>x</i>² + <i>y</i>²)(1 + <i>ez</i>) + <i>fzx</i>³</span>',
+      note: 'Particles spiral up and around a shell, then drop back down through a tube in its middle. Raise <b>a</b> past about 1 and the whole shape collapses to a point.' },
+    { id: 'thomas', name: 'Thomas', k: 0.208186, kmin: 0.16, kmax: 0.32, kstep: 0.0005, kname: 'b', rate: 5, hmax: 0.05, ref: 0.27,
+      map: () => ({ c: [0, 0, 0], s: 0.215 }),
+      eq: '<span><i>ẋ</i> = sin <i>y</i> − <i>bx</i></span><span><i>ẏ</i> = sin <i>z</i> − <i>by</i></span><span><i>ż</i> = sin <i>x</i> − <i>bz</i></span>',
+      note: 'René Thomas, 1999. Each equation is the last one with the letters shifted. Lower <b>b</b> and the motion loosens into a random-looking walk through a lattice of cells.' },
+    { id: 'halvorsen', name: 'Halvorsen', k: 1.89, kmin: 1.35, kmax: 2.1, kstep: 0.005, kname: 'a', rate: 0.5, hmax: 0.005, ref: 3.3,
+      map: () => ({ c: [-2.9, -2.9, -2.9], s: 0.08 }),
+      eq: '<span><i>ẋ</i> = −<i>ax</i> − 4<i>y</i> − 4<i>z</i> − <i>y</i>²</span><span><i>ẏ</i> = −<i>ay</i> − 4<i>z</i> − 4<i>x</i> − <i>z</i>²</span><span><i>ż</i> = −<i>az</i> − 4<i>x</i> − 4<i>y</i> − <i>x</i>²</span>',
+      note: 'Three identical lobes, one per axis, wound around each other by the same cyclic symmetry as Thomas.' },
+    { id: 'dadras', name: 'Dadras', k: 3, kmin: 2.4, kmax: 3.8, kstep: 0.01, kname: 'a', rate: 1.4, hmax: 0.005, ref: 0.6,
+      map: () => ({ c: [0.4, -0.9, 0], s: 0.082 }),
+      eq: '<span><i>ẋ</i> = <i>y</i> − <i>ax</i> + <i>byz</i></span><span><i>ẏ</i> = <i>cy</i> − <i>xz</i> + <i>z</i></span><span><i>ż</i> = <i>dxy</i> − <i>ez</i></span>',
+      note: 'A multi-scroll system from Dadras and Momeni. The swarm moves at wildly different speeds through different scrolls, and the color shows it: dark is slow, bright is fast.' },
+    { id: 'rossler', name: 'Rössler', k: 5.7, kmin: 2.2, kmax: 7, kstep: 0.01, kname: 'c', rate: 2.4, hmax: 0.01, ref: 0.7,
+      map: k => ({ c: [0.2 * k, -0.26 * k, 0.5 * k], s: 0.5 / k }),
+      eq: '<span><i>ẋ</i> = −<i>y</i> − <i>z</i></span><span><i>ẏ</i> = <i>x</i> + <i>ay</i></span><span><i>ż</i> = <i>b</i> + <i>z</i> (<i>x</i> − <i>c</i>)</span>',
+      note: 'Otto Rössler, 1976, built to be as simple as chaos gets. Slide <b>c</b> from 2.5 upward: one loop at 2.5, two at 3.5, four at 4, eight near 4.2, and chaos by 4.3.' },
+  ];
+  const PALETTES = [
+    { id: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg,#3b1f7a,#2fb6b0,#ffe3a1)', c: ['#2a1c78', '#1fa7a8', '#ffe2a0'], bg: '#04040a', accent: '#b6a8ff' },
+    { id: 'ember',  name: 'Ember',  css: 'linear-gradient(135deg,#5a0f18,#e8642c,#fff3d6)', c: ['#4a0b1a', '#e0582a', '#fff0cf'], bg: '#070304', accent: '#f19a62' },
+    { id: 'glacier',name: 'Glacier',css: 'linear-gradient(135deg,#0d2b6b,#4ec3f0,#f4fbff)', c: ['#0c2466', '#3fb4ee', '#f2fbff'], bg: '#020509', accent: '#8fd3f5' },
+    { id: 'orchid', name: 'Orchid', css: 'linear-gradient(135deg,#40104f,#e0559b,#f9e0f0)', c: ['#3a0f52', '#d64b93', '#fbe3f1'], bg: '#060308', accent: '#ee8cc0' },
+  ];
+  const COUNTS = [{ id: 18, name: '262K' }, { id: 19, name: '524K' }, { id: 20, name: '1M' }, { id: 21, name: '2M' }];
+  const S = {
+    sys: SYS[0], prev: null, mix: 1, k: {}, style: 'streaks', pal: PALETTES[0], log2n: (window.__gardenTest && window.__gardenTest.log2n) || (matchMedia('(max-width: 760px)').matches ? 18 : 19), speed: 1, trails: false, glow: 1,
+    yaw: -0.55, pitch: 0.42, dist: 3.9, burst: [0, 0, 0, 0], burstT: 0, perf: 1 / 60, perfN: 0, userN: false, spin: !REDUCED, vyaw: 0, scatter: 0, seed: 7,
+  };
+  SYS.forEach(s => S.k[s.id] = s.k);
+  let upd, draw, fade, post, down, up, N = 0, bufs = [], vaos = [], cur = 0, tf, hdr = null, chain = [], drag = null, pinch = null;
+  const pts = new Map();
+
+  const FIELD = `
+  uniform int u_ta, u_tb; uniform float u_ka, u_kb, u_mix, u_ra, u_rb; uniform vec4 u_xa, u_xb;
+  vec3 sysf(int t, vec3 p, float k){
+    float x = p.x, y = p.y, z = p.z;
+    if (t == 0) return vec3(10.0*(y - x), x*(k - z) - y, x*y - 2.6666667*z);
+    if (t == 1) return vec3((z - 0.7)*x - 3.5*y, 3.5*x + (z - 0.7)*y, 0.6 + k*z - z*z*z/3.0 - (x*x + y*y)*(1.0 + 0.25*z) + 0.1*z*x*x*x);
+    if (t == 2) return vec3(sin(y) - k*x, sin(z) - k*y, sin(x) - k*z);
+    if (t == 3) return vec3(-k*x - 4.0*y - 4.0*z - y*y, -k*y - 4.0*z - 4.0*x - z*z, -k*z - 4.0*x - 4.0*y - x*x);
+    if (t == 4) return vec3(y - k*x + 2.7*y*z, 1.7*y - x*z + z, 2.0*x*y - 9.0*z);
+    return vec3(-y - z, x + 0.2*y, 0.2 + z*(x - k));
+  }
+  vec3 Fw(vec3 w){
+    vec3 va = sysf(u_ta, w / u_xa.w + u_xa.xyz, u_ka) * (u_xa.w * u_ra);
+    if (u_mix >= 1.0) return va;
+    vec3 vb = sysf(u_tb, w / u_xb.w + u_xb.xyz, u_kb) * (u_xb.w * u_rb);
+    return mix(vb, va, u_mix);
+  }`;
+
+  const UPD_VS = `#version 300 es
+  precision highp float; precision highp int;
+  layout(location = 0) in vec4 a_p;
+  out vec4 v_p;
+  uniform float u_dt, u_respawn, u_scatter; uniform int u_steps; uniform uint u_seed; uniform vec4 u_burst;
+  ${FIELD}
+  ${HASH}
+  void main(){
+    vec3 p = a_p.xyz; float h = u_dt / float(u_steps);
+    for (int i = 0; i < 12; i++) {
+      if (i >= u_steps) break;
+      vec3 k1 = Fw(p), k2 = Fw(p + 0.5*h*k1), k3 = Fw(p + 0.5*h*k2), k4 = Fw(p + h*k3);
+      p += h / 6.0 * (k1 + 2.0*k2 + 2.0*k3 + k4);
+    }
+    uint id = uint(gl_VertexID);
+    float roll = float(hashu(id * 2654435761u ^ u_seed)) / 4294967295.0;
+    vec3 r = vec3(hashu(id ^ u_seed * 3u), hashu(id * 7u + u_seed), hashu(id * 13u ^ (u_seed + 911u))) / 4294967295.0;
+    if (u_scatter > 1.5) {
+      // butterfly effect: everyone starts inside one tiny ball
+      p = u_burst.xyz + normalize(r * 2.0 - 1.0 + 1e-6) * u_burst.w * pow(r.x, 0.333);
+    } else if (!(dot(p, p) < 7.0) || (roll < u_respawn && u_burst.w <= 0.0) || u_scatter > 0.5) {
+      p = (r * 2.0 - 1.0) * (u_scatter > 0.5 ? 1.25 : 0.7);
+    }
+    v_p = vec4(p, a_p.w);
+  }`;
+  const UPD_FS = `#version 300 es
+  precision mediump float; out vec4 o; void main(){ o = vec4(0); }`;
+
+  const DRAW_VS = `#version 300 es
+  precision highp float; precision highp int;
+  layout(location = 0) in vec4 a_p;
+  uniform mat4 u_mvp; uniform float u_size, u_ref, u_tail; uniform vec3 u_c0, u_c1, u_c2;
+  out vec3 v_c;
+  ${FIELD}
+  void main(){
+    vec3 v = Fw(a_p.xyz);
+    float t = clamp(0.5 + 0.42 * log2(length(v) / u_ref + 1e-6), 0.0, 1.0);
+    vec3 col = t < 0.5 ? mix(u_c0, u_c1, t * 2.0) : mix(u_c1, u_c2, t * 2.0 - 1.0);
+    // streaks: vertex 1 of each instance trails behind along the velocity
+    float tail = float(gl_VertexID & 1);
+    vec3 pos = a_p.xyz - v * (u_tail * tail);
+    vec4 p = u_mvp * vec4(pos, 1.0);
+    gl_Position = p; gl_PointSize = u_size;
+    v_c = col * clamp(3.6 / p.w, 0.5, 1.8) * (1.0 - tail);
+  }`;
+  const DRAW_FS = `#version 300 es
+  precision highp float; in vec3 v_c; uniform float u_gain; out vec4 o;
+  void main(){ o = vec4(v_c * u_gain, 1.0); }`;
+  const FADE_FS = `#version 300 es
+  precision highp float; uniform float u_keep; out vec4 o; void main(){ o = vec4(0.0, 0.0, 0.0, u_keep); }`;
+  const DOWN_FS = `#version 300 es
+  precision highp float; uniform sampler2D u_t; uniform vec2 u_px; in vec2 v_uv; out vec4 o;
+  void main(){
+    vec2 h = u_px * 0.5;
+    o = (texture(u_t, v_uv) * 4.0 + texture(u_t, v_uv - h) + texture(u_t, v_uv + h)
+       + texture(u_t, v_uv + vec2(h.x, -h.y)) + texture(u_t, v_uv - vec2(h.x, -h.y))) / 8.0;
+    o = min(o, vec4(3.0));
+  }`;
+  const UP_FS = `#version 300 es
+  precision highp float; uniform sampler2D u_t; uniform vec2 u_px; in vec2 v_uv; out vec4 o;
+  void main(){
+    vec2 h = u_px * 0.5;
+    vec4 s = texture(u_t, v_uv + vec2(-2.0*h.x, 0)) + texture(u_t, v_uv + vec2(2.0*h.x, 0))
+           + texture(u_t, v_uv + vec2(0, -2.0*h.y)) + texture(u_t, v_uv + vec2(0, 2.0*h.y))
+           + 2.0 * (texture(u_t, v_uv + vec2(-h.x, h.y)) + texture(u_t, v_uv + vec2(h.x, h.y))
+                  + texture(u_t, v_uv + vec2(h.x, -h.y)) + texture(u_t, v_uv + vec2(-h.x, -h.y)));
+    o = s / 12.0;
+  }`;
+  const POST_FS = `#version 300 es
+  precision highp float; precision highp int;
+  uniform sampler2D u_hdr, u_bloom; uniform float u_exp, u_bloomAmt, u_time; uniform vec3 u_bg; uniform int u_hasBloom;
+  in vec2 v_uv; out vec4 o;
+  ${HASH}
+  void main(){
+    vec3 c = min(texture(u_hdr, v_uv).rgb, vec3(12.0));
+    if (u_hasBloom == 1) c += texture(u_bloom, v_uv).rgb * u_bloomAmt;
+    c = 1.0 - exp(-c * u_exp);
+    c = pow(c, vec3(0.92));
+    vec2 q = v_uv - 0.5;
+    vec3 bg = u_bg * (1.0 - 0.8 * dot(q, q)) + vec3(0.012, 0.010, 0.022) * (1.0 - length(q) * 1.4);
+    vec3 col = bg + c * (1.0 - bg);
+    col *= 1.0 - 0.35 * dot(q, q);
+    col += (hash2(gl_FragCoord.xy + vec2(u_time * 61.0, u_time * 37.0)) - 0.5) / 200.0;
+    o = vec4(col, 1.0);
+  }`;
+
+  function allocParticles(log2n) {
+    N = 1 << log2n;
+    bufs.forEach(b => gl.deleteBuffer(b)); vaos.forEach(v => gl.deleteVertexArray(v));
+    const data = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) {
+      data[i * 4] = (Math.random() * 2 - 1) * 0.7; data[i * 4 + 1] = (Math.random() * 2 - 1) * 0.7;
+      data[i * 4 + 2] = (Math.random() * 2 - 1) * 0.7; data[i * 4 + 3] = Math.random();
+    }
+    bufs = [0, 1].map(() => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_COPY); return b; });
+    vaos = bufs.map(b => {
+      const v = gl.createVertexArray(); gl.bindVertexArray(v);
+      gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+      return v;
+    });
+    gl.bindVertexArray(null); gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    cur = 0;
+  }
+  function allocTargets() {
+    freeTarget(hdr); chain.forEach(freeTarget); chain = [];
+    if (HAS_FLOAT) {
+      hdr = target(W, H, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR);
+      let w = W, h = H;
+      for (let i = 0; i < 6 && w > 8 && h > 8; i++) { w = Math.max(1, w >> 1); h = Math.max(1, h >> 1); chain.push(target(w, h, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, gl.LINEAR)); }
+    } else {
+      hdr = target(W, H, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, hdr.f); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+  function fieldUniforms(p) {
+    const a = S.sys, b = S.prev || S.sys;
+    const ma = a.map(S.k[a.id]), mb = b.map(S.k[b.id]);
+    gl.uniform1i(p.u.u_ta, SYS.indexOf(a)); gl.uniform1i(p.u.u_tb, SYS.indexOf(b));
+    gl.uniform1f(p.u.u_ka, S.k[a.id]); gl.uniform1f(p.u.u_kb, S.k[b.id]);
+    const m = S.prev ? S.mix * S.mix * (3 - 2 * S.mix) : 1;
+    gl.uniform1f(p.u.u_mix, m);
+    gl.uniform1f(p.u.u_ra, a.rate); gl.uniform1f(p.u.u_rb, b.rate);
+    gl.uniform4f(p.u.u_xa, ...ma.c, ma.s); gl.uniform4f(p.u.u_xb, ...mb.c, mb.s);
+    return m;
+  }
+  function step(dt) {
+    gl.useProgram(upd.p);
+    fieldUniforms(upd);
+    const a = S.sys, b = S.prev || S.sys;
+    const native = Math.max(a.rate / a.hmax, b.rate / b.hmax) * dt * S.speed;
+    gl.uniform1f(upd.u.u_dt, dt * S.speed);
+    gl.uniform1i(upd.u.u_steps, clamp(Math.ceil(native), 1, 12));
+    gl.uniform1f(upd.u.u_respawn, S.trails ? 0.0004 : 0.00015);
+    gl.uniform1f(upd.u.u_scatter, S.scatter);
+    gl.uniform4f(upd.u.u_burst, ...S.burst);
+    S.scatter = 0;
+    S.seed = (Math.imul(S.seed, 1103515245) + 12345) >>> 0;
+    gl.uniform1ui(upd.u.u_seed, S.seed);
+    const dst = 1 - cur;
+    gl.bindVertexArray(vaos[cur]);
+    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, tf);
+    gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, bufs[dst]);
+    gl.enable(gl.RASTERIZER_DISCARD);
+    gl.beginTransformFeedback(gl.POINTS);
+    gl.drawArrays(gl.POINTS, 0, N);
+    gl.endTransformFeedback();
+    gl.disable(gl.RASTERIZER_DISCARD);
+    gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+    gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+    gl.bindVertexArray(null);
+    cur = dst;
+  }
+  function mvp() {
+    const cy = Math.cos(S.yaw), sy = Math.sin(S.yaw), cp = Math.cos(S.pitch), sp = Math.sin(S.pitch);
+    const e = [S.dist * cp * cy, S.dist * cp * sy, S.dist * sp];
+    const z = norm(e), x = norm(cross([0, 0, 1], z)), y = cross(z, x);
+    const view = [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1];
+    const a = W / H, n = 0.05, fr = 50, fov = projY();
+    const proj = [fov / a, 0, 0, 0, 0, fov, 0, 0, 0, 0, (fr + n) / (n - fr), -1, 0, 0, 2 * fr * n / (n - fr), 0];
+    return mul(proj, view);
+  }
+  function projY() { const f = 1 / Math.tan(0.38), a = W / H; return a < 1 ? f * a * 1.15 : f; }
+  function butterfly() {
+    // pick one particle that already lives on the attractor and pack everyone around it
+    const d = new Float32Array(4);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cur]); gl.getBufferSubData(gl.ARRAY_BUFFER, 16 * 1234, d); gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    if (!(Math.hypot(d[0], d[1], d[2]) < 2.5)) return;
+    S.burst = [d[0], d[1], d[2], 0.004]; S.scatter = 2; S.burstT = 0;
+    if (S.trails) { S.trails = false; S.style = 'streaks'; rebuildPanel(); }
+    hint('Every particle now starts in one speck, 400 times smaller than the attractor. Watch chaos tear it apart.');
+  }
+  function setSystem(s) {
+    if (s === S.sys) return;
+    S.prev = S.sys; S.sys = s; S.mix = 0;
+    placard(X);
+    rebuildPanel();
+  }
+
+  const X = {
+    id: 'attractor', ready: false,
+    title: 'Attractor', kicker: 'Strange attractors',
+    get blurb() { return `${(N || 524288).toLocaleString('en-US')} particles follow one set of equations. Each path is chaotic and never repeats, yet every particle settles onto the same shape. Switch systems and watch the swarm migrate from one to the next.`; },
+    get eq() { return S.sys.eq; },
+    hint: TOUCH ? 'Drag to orbit  ·  pinch to zoom  ·  double-tap to scatter the swarm' : 'Drag to orbit  ·  scroll to zoom  ·  double-click or Space to scatter the swarm',
+    init() {
+      upd = program(UPD_VS, UPD_FS, ['v_p']);
+      draw = program(DRAW_VS, DRAW_FS);
+      fade = program(QUAD_VS, FADE_FS);
+      post = program(QUAD_VS, POST_FS);
+      down = program(QUAD_VS, DOWN_FS);
+      up = program(QUAD_VS, UP_FS);
+      tf = gl.createTransformFeedback();
+      allocParticles(S.log2n);
+      allocTargets();
+      for (let i = 0; i < 120; i++) step(1 / 15);
+      this.ready = true;
+    },
+    resize() { allocTargets(); },
+    enter() {
+      if (!this.entered) { this.entered = true; if (W < H) S.dist = 3.45; }
+      document.body.dataset.tone = 'dark';
+      document.documentElement.style.setProperty('--accent', S.pal.accent);
+      canvas.className = 'grab';
+    },
+    frame(t, dt) {
+      // step the swarm down a size if this GPU cannot keep up
+      S.perf = lerp(S.perf, dt, 0.05); S.perfN++;
+      if (!S.userN && S.perfN > 150 && S.perf > 0.034 && S.log2n > 18) {
+        S.log2n--; S.perfN = 0; allocParticles(S.log2n); placard(X);
+        document.querySelectorAll('#panelBody [id^="a-n-"]').forEach(b => b.setAttribute('aria-pressed', String(b.id === 'a-n-' + S.log2n)));
+      }
+      if (S.prev) { S.mix += dt / 2.6; if (S.mix >= 1) { S.mix = 1; S.prev = null; } }
+      if (S.spin && !drag) S.yaw += dt * 0.11;
+      S.yaw += S.vyaw * dt; S.vyaw *= Math.pow(0.04, dt);
+      step(dt);
+      if (S.burst[3] > 0 && (S.burstT += dt) > 40) S.burst = [0, 0, 0, 0];
+
+      // splat particles into the HDR buffer
+      bindOut(hdr, W, H);
+      gl.enable(gl.BLEND);
+      if (S.trails) {
+        gl.useProgram(fade.p); gl.uniform1f(fade.u.u_keep, Math.pow(0.16, dt));
+        gl.blendFunc(gl.ZERO, gl.SRC_ALPHA); fullscreen();
+      } else { gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(draw.p);
+      fieldUniforms(draw);
+      const a = S.sys, b = S.prev || S.sys, m = S.prev ? S.mix : 1;
+      gl.uniformMatrix4fv(draw.u.u_mvp, false, mvp());
+      gl.uniform1f(draw.u.u_size, Math.max(1, DPR * 0.85));
+      gl.uniform1f(draw.u.u_ref, lerp(b.ref * b.rate, a.ref * a.rate, m));
+      const pc = S.pal.c.map(hex);
+      gl.uniform3fv(draw.u.u_c0, pc[0]); gl.uniform3fv(draw.u.u_c1, pc[1]); gl.uniform3fv(draw.u.u_c2, pc[2]);
+      // keep brightness steady across screen sizes, zoom and particle counts
+      const ppu = (H / 2) * projY() / S.dist, size = Math.max(1, DPR * 0.85), perN = 524288 / N;
+      const gain = S.trails ? 0.0075 * (ppu / 288) ** 2 / (size * size)
+        : S.style === 'streaks' ? 0.0245 * (ppu / 288) : 0.0385 * (ppu / 288) ** 2 / (size * size);
+      gl.uniform1f(draw.u.u_gain, gain * perN * S.glow * (HAS_FLOAT ? 1 : 0.6));
+      gl.bindVertexArray(vaos[cur]);
+      if (S.style === 'streaks') {
+        gl.uniform1f(draw.u.u_tail, 0.05);
+        gl.vertexAttribDivisor(0, 1); gl.drawArraysInstanced(gl.LINES, 0, 2, N); gl.vertexAttribDivisor(0, 0);
+      } else {
+        gl.uniform1f(draw.u.u_tail, 0);
+        gl.drawArrays(gl.POINTS, 0, N);
+      }
+      gl.bindVertexArray(null);
+
+      // dual-filter bloom
+      gl.activeTexture(gl.TEXTURE0);
+      if (chain.length) {
+        gl.disable(gl.BLEND);
+        gl.useProgram(down.p); gl.uniform1i(down.u.u_t, 0);
+        let src = hdr;
+        for (const d of chain) { gl.bindTexture(gl.TEXTURE_2D, src.t); gl.uniform2f(down.u.u_px, 1 / src.w, 1 / src.h); bindOut(d, d.w, d.h); fullscreen(); src = d; }
+        gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+        gl.useProgram(up.p); gl.uniform1i(up.u.u_t, 0);
+        for (let i = chain.length - 1; i > 0; i--) { const s = chain[i], d = chain[i - 1]; gl.bindTexture(gl.TEXTURE_2D, s.t); gl.uniform2f(up.u.u_px, 1 / s.w, 1 / s.h); bindOut(d, d.w, d.h); fullscreen(); }
+      }
+      gl.disable(gl.BLEND);
+      gl.useProgram(post.p);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, hdr.t); gl.uniform1i(post.u.u_hdr, 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, chain.length ? chain[0].t : hdr.t); gl.uniform1i(post.u.u_bloom, 1);
+      gl.uniform1i(post.u.u_hasBloom, chain.length ? 1 : 0);
+      gl.uniform1f(post.u.u_exp, 1.0); gl.uniform1f(post.u.u_bloomAmt, 0.16 * S.glow);
+      gl.uniform3fv(post.u.u_bg, hex(S.pal.bg)); gl.uniform1f(post.u.u_time, t % 100);
+      bindOut(null, W, H); fullscreen();
+      gl.activeTexture(gl.TEXTURE0);
+    },
+    down(e) { pts.set(e.pointerId, [e.clientX, e.clientY]); drag = true; canvas.className = 'grabbing'; pinch = null; },
+    move(e) {
+      if (!pts.has(e.pointerId)) return;
+      const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pts.size === 1) {
+        const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
+        S.yaw -= dx * 0.006; S.pitch = clamp(S.pitch + dy * 0.005, -1.45, 1.45);
+        S.vyaw = -dx * 0.006 / Math.max(1 / 120, 1 / 60) * 0.5;
+      } else if (pts.size === 2) {
+        const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (pinch) S.dist = clamp(S.dist * pinch / d, 1.2, 9);
+        pinch = d;
+      }
+    },
+    up(e) { pts.delete(e.pointerId); pinch = null; if (!pts.size) { drag = false; canvas.className = 'grab'; } },
+    wheel(e) { S.dist = clamp(S.dist * Math.exp(e.deltaY * (e.deltaMode ? 0.05 : 0.001)), 1.2, 9); },
+    dbl() { S.burst = [0, 0, 0, 0]; S.scatter = 1; },
+    key(e) { if (e.key === ' ') { S.burst = [0, 0, 0, 0]; S.scatter = 1; return true; } if (e.key === 'b' || e.key === 'B') { butterfly(); return true; } },
+    _butterfly() { butterfly(); },
+    _state: S, _sys: SYS, _set(id) { setSystem(SYS.find(s => s.id === id)); }, _step(dt) { step(dt); }, _alloc(n) { allocParticles(n); }, _read() { const d = new Float32Array(N * 4); gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cur]); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, d); gl.bindBuffer(gl.ARRAY_BUFFER, null); return Array.from(d); },
+    panel() {
+      const s = S.sys;
+      return [
+        group('System', chips('a-sys', SYS, s.id, it => setSystem(it))),
+        group(null,
+          slider('a-k-' + s.id, `Parameter ${s.kname}`, s.kmin, s.kmax, s.kstep, S.k[s.id], v => v.toFixed(s.kstep < 0.001 ? 4 : s.kstep < 0.01 ? 3 : 2), v => S.k[s.id] = v),
+          note(s.note),
+          buttons([{ name: `Reset ${s.kname}`, on: () => { S.k[s.id] = s.k; $('#a-k-' + s.id).value = s.k; $('#a-k-' + s.id).dispatchEvent(new Event('input')); } }, { name: 'Scatter', on: () => { S.burst = [0, 0, 0, 0]; S.scatter = 1; } }])),
+        group('Butterfly effect',
+          note('Pack the whole swarm into one speck of dust and let it go. Chaos means nearby paths pull apart exponentially fast, so the speck stretches into a thread and then covers the whole attractor.'),
+          buttons([{ name: 'Release from one point', on: butterfly }])),
+        group('Exposure', chips('a-exp', [{ id: 'streaks', name: 'Streaks' }, { id: 'points', name: 'Points' }, { id: 'long', name: 'Long exposure' }], S.trails ? 'long' : S.style, it => { S.trails = it.id === 'long'; S.style = it.id === 'streaks' ? 'streaks' : 'points'; }),
+          toggle('a-spin', 'Slow orbit', S.spin, v => S.spin = v)),
+        group('Palette', swatches('a-pal', PALETTES, S.pal.id, it => { S.pal = it; document.documentElement.style.setProperty('--accent', it.accent); })),
+        group('Particles', chips('a-n', COUNTS, S.log2n, it => { S.userN = true; S.log2n = it.id; allocParticles(it.id); S.scatter = 1; placard(X); })),
+        group(null,
+          slider('a-speed', 'Time', 0.1, 2.5, 0.05, S.speed, v => v.toFixed(2) + '×', v => S.speed = v),
+          slider('a-glow', 'Glow', 0.3, 2.5, 0.05, S.glow, v => v.toFixed(2) + '×', v => S.glow = v)),
+      ];
+    },
+  };
+  return X;
+}
+function norm(v) { const l = Math.hypot(...v) || 1; return v.map(x => x / l); }
+function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+function mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; }
+
+/* =====================================================================
+   gallery
+   ===================================================================== */
+const exhibits = { morphogen: Morphogen(), julia: Julia(), attractor: Attractor() };
+let current = null;
+
+function placard(x) {
+  $('#title').textContent = x.title;
+  $('#kicker').textContent = x.kicker;
+  $('#blurb').textContent = x.blurb;
+  $('#eq').innerHTML = x.eq;
+}
+function rebuildPanel() { panelBody.replaceChildren(...current.panel()); }
+let switching = 0;
+function show(id) {
+  const x = exhibits[id] || exhibits.morphogen;
+  if (current === x) return;
+  if (current && !REDUCED) {
+    canvas.classList.add('dim'); clearTimeout(switching);
+    switching = setTimeout(() => { swap(x); requestAnimationFrame(() => canvas.classList.remove('dim')); }, 260);
+    document.querySelectorAll('#switcher button').forEach(b => b.setAttribute('aria-current', String(b.dataset.x === x.id)));
+    return;
+  }
+  swap(x);
+}
+function swap(x) {
+  if (current === x) return;
+  try { if (!x.ready) x.init(); }
+  catch (err) {
+    console.error(err); hint('This exhibit could not start on this device: ' + err.message);
+    document.querySelectorAll('#switcher button').forEach(b => b.setAttribute('aria-current', String(!!current && b.dataset.x === current.id)));
+    return;
+  }
+  if (current && current.leave) current.leave();
+  current = x;
+  x.enter();
+  placard(x); rebuildPanel(); hint(x.hint);
+  const pl = $('#placard'); pl.classList.remove('rise'); void pl.offsetWidth; pl.classList.add('rise');
+  document.querySelectorAll('#switcher button').forEach(b => b.setAttribute('aria-current', String(b.dataset.x === x.id)));
+  try { history.replaceState(null, '', '#' + x.id); } catch (e) {}
+}
+
+document.querySelectorAll('#switcher button').forEach(b => b.onclick = () => show(b.dataset.x));
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+let lastTap = { t: 0, x: 0, y: 0 };
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId); canvas.focus({ preventScroll: true });
+  if (e.pointerType === 'touch') {
+    const now = performance.now();
+    if (now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 32) { lastTap.t = 0; current && current.dbl && current.dbl(); }
+    else lastTap = { t: now, x: e.clientX, y: e.clientY };
+  }
+  current && current.down && current.down(e);
+});
+canvas.addEventListener('pointermove', e => current && current.move && current.move(e));
+const upHandler = e => current && current.up && current.up(e);
+canvas.addEventListener('pointerup', upHandler);
+canvas.addEventListener('pointercancel', upHandler);
+canvas.addEventListener('pointerleave', () => { if (current === exhibits.morphogen) $('#probe').hidden = true; current && current.out && current.out(); });
+canvas.addEventListener('wheel', e => { e.preventDefault(); current && current.wheel && current.wheel(e); }, { passive: false });
+canvas.addEventListener('dblclick', e => { if (!TOUCH) current && current.dbl && current.dbl(); });
+
+function setBare(v) { document.body.classList.toggle('bare', v); }
+$('#hide').onclick = () => setBare(true);
+$('#show').onclick = () => setBare(false);
+$('#panelToggle').onclick = () => {
+  const open = !$('#panel').classList.contains('open');
+  $('#panel').classList.toggle('open', open); $('#placard').classList.toggle('open', open);
+  $('#panelToggle').setAttribute('aria-expanded', String(open));
+};
+window.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea')) return;
+  if (e.key === 'h' || e.key === 'H') { setBare(!document.body.classList.contains('bare')); return; }
+  if (e.key === '1') return show('morphogen');
+  if (e.key === '2') return show('julia');
+  if (e.key === '3') return show('attractor');
+  if (e.target.closest && e.target.closest('button') && e.key === ' ') return;
+  if (current && current.key && current.key(e)) e.preventDefault();
+});
+window.addEventListener('resize', resize);
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); hint('The graphics context was lost. Reload the page to replant the garden.'); });
+
+let last = performance.now(), failed = false;
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000)); last = now;
+  if (!current || document.hidden || window.__garden.paused) return;
+  try { current.frame(now / 1000, dt); }
+  catch (err) { if (!failed) { failed = true; console.error(err); hint('Something went wrong drawing this exhibit. Try another one, or reload.'); } }
+}
+resize();
+window.__garden = { exhibits, show: id => swap(exhibits[id]) };
+show((location.hash || '').slice(1) || 'morphogen');
+requestAnimationFrame(loop);
+</script>
