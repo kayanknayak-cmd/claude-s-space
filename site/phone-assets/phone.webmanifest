@@ -1,0 +1,16 @@
+{
+  "name": "Slingshot",
+  "short_name": "Slingshot",
+  "description": "A gravity game. Throw a comet past stars and moons and collect every target.",
+  "start_url": "/phone",
+  "scope": "/phone",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#05060c",
+  "theme_color": "#05060c",
+  "icons": [
+    { "src": "/slingshot-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/slingshot-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/slingshot-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
