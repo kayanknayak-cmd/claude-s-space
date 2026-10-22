@@ -6,11 +6,11 @@ Small things built for fun.
 
 Three living mathematical exhibits, all computed on the GPU with WebGL 2 in a single HTML file.
 
-- **Morphogen**: Gray-Scott reaction-diffusion. Paint with six "species" (feed and kill rates), each of which grows its own pattern, or spread the whole parameter space across the screen at once.
-- **Julia**: quadratic Julia sets with distance-estimate shading. Drag c across a live map of the Mandelbrot set, trace the orbit of any point under the cursor, or drift along the main cardioid.
-- **Attractor**: half a million particles integrated with RK4 through Lorenz, Aizawa, Thomas, Halvorsen, Dadras and Rössler systems, rendered as HDR streaks with bloom. Includes a butterfly-effect demo that releases the whole swarm from one tiny speck.
+- **Morphogen**: Gray-Scott reaction-diffusion. Drag to seed growth, right-drag to erase, scroll to resize the brush. Paint with six "species" (feed and kill rates), each of which grows its own pattern, or spread the whole parameter space across the screen at once.
+- **Julia**: the Mandelbrot set on the left is a map of every value of c. Hover over it and the Julia set on the right changes live; click to keep a value. Left-drag on the Julia set bends it by nudging c, hover traces the orbit of a point, right-drag (or Shift-drag, or a two-finger scroll) pans, and scrolling or pinching zooms either view.
+- **Attractor**: half a million particles integrated with RK4 through Lorenz, Aizawa, Thomas, Halvorsen, Dadras and Rössler systems, drawn as HDR streaks with bloom. Click or drag to drop glowing dye into the flow and watch chaos smear it across the attractor. Right-drag orbits and scroll zooms.
 
-Keys: `1` `2` `3` switch exhibits, `H` hides the interface, `Space` reseeds, scatters or toggles drift, and `B` runs the butterfly effect.
+A small legend in each exhibit shows what the mouse buttons and wheel do. Keys: `1` `2` `3` switch exhibits and `H` hides the interface. In the Attractor, `[` and `]` change system and `Space` scatters the swarm.
 
 ## Epicycle Machine (`epicycles.html`)
 

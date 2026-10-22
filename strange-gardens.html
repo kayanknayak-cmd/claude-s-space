@@ -57,6 +57,10 @@ body.bare .ui{opacity:0;pointer-events:none}
 .placard h1{margin:4px 0 0;font:300 italic clamp(44px,6.4vw,76px)/.92 var(--display);letter-spacing:-.01em;text-wrap:balance}
 .kicker{font:500 11px/1.2 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
 .blurb{margin:0;max-width:24rem;color:var(--paper);opacity:.86;font-size:15px}
+.placard:not(.open) .blurb{display:none}
+.about{pointer-events:auto;justify-self:start;appearance:none;background:none;border:0;padding:2px 0;cursor:pointer;
+  font:400 12.5px/1.2 var(--body);color:var(--mist);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:4px}
+.about:hover{color:var(--paper)}
 .eq{display:grid;gap:2px;margin-top:4px;font:400 italic 21px/1.35 var(--display);color:var(--paper)}
 .eq span{white-space:nowrap}
 .eq sub,.eq sup{font-size:.62em;line-height:0}
@@ -69,8 +73,21 @@ body.bare .ui{opacity:0;pointer-events:none}
   max-height:calc(100% - 140px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overflow:auto;
   background:var(--glass);-webkit-backdrop-filter:blur(16px) saturate(1.2);backdrop-filter:blur(16px) saturate(1.2);
   border:1px solid var(--line);border-radius:16px;padding:6px 16px 16px;scrollbar-width:thin}
-.panel-head{display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px}
-.panel-head span{font:500 10.5px/1 var(--body);letter-spacing:.24em;text-transform:uppercase;color:var(--mist)}
+.panel-head{appearance:none;background:none;border:0;width:100%;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:9px 0 5px;
+  font:500 10.5px/1 var(--body);letter-spacing:.24em;text-transform:uppercase;color:var(--mist)}
+.panel-head:hover{color:var(--paper)}
+.panel-head svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.6;transition:transform .25s}
+.panel.collapsed{width:auto;padding-bottom:5px}
+.panel.collapsed #panelBody{display:none}
+.panel.collapsed .panel-head svg{transform:rotate(180deg)}
+details.more{border-top:1px solid var(--line)}
+details.more>summary{list-style:none;cursor:pointer;padding:13px 0 9px;display:flex;justify-content:space-between;
+  font:500 10.5px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--mist)}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::after{content:"+";font-size:15px;letter-spacing:0;line-height:.6}
+details.more[open]>summary::after{content:"−"}
+details.more>.grp:first-of-type{border-top:0;padding-top:4px}
+.note.tip{color:var(--paper);opacity:.8}
 .grp{display:grid;gap:9px;padding:13px 0 12px;border-top:1px solid var(--line)}
 .grp:first-of-type{border-top:0}
 .grp h3{margin:0;font:500 10.5px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--mist)}
@@ -123,11 +140,32 @@ body.bare #show:hover{opacity:1}
 #panelToggle{display:none}
 
 /* Julia's map of c */
-.cmap{position:fixed;left:calc(var(--gut) + 8px);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);display:grid;gap:7px}
-.cmap canvas{display:block;width:244px;height:170px;border-radius:12px;border:1px solid var(--line);cursor:crosshair;touch-action:none;background:#050609}
-.cmap .cap{font:400 12px/1.35 var(--mono);color:var(--paper);font-variant-numeric:tabular-nums;text-shadow:0 0 6px var(--halo),0 0 2px var(--halo)}
-.cmap .cap em{font-style:normal;color:var(--accent)}
-.cmap .lbl{font:500 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--mist)}
+
+/* Julia's two views */
+.divider{position:fixed;background:var(--line);pointer-events:none}
+.jlabel{position:fixed;transform:translateX(-50%);display:grid;gap:4px;justify-items:center;text-align:center;pointer-events:none}
+.mlabel{position:fixed;transform:translateX(-100%);display:grid;gap:4px;justify-items:end;text-align:right;pointer-events:none;white-space:nowrap}
+.eyebrow{font:500 10.5px/1 var(--body);letter-spacing:.24em;text-transform:uppercase;color:var(--mist);text-shadow:0 0 8px var(--halo)}
+.jlabel .val{font:400 15px/1.3 var(--mono);color:var(--paper);font-variant-numeric:tabular-nums;text-shadow:0 0 8px var(--halo),0 0 3px var(--halo)}
+.jlabel .state{font-size:13px;line-height:1.4;color:var(--paper);opacity:.82;max-width:26rem;text-shadow:0 0 8px var(--halo),0 0 3px var(--halo)}
+.mlabel .sub{font:italic 400 16px/1.2 var(--display);color:var(--paper);opacity:.85;text-shadow:0 0 8px var(--halo)}
+
+/* How-to legend */
+.legend{position:fixed;left:calc(var(--gut) + 6px);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);display:grid;gap:6px;
+  padding:10px 13px 11px;border-radius:12px;background:var(--glass);border:1px solid var(--line);max-width:min(23rem,calc(50vw - 190px));
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);font-size:12.5px;line-height:1.3;pointer-events:none}
+.lg-title{font:500 10px/1 var(--body);letter-spacing:.22em;text-transform:uppercase;color:var(--mist);margin-bottom:2px}
+.lg-row{display:flex;align-items:center;gap:10px}
+.lg-ic{flex:none;width:14px;height:20px;display:grid;place-items:center}
+.lg-ic svg{width:14px;height:20px;overflow:visible}
+.lg-ic .o{fill:none;stroke:var(--paper);stroke-width:1.1;opacity:.75}
+.lg-ic .f{fill:var(--accent);stroke:none}
+.lg-t b{font-weight:500;color:var(--paper)}
+.lg-t em{display:block;font-style:normal;color:var(--mist);font-size:11.5px}
+kbd{font:400 11px/1 var(--mono);padding:2px 5px;border:1px solid var(--line);border-radius:4px;color:var(--paper)}
+.hint.coach{border-color:color-mix(in srgb,var(--accent) 70%,transparent);padding-left:26px}
+.hint.coach::before{content:"";position:absolute;left:11px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--accent);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25;transform:scale(.7)}}
 
 /* Morphogen's parameter-map axes */
 .axes{position:fixed;inset:0;pointer-events:none;font:400 11px/1 var(--mono);color:var(--paper)}
@@ -142,8 +180,6 @@ body.bare #show:hover{opacity:1}
 @media (max-width:760px){
   .placard{gap:6px;top:calc(env(safe-area-inset-top,0px) + 14px)}
   .placard h1{font-size:44px}
-  .blurb{display:none}
-  .placard.open .blurb{display:block}
   .eq{font-size:17px}
   .scrim{height:min(22rem,55vh)}
   #panelToggle{display:grid}
@@ -154,13 +190,15 @@ body.bare #show:hover{opacity:1}
   .switcher button{padding:7px 11px 8px;font-size:18px}
   .corner{bottom:calc(env(safe-area-inset-bottom,0px) + 18px)}
   .hint{bottom:calc(env(safe-area-inset-bottom,0px) + 70px);left:var(--gut);transform:none;white-space:normal;max-width:calc(100vw - 2*var(--gut))}
-  .cmap{bottom:calc(env(safe-area-inset-bottom,0px) + 124px)}
-  .cmap canvas{width:168px;height:117px}
   .ax-k{bottom:calc(env(safe-area-inset-bottom,0px) + 112px)}
+  .legend{display:none}
+  .panel.collapsed #panelBody{display:block}
+  .panel.collapsed{width:auto}
+  .jlabel .state,.mlabel .sub{display:none}
   .ax-f{bottom:calc(env(safe-area-inset-bottom,0px) + 146px)}
 }
 @media (max-width:420px){.switcher button{padding:7px 8px 8px;font-size:17px}}
-@media (prefers-reduced-motion:reduce){.ui,.panel,.hint,#gl{transition:none}.placard.rise>*{animation:none}}
+@media (prefers-reduced-motion:reduce){.ui,.panel,.hint,#gl{transition:none}.placard.rise>*,.hint.coach::before{animation:none}}
 </style>
 
 <canvas id="gl" tabindex="0" aria-label="Interactive mathematical artwork"></canvas>
@@ -174,18 +212,18 @@ body.bare #show:hover{opacity:1}
     <div class="kicker" id="kicker"></div>
     <p class="blurb" id="blurb"></p>
     <div class="eq" id="eq"></div>
+    <button class="about" id="about" type="button" aria-expanded="false">About this piece</button>
   </header>
 
   <aside class="panel" id="panel" aria-label="Controls">
-    <div class="panel-head"><span id="panelTitle">Instruments</span></div>
+    <button class="panel-head" id="panelHead" type="button" aria-expanded="true"><span>Controls</span><svg viewBox="0 0 12 12"><path d="M2.5 7.5 6 4l3.5 3.5"/></svg></button>
     <div id="panelBody"></div>
   </aside>
 
-  <div class="cmap" id="cmap" hidden>
-    <span class="lbl">The map of c</span>
-    <canvas id="mini" aria-label="Mandelbrot set. Drag to choose c."></canvas>
-    <div class="cap" id="ccap"></div>
-  </div>
+  <div class="divider" id="divider" hidden></div>
+  <div class="mlabel" id="mlabel" hidden><span class="eyebrow">The Mandelbrot set</span><span class="sub">every point here is a value of c</span></div>
+  <div class="jlabel" id="jlabel" hidden aria-live="polite"><span class="eyebrow">The Julia set for</span><span class="val" id="jc-val"></span><span class="state" id="jc-state"></span></div>
+  <div class="legend" id="legend" aria-label="How to use this exhibit"></div>
 
   <div class="axes" id="axes" hidden>
     <span class="ax-k">kill rate k &nbsp;0.045 → 0.070</span>
@@ -366,11 +404,67 @@ function buttons(items) {
 }
 function note(html, cls = 'note') { const p = el('p', cls); p.innerHTML = html; return p; }
 
-/* ---------- hint ---------- */
-let hintTimer = 0;
+function more(label, ...kids) {
+  const d = el('details', 'more'), sm = el('summary'); sm.textContent = label;
+  d.append(sm, ...kids.filter(Boolean));
+  return d;
+}
+
+/* ---------- hints, first-step coaching, legend ---------- */
+let hintTimer = 0, coachKey = null;
 function hint(text) {
-  const h = $('#hint'); h.textContent = text; h.classList.remove('gone');
+  const h = $('#hint'); h.textContent = text; h.classList.remove('gone', 'coach'); coachKey = null;
   clearTimeout(hintTimer); hintTimer = setTimeout(() => h.classList.add('gone'), 6500);
+}
+function coach(text, key) {
+  // stays up until the visitor actually does the thing
+  const h = $('#hint'); h.textContent = text; h.classList.remove('gone'); h.classList.add('coach');
+  clearTimeout(hintTimer); coachKey = key;
+}
+function coachDone(key) {
+  if (exhibits[key]) exhibits[key].coached = true;
+  if (coachKey !== key) return;
+  coachKey = null; const h = $('#hint'); h.classList.add('gone');
+  setTimeout(() => { if (!coachKey) h.classList.remove('coach'); }, 1200);
+}
+const ICON = {
+  left: '<svg viewBox="0 0 14 20"><rect class="o" x="1" y="1" width="12" height="18" rx="6"/><path class="f" d="M7 1.4A5.6 5.6 0 0 0 1.4 7v1.2H7z"/><path class="o" d="M7 1.4v6.8M1.2 8.2h11.6"/></svg>',
+  right: '<svg viewBox="0 0 14 20"><rect class="o" x="1" y="1" width="12" height="18" rx="6"/><path class="f" d="M7 1.4A5.6 5.6 0 0 1 12.6 7v1.2H7z"/><path class="o" d="M7 1.4v6.8M1.2 8.2h11.6"/></svg>',
+  wheel: '<svg viewBox="0 0 14 20"><rect class="o" x="1" y="1" width="12" height="18" rx="6"/><path class="o" d="M1.2 8.2h11.6"/><rect class="f" x="5.8" y="2.6" width="2.4" height="4.6" rx="1.2"/></svg>',
+  hover: '<svg viewBox="0 0 14 20"><path class="f" d="M3 3.5l8.4 7.6-3.7.5 2.1 4.6-1.9.9-2.1-4.7L3 15z"/></svg>',
+  touch: '<svg viewBox="0 0 14 20"><circle class="o" cx="7" cy="10" r="5"/><circle class="f" cx="7" cy="10" r="2"/></svg>',
+  pinch: '<svg viewBox="0 0 14 20"><circle class="o" cx="3.8" cy="13.5" r="2.6"/><circle class="o" cx="10.2" cy="6.5" r="2.6"/><path class="o" d="M5.7 11.4l2.6-2.8"/></svg>',
+  key: '',
+};
+function legend(rows, title) {
+  const L = $('#legend'); L.replaceChildren();
+  if (title) { const t = el('div', 'lg-title'); t.textContent = title; L.append(t); }
+  for (const [ic, act, what, alt] of rows) {
+    const r = el('div', 'lg-row'), i = el('span', 'lg-ic'), t = el('span', 'lg-t');
+    i.innerHTML = ICON[ic] || '';
+    t.innerHTML = `<b>${act}</b> ${what}` + (alt ? `<em>${alt}</em>` : '');
+    r.append(i, t); L.append(r);
+  }
+}
+/* a shared 2D layer above the GPU canvas: brush rings, markers, orbit traces */
+const overlayCv = $('#orbit');
+function overlay() {
+  if (overlayCv.width !== W || overlayCv.height !== H) { overlayCv.width = W; overlayCv.height = H; }
+  const g = overlayCv.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  return g;
+}
+function clearOverlay() { const g = overlayCv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, overlayCv.width, overlayCv.height); }
+/* mouse wheel zooms; a trackpad's two-finger scroll pans; a pinch (ctrl + wheel) zooms */
+let trackpad = false;
+function wheelKind(e) {
+  if (e.ctrlKey) return 'pinch';
+  if (e.metaKey || e.altKey) return 'wheel';
+  if (e.shiftKey) return 'scroll';
+  if (e.deltaMode !== 0) return 'wheel';
+  if (e.deltaX !== 0 || !Number.isInteger(e.deltaY)) trackpad = true;
+  if (trackpad && (Math.abs(e.deltaY) < 50 || e.deltaX !== 0 || !Number.isInteger(e.deltaY))) return 'scroll';
+  return 'wheel';
 }
 
 /* =====================================================================
@@ -390,7 +484,7 @@ function Morphogen() {
     { id: 'specimen', name: 'Specimen', css: 'conic-gradient(#ef7d62 0 33%,#63cdb9 0 66%,#e8c06e 0)', mode: 0, bg: '#080a11', lo: '#000000', hi: '#000000', gl: '#fff6e6', tone: 'dark', accent: '#8fe3cf' },
     { id: 'isoline',  name: 'Isoline',  css: 'repeating-radial-gradient(circle at 50% 50%,#0a0c14 0 3px,#63cdb9 3px 4px)', mode: 1, bg: '#05060b', lo: '#000000', hi: '#000000', gl: '#ffffff', tone: 'dark', accent: '#8fe3cf' },
     { id: 'lacquer',  name: 'Lacquer',  css: 'radial-gradient(circle at 35% 35%,#ffd479,#c2311f 50%,#120406)', mode: 3, bg: '#0b0405', lo: '#5e120f', hi: '#e9973f', gl: '#fff0c8', tone: 'dark', accent: '#f0a24a' },
-    { id: 'porcelain',name: 'Porcelain',css: 'radial-gradient(circle at 35% 35%,#fbf8f1,#e9e3d6 50%,#1f3f93 51%)', mode: 2, bg: '#f1ece1', lo: '#9fb3dc', hi: '#173a8c', gl: '#ffffff', tone: 'light', accent: '#2b55b8' },
+    { id: 'spectrum', name: 'Spectrum', css: 'repeating-radial-gradient(circle at 50% 50%,#05060b 0 2px,#7a5cff 2px 3px,#05060b 3px 5px,#2fc9b5 5px 6px,#05060b 6px 8px,#f3d27a 8px 9px)', mode: 4, bg: '#04050a', lo: '#6d4dff', hi: '#25c3b0', gl: '#f5d37c', tone: 'dark', accent: '#9a86ff' },
   ];
   const S = { tool: 'seed', species: SPECIES[0], pal: PALETTES[1], tempo: 10, brush: 7, map: false, warm: 0 };
   let sim, disp, copy, A = null, B = null, w = 0, h = 0, fmt;
@@ -466,17 +560,21 @@ function Morphogen() {
     vec3 L = normalize(vec3(-0.55, 0.62, 0.72));
     vec2 q = v_uv - 0.5;
     vec3 col;
-    if (u_mode == 1) {
-      // isolines of the B concentration, drawn with constant screen width
-      float lines = 0.0;
+    if (u_mode == 1 || u_mode == 4) {
+      // isolines of the B concentration, drawn with constant screen width;
+      // Spectrum colors each level, the others color by species
+      float lines = 0.0; vec3 lc = vec3(0.0);
       for (int k = 1; k <= 5; k++) {
         float iso = 0.045 * float(k);
         float d = abs(B - iso) / gl * u_cellpx;
-        lines += exp(-d*d / 1.6) * (k == 3 ? 1.0 : 0.5);
+        float e = exp(-d*d / 1.6) * (k == 3 ? 1.0 : 0.5);
+        float f = float(k - 1) / 4.0;
+        vec3 c4 = f < 0.5 ? mix(u_lo, u_hi, f * 2.0) : mix(u_hi, u_gl, f * 2.0 - 1.0);
+        lc += (u_mode == 4 ? c4 : tint) * e; lines += e;
       }
       float fill = smoothstep(0.08, 0.3, B);
-      vec3 bg = u_bg + tint * 0.025;
-      col = bg + tint * fill * 0.09 + tint * lines * 0.95 + vec3(1.0) * pow(lines, 3.0) * 0.12;
+      vec3 ft = u_mode == 4 ? mix(u_lo, u_hi, fill) : tint;
+      col = u_bg + ft * 0.025 + ft * fill * 0.09 + lc * 0.95 + vec3(1.0) * pow(lines, 3.0) * 0.12;
     } else {
       float hn = smoothstep(0.04, 0.30, B);
       vec3 n = normalize(vec3(-hx * 6.0, -hy * 6.0, 1.0));
@@ -487,16 +585,14 @@ function Morphogen() {
       float shadow = smoothstep(0.0, 0.16, above - B) * (1.0 - hn);
       vec3 deep = u_mode == 3 ? u_lo : tint * 0.42;
       vec3 crest = mix(tint, vec3(1.0), 0.32);
-      vec3 base = u_bg;
-      if (u_mode == 2) { deep = u_lo; crest = u_hi * 0.8; }
-      col = mix(base, deep, smoothstep(0.0, 0.3, hn));
+      col = mix(u_bg, deep, smoothstep(0.0, 0.3, hn));
       col = mix(col, tint, smoothstep(0.25, 0.75, hn));
       col = mix(col, crest, smoothstep(0.78, 1.0, hn) * 0.55);
       col *= mix(1.0, 0.55 + 0.6 * diff, hn);
-      col += u_gl * spec * hn * (u_mode == 2 ? 0.35 : 0.16);
-      col *= 1.0 - shadow * (u_mode == 2 ? 0.22 : 0.55);
+      col += u_gl * spec * hn * 0.16;
+      col *= 1.0 - shadow * 0.55;
     }
-    col *= 1.0 - (u_mode == 2 ? 0.22 : 0.55) * dot(q, q);
+    col *= 1.0 - 0.55 * dot(q, q);
     col += (hash2(gl_FragCoord.xy + vec2(u_time*61.0, u_time*37.0)) - 0.5) / 160.0;
     o = vec4(col, 1.0);
   }`;
@@ -584,6 +680,20 @@ function Morphogen() {
     document.documentElement.style.setProperty('--accent', S.pal.accent);
   }
   function toSim(cx, cy) { return [cx / cssW * w, (1 - cy / cssH) * h]; }
+  let hoverAt = null;
+  function ring() {
+    if (!hoverAt) return;
+    const g = overlay(), erase = (drag && drag.mode === 2) || S.tool === 'erase' || hoverAt[2];
+    const r = S.brush * CELL * (erase ? 1.75 : 1);
+    g.lineWidth = 1.25; g.strokeStyle = erase ? 'rgba(236,229,214,.8)' : S.species.col;
+    if (erase) g.setLineDash([3, 3]);
+    g.beginPath(); g.arc(hoverAt[0], hoverAt[1], r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+  }
+  function setBrush(v) {
+    S.brush = clamp(v, 2, 24);
+    const sl = $('#m-brush'); if (sl) { sl.value = Math.round(S.brush); sl.closest('.sl').querySelector('output').textContent = Math.round(S.brush) * CELL + ' px'; }
+    ring();
+  }
 
   const X = {
     id: 'morphogen', ready: false,
@@ -591,6 +701,13 @@ function Morphogen() {
     blurb: 'Two chemicals spread across a surface at different speeds, and one feeds on the other. That is the whole rule. Out of it grow coral, labyrinths and cells that split in two: the kind of mechanism Alan Turing proposed in 1952 for the spots and stripes on animals.',
     eq: '<span>∂<i>A</i>/∂<i>t</i> = <i>D<sub>A</sub></i><svg class="nabla" viewBox="0 0 10 10" aria-label="nabla"><path d="M.8 1.2h8.4L5 9.4z"/><path d="M2.1 1.7 5 7.9" style="stroke-width:1.2"/></svg>²<i>A</i> − <i>AB</i>² + <i>f</i> (1 − <i>A</i>)</span><span>∂<i>B</i>/∂<i>t</i> = <i>D<sub>B</sub></i><svg class="nabla" viewBox="0 0 10 10" aria-label="nabla"><path d="M.8 1.2h8.4L5 9.4z"/><path d="M2.1 1.7 5 7.9" style="stroke-width:1.2"/></svg>²<i>B</i> + <i>AB</i>² − (<i>k</i> + <i>f</i>) <i>B</i></span>',
     hint: TOUCH ? 'Drag to seed growth  ·  pick a species, or Erase, in the controls' : 'Drag to seed growth  ·  right-drag to erase  ·  pick a species to paint with it',
+    panelOpen: true, aboutOpen: !TOUCH && innerWidth > 760,
+    legendRows: TOUCH ? [['touch', 'Drag', 'to seed growth'], ['key', 'Controls', 'switch to Erase or pick a species']] : [
+      ['left', 'Drag', 'seed growth'],
+      ['right', 'Right-drag', 'erase', 'or Alt-drag'],
+      ['wheel', 'Scroll', 'change the brush size'],
+      ['key', '<kbd>Space</kbd>', 'reseed the garden'],
+    ],
     init() {
       if (!HAS_HALF) throw new Error('This exhibit needs floating-point render targets.');
       fmt = HAS_FLOAT ? gl.RGBA32F : gl.RGBA16F;
@@ -606,7 +723,7 @@ function Morphogen() {
       if (Math.abs(nw - w) > 2 || Math.abs(nh - h) > 2) alloc(nw, nh);
     },
     enter() { applyPalette(); canvas.className = ''; $('#axes').hidden = !S.map; },
-    leave() { $('#axes').hidden = true; $('#probe').hidden = true; },
+    leave() { $('#axes').hidden = true; $('#probe').hidden = true; hoverAt = null; clearOverlay(); },
     frame(t, dt) {
       let n = S.tempo;
       if (S.warm > 0) { S.warm -= dt; n = Math.round(lerp(S.tempo, 34, clamp(S.warm / 2.2, 0, 1))); }
@@ -635,6 +752,7 @@ function Morphogen() {
     },
     move(e) {
       if (drag) { const [x, y] = toSim(e.clientX, e.clientY); drag.x = x; drag.y = y; }
+      if (e.pointerType === 'mouse') { hoverAt = [e.clientX, e.clientY, e.altKey]; ring(); }
       if (S.map) {
         const p = $('#probe'); p.hidden = false;
         const fx = clamp(e.clientX / cssW, 0, 1), fy = clamp(1 - e.clientY / cssH, 0, 1);
@@ -642,7 +760,10 @@ function Morphogen() {
         p.style.left = e.clientX + 'px'; p.style.top = e.clientY + 'px';
       }
     },
-    up() { drag = null; },
+    up() { drag = null; ring(); },
+    out() { hoverAt = null; clearOverlay(); },
+    wheel(e, kind) { setBrush(S.brush * Math.exp(-e.deltaY * (kind === 'pinch' ? 0.02 : e.deltaMode ? 0.1 : 0.0025))); },
+    pinchZoom(f) { setBrush(S.brush * f); },
     key(e) { if (e.key === ' ') { upload(seedData(S.map ? 'map' : 'garden')); S.warm = 1.5; return true; } },
     _steps(n) { steps(n, null); },
     _state: S, _species: SPECIES, _seed(kind) { upload(seedData(kind)); },
@@ -670,7 +791,7 @@ function Morphogen() {
 }
 
 /* =====================================================================
-   JULIA: quadratic Julia sets, chosen from a live map of the Mandelbrot set
+   JULIA: the Mandelbrot set as a map, and the Julia set for the chosen c
    ===================================================================== */
 function Julia() {
   const PRESETS = [
@@ -687,13 +808,19 @@ function Julia() {
     { id: 'verdigris', name: 'Verdigris', css: 'linear-gradient(135deg,#062521,#1f8f74,#c5e0ab,#f3efdc)', stops: ['#08302a', '#21957a', '#c5e0ab', '#f3efdc'], bg: '#030807', light: 0, tone: 'dark', accent: '#9fdcb8' },
     { id: 'vellum', name: 'Vellum', css: 'linear-gradient(135deg,#f3ecdd 50%,#2b2140 50%)', stops: ['#3a2a55', '#8d2f4a', '#1d4d6b', '#2c2140'], bg: '#f3ecdd', light: 1, tone: 'light', accent: '#8d2f4a' },
   ];
-  const S = { trace: !TOUCH, c: [-0.125, 0.6495], center: [0, 0], scale: 3.5, drift: !REDUCED, theta: 2.09, tDrift: 0, pal: PALETTES[0], density: 1, detail: 1, rs: 1, aa: 1, slow: 0, fast: 0, dirty: true, idle: 0, hq: false };
-  let prog, fbo = null, mini, miniBase = null, miniView = null;
-  const pts = new Map(); let pinch = null;
+  const MAP0 = { center: [-0.62, 0], scale: 2.9 }, JUL0 = { center: [0, 0], scale: 3.1 };
+  const S = {
+    c: PRESETS[0].c.slice(), preview: null, trace: !TOUCH, wander: false, theta: 2.09, tw: 0,
+    mv: { ...MAP0, center: MAP0.center.slice() }, jv: { ...JUL0, center: JUL0.center.slice() },
+    pal: PALETTES[0], density: 1, detail: 1, rs: 1, slow: 0, fast: 0,
+    mDirty: true, jDirty: true, oDirty: true, idle: 0, hq: false, hover: null, coached: false,
+  };
+  let prog, mapT = null, julT = null, L = null;
+  const pts = new Map(); let gest = null;
 
   const FS = `#version 300 es
   precision highp float; precision highp int;
-  uniform vec2 u_res, u_c, u_center; uniform float u_scale, u_density, u_light; uniform int u_iter, u_aa;
+  uniform vec2 u_res, u_c, u_center; uniform float u_scale, u_density, u_light, u_gain; uniform int u_iter, u_aa, u_mode;
   uniform vec3 u_p0, u_p1, u_p2, u_p3, u_bg;
   out vec4 o;
   vec3 grad(float t){
@@ -703,35 +830,41 @@ function Julia() {
     if (t < 3.0) return mix(u_p2, u_p3, f);
     return mix(u_p3, u_p0, f);
   }
-  vec3 shade(vec2 z){
-    vec2 dz = vec2(1.0, 0.0); float m2 = dot(z, z); float trap = 1e9; int n = 0;
-    for (int i = 0; i < 4000; i++) {
+  vec3 inside(float trap){
+    if (u_mode == 1) return u_light > 0.5 ? mix(u_bg, u_p0, 0.16) : mix(u_bg, u_p0, 0.42);
+    float t = sqrt(trap);
+    vec3 inner = mix(u_p0, u_p1, 0.35 + 0.35 * sin(t * 9.0 * u_density));
+    float a = exp(-t * 6.0);
+    return u_light > 0.5 ? mix(u_bg, inner, 0.06 + 0.12*a) : u_bg * 0.6 + inner * (0.05 + 0.22*a);
+  }
+  vec3 shade(vec2 p){
+    vec2 z, dz, c, add;
+    if (u_mode == 1) {
+      // the main cardioid and the period-2 bulb never escape: skip them
+      float x = p.x - 0.25, q = x*x + p.y*p.y;
+      if (q * (q + x) < 0.25 * p.y * p.y || (p.x + 1.0)*(p.x + 1.0) + p.y*p.y < 0.0625) return inside(0.0);
+      c = p; z = vec2(0.0); dz = vec2(0.0); add = vec2(1.0, 0.0);
+    } else { c = u_c; z = p; dz = vec2(1.0, 0.0); add = vec2(0.0); }
+    float m2 = dot(z, z), trap = 1e9; int n = 0;
+    for (int i = 0; i < 6000; i++) {
       if (i >= u_iter) break;
-      dz = 2.0 * vec2(z.x*dz.x - z.y*dz.y, z.x*dz.y + z.y*dz.x);
-      z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + u_c;
+      dz = 2.0 * vec2(z.x*dz.x - z.y*dz.y, z.x*dz.y + z.y*dz.x) + add;
+      z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
       m2 = dot(z, z);
       trap = min(trap, abs(m2 - 0.36));
       n = i;
       if (m2 > 1e8) break;
     }
+    if (m2 <= 1e8) return inside(trap);
     float px = u_scale / min(u_res.x, u_res.y);
-    if (m2 <= 1e8) {
-      float t = sqrt(trap);
-      vec3 inner = mix(u_p0, u_p1, 0.35 + 0.35 * sin(t * 9.0 * u_density));
-      float a = exp(-t * 6.0);
-      return u_light > 0.5 ? mix(u_bg, inner, 0.06 + 0.12*a) : u_bg * 0.6 + inner * (0.05 + 0.22*a);
-    }
     float sn = float(n) + 1.0 - log2(0.5 * log(m2));
     float de = 0.25 * sqrt(m2) * log(m2) / length(dz);
     float dp = de / px;
     vec3 hue = grad(log2(sn + 2.0) * 0.55 * u_density + 0.05);
     float edge = exp(-dp * 0.9);
     float glow = pow(clamp(1.0 - log2(1.0 + dp) / 8.5, 0.0, 1.0), 3.2);
-    if (u_light > 0.5) {
-      float ink = clamp(pow(glow, 1.6) * 0.45 + edge, 0.0, 1.0);
-      return mix(u_bg, hue * 0.85, ink);
-    }
-    return u_bg + hue * (glow * 1.05) + mix(hue, vec3(1.0), 0.55) * edge * 0.85;
+    if (u_light > 0.5) return mix(u_bg, hue * 0.85, clamp(pow(glow, 1.6) * 0.45 * u_gain + edge, 0.0, 1.0));
+    return u_bg + hue * (glow * 1.05 * u_gain) + mix(hue, vec3(1.0), 0.55) * edge * 0.85;
   }
   void main(){
     vec3 col = vec3(0);
@@ -743,262 +876,312 @@ function Julia() {
     }
     col /= float(u_aa * u_aa);
     vec2 q = gl_FragCoord.xy / u_res - 0.5;
-    if (u_light < 0.5) col *= 1.0 - 0.45 * dot(q, q);
+    if (u_light < 0.5) col *= 1.0 - 0.4 * dot(q, q);
     o = vec4(col, 1.0);
   }`;
 
+  /* ---- geometry: which part of the screen is the map, which is the Julia set ---- */
+  function layout() {
+    if (cssW < cssH * 0.95) {
+      const mh = Math.round(cssH * 0.42);
+      return { portrait: true, map: { x: 0, y: 0, w: cssW, h: mh }, jul: { x: 0, y: mh, w: cssW, h: cssH - mh } };
+    }
+    const mw = Math.round(cssW * 0.46);
+    return { portrait: false, map: { x: 0, y: 0, w: mw, h: cssH }, jul: { x: mw, y: 0, w: cssW - mw, h: cssH } };
+  }
+  const view = r => r === 'map' ? S.mv : S.jv;
+  const rect = r => r === 'map' ? L.map : L.jul;
+  function regionAt(x, y) { const m = L.map; return x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h ? 'map' : 'jul'; }
+  function toZ(r, x, y) {
+    const v = view(r), R = rect(r), px = v.scale / Math.min(R.w, R.h);
+    return [v.center[0] + (x - R.x - R.w / 2) * px, v.center[1] - (y - R.y - R.h / 2) * px];
+  }
+  function toPx(r, zx, zy) {
+    const v = view(r), R = rect(r), px = v.scale / Math.min(R.w, R.h);
+    return [R.x + R.w / 2 + (zx - v.center[0]) / px, R.y + R.h / 2 - (zy - v.center[1]) / px];
+  }
+  function pan(r, dx, dy) {
+    const v = view(r), R = rect(r), px = v.scale / Math.min(R.w, R.h);
+    v.center = [v.center[0] - dx * px, v.center[1] + dy * px];
+    if (r === 'map') S.mDirty = true; else S.jDirty = true;
+    S.oDirty = true;
+  }
+  function zoomAt(r, x, y, f) {
+    const v = view(r), R = rect(r);
+    const [zx, zy] = toZ(r, x, y);
+    v.scale = clamp(v.scale * f, 2e-5, r === 'map' ? 4.5 : 6);
+    const px = v.scale / Math.min(R.w, R.h);
+    v.center = [zx - (x - R.x - R.w / 2) * px, zy + (y - R.y - R.h / 2) * px];
+    if (r === 'map') S.mDirty = true; else S.jDirty = true;
+    S.oDirty = true;
+  }
+
+  function cNow() { return S.preview || S.c; }
   function cOnPath(th, t) {
     const r = 1.0 + 0.035 * Math.sin(t * 0.21) + 0.012 * Math.sin(t * 0.53);
     const ex = Math.cos(th) * r, ey = Math.sin(th) * r;
-    const e2x = ex * ex - ey * ey, e2y = 2 * ex * ey;
-    return [0.5 * ex - 0.25 * e2x, 0.5 * ey - 0.25 * e2y];
+    return [0.5 * ex - 0.25 * (ex * ex - ey * ey), 0.5 * ey - 0.25 * (2 * ex * ey)];
   }
   function inM(cx, cy) {
     let x = 0, y = 0;
     for (let i = 0; i < 1500; i++) { const t = x * x - y * y + cx; y = 2 * x * y + cy; x = t; if (x * x + y * y > 4) return false; }
     return true;
   }
-  function iterations() {
-    const zoom = Math.max(0, Math.log2(3.5 / S.scale));
-    return Math.round((260 + 70 * zoom) * S.detail);
+  function iterations(r) {
+    const v = view(r), zoom = Math.max(0, Math.log2((r === 'map' ? MAP0.scale : JUL0.scale) / v.scale));
+    return Math.round((r === 'map' ? 240 + 110 * zoom : 260 + 70 * zoom) * S.detail);
   }
   function fmtC(c) {
     const s = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(4);
     return `${s(c[0])} ${c[1] < 0 ? '−' : '+'} ${Math.abs(c[1]).toFixed(4)}i`;
   }
-
-  /* the little map: drawn once on the CPU, then decorated with c */
-  function buildMini() {
-    mini = $('#mini');
-    const rw = Math.round(mini.clientWidth * DPR), rh = Math.round(mini.clientHeight * DPR);
-    if (!rw || !rh) return;
-    mini.width = rw; mini.height = rh;
-    const spanX = 3.05, x0 = -2.2, ySpan = spanX * rh / rw;
-    miniView = { x0, spanX, y0: -ySpan / 2, ySpan, rw, rh };
-    const ctx = mini.getContext('2d'), img = ctx.createImageData(rw, rh), d = img.data;
-    const acc = hex(S.pal.light ? '#f4a96b' : S.pal.accent).map(v => v * 255);
-    const px = spanX / rw;
-    for (let j = 0; j < rh; j++) for (let i = 0; i < rw; i++) {
-      const cx = x0 + (i + 0.5) * px, cy = miniView.y0 + ySpan - (j + 0.5) * px;
-      let x = 0, y = 0, dx = 0, dy = 0, m2 = 0, n = 0;
-      for (; n < 400; n++) {
-        const ndx = 2 * (x * dx - y * dy) + 1, ndy = 2 * (x * dy + y * dx);
-        dx = ndx; dy = ndy;
-        const t = x * x - y * y + cx; y = 2 * x * y + cy; x = t;
-        m2 = x * x + y * y; if (m2 > 1e6) break;
-      }
-      const k = (j * rw + i) * 4;
-      if (n >= 400) { d[k] = 26; d[k + 1] = 24; d[k + 2] = 34; }
-      else {
-        const de = 0.5 * Math.sqrt(m2) * Math.log(m2) * 0.5 / Math.hypot(dx, dy), dp = de / px;
-        const g = Math.pow(clamp(1 - Math.log2(1 + dp) / 6, 0, 1), 2.4), e = Math.exp(-dp * 1.2);
-        d[k] = 5 + acc[0] * g * 0.8 + 200 * e; d[k + 1] = 6 + acc[1] * g * 0.8 + 190 * e; d[k + 2] = 9 + acc[2] * g * 0.8 + 170 * e;
-      }
-      d[k + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-    miniBase = document.createElement('canvas'); miniBase.width = rw; miniBase.height = rh;
-    miniBase.getContext('2d').drawImage(mini, 0, 0);
-  }
-  function drawMini() {
-    if (!miniBase) return;
-    const ctx = mini.getContext('2d'), v = miniView;
-    ctx.drawImage(miniBase, 0, 0);
-    const toPx = (cx, cy) => [(cx - v.x0) / v.spanX * v.rw, (v.y0 + v.ySpan - cy) / v.ySpan * v.rh];
-    if (S.drift) {
-      ctx.beginPath();
-      for (let i = 0; i <= 180; i++) { const [x, y] = toPx(...cOnPath(i / 180 * Math.PI * 2, S.tDrift)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-      ctx.strokeStyle = 'rgba(236,229,214,.28)'; ctx.setLineDash([2 * DPR, 4 * DPR]); ctx.lineWidth = DPR; ctx.stroke(); ctx.setLineDash([]);
-    }
-    const [x, y] = toPx(...S.c);
-    ctx.lineWidth = 1.5 * DPR; ctx.strokeStyle = '#fff';
-    ctx.beginPath(); ctx.arc(x, y, 5.5 * DPR, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#fff';
-    ctx.beginPath(); ctx.arc(x, y, 2 * DPR, 0, Math.PI * 2); ctx.fill();
+  function setC(c, keepWander) {
+    S.c = c; S.preview = null; S.jDirty = true; S.oDirty = true;
+    if (!keepWander && S.wander) { S.wander = false; const t = $('#j-wander'); if (t) t.set(false); }
+    caption();
   }
   function caption() {
-    const conn = inM(...S.c);
-    $('#ccap').innerHTML = `c = <em>${fmtC(S.c)}</em><br>${conn ? 'inside the set · connected' : 'outside the set · dust'}`;
+    const c = cNow(), conn = inM(...c);
+    $('#jc-val').textContent = 'c = ' + fmtC(c);
+    $('#jc-state').textContent = (S.preview ? 'Previewing. Click the map to keep it. ' : '') + (conn ? 'c is inside the Mandelbrot set, so this Julia set is one connected piece.' : 'c is outside the Mandelbrot set, so this Julia set is scattered dust.');
   }
-  function setC(c) { S.c = c; S.dirty = true; drawMini(); caption(); }
-  function miniPick(e) {
-    const r = mini.getBoundingClientRect(), v = miniView;
-    const cx = v.x0 + (e.clientX - r.left) / r.width * v.spanX;
-    const cy = v.y0 + v.ySpan - (e.clientY - r.top) / r.height * v.ySpan;
-    if (S.drift) { S.drift = false; const t = $('#j-drift'); if (t) t.set(false); }
-    setC([cx, cy]);
+  function placeLabels() {
+    const j = L.jul, m = L.map, jl = $('#jlabel'), ml = $('#mlabel'), dv = $('#divider');
+    jl.style.left = (j.x + j.w / 2) + 'px'; jl.style.top = (L.portrait ? j.y + 10 : 22) + 'px'; jl.style.maxWidth = (j.w - 40) + 'px';
+    ml.style.left = (m.x + m.w - 18) + 'px'; ml.style.top = (L.portrait ? m.y + m.h - 34 : 22) + 'px';
+    ml.classList.toggle('bottom', L.portrait);
+    if (L.portrait) { dv.style.cssText = `left:0;top:${j.y}px;width:${cssW}px;height:1px`; }
+    else { dv.style.cssText = `left:${j.x}px;top:0;width:1px;height:${cssH}px`; }
   }
-  function applyPalette() {
-    document.body.dataset.tone = S.pal.tone;
-    document.documentElement.style.setProperty('--accent', S.pal.accent);
-    S.dirty = true;
+
+  /* ---- rendering ---- */
+  function renderView(r, hq) {
+    const R = rect(r), v = view(r), rs = hq ? 1 : S.rs;
+    const w = Math.max(1, Math.round(R.w * DPR * rs)), h = Math.max(1, Math.round(R.h * DPR * rs));
+    let t = r === 'map' ? mapT : julT;
+    if (!t || t.w !== w || t.h !== h) {
+      freeTarget(t); t = target(w, h, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+      if (r === 'map') mapT = t; else julT = t;
+    }
+    const c = cNow(), st = S.pal.stops.map(hex);
+    gl.useProgram(prog.p);
+    gl.uniform1i(prog.u.u_mode, r === 'map' ? 1 : 0);
+    gl.uniform2f(prog.u.u_res, w, h);
+    gl.uniform2f(prog.u.u_c, c[0], c[1]);
+    gl.uniform2f(prog.u.u_center, v.center[0], v.center[1]);
+    gl.uniform1f(prog.u.u_scale, v.scale);
+    gl.uniform1f(prog.u.u_density, S.density);
+    gl.uniform1f(prog.u.u_light, S.pal.light);
+    gl.uniform1f(prog.u.u_gain, r === 'map' ? 0.75 : 1);
+    gl.uniform1i(prog.u.u_iter, iterations(r));
+    gl.uniform1i(prog.u.u_aa, hq ? (DPR > 1.5 ? (TOUCH ? 1 : 2) : 3) : 1);
+    gl.uniform3fv(prog.u.u_p0, st[0]); gl.uniform3fv(prog.u.u_p1, st[1]);
+    gl.uniform3fv(prog.u.u_p2, st[2]); gl.uniform3fv(prog.u.u_p3, st[3]);
+    gl.uniform3fv(prog.u.u_bg, hex(S.pal.bg));
+    bindOut(t, w, h); fullscreen();
   }
-  /* orbit tracer: the path of one starting point under z -> z^2 + c */
-  const orbitCv = $('#orbit');
-  let hover = null;
-  function clearOrbit() { const g = orbitCv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, orbitCv.width, orbitCv.height); }
-  function drawOrbit() {
-    if (orbitCv.width !== W || orbitCv.height !== H) { orbitCv.width = W; orbitCv.height = H; }
-    clearOrbit();
-    if (!hover || !S.trace || pts.size) return;
-    const g = orbitCv.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
-    const px = S.scale / Math.min(cssW, cssH);
-    const toScr = (x, y) => [cssW / 2 + (x - S.center[0]) / px, cssH / 2 - (y - S.center[1]) / px];
-    let x = S.center[0] + (hover[0] - cssW / 2) * px, y = S.center[1] - (hover[1] - cssH / 2) * px;
-    const pts2 = [[x, y]]; let fate = 0;
+  function composite() {
+    bindOut(null, W, H);
+    for (const [t, R] of [[mapT, L.map], [julT, L.jul]]) {
+      if (!t) continue;
+      const x0 = Math.round(R.x * DPR), x1 = Math.round((R.x + R.w) * DPR);
+      const y0 = H - Math.round((R.y + R.h) * DPR), y1 = H - Math.round(R.y * DPR);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, t.f); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      gl.blitFramebuffer(0, 0, t.w, t.h, x0, y0, x1, y1, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  }
+
+  /* ---- overlay: markers on the map, the orbit under the cursor ---- */
+  function drawOverlay() {
+    const g = overlay(), light = S.pal.light > 0.5, ink = light ? '27,29,40' : '236,229,214';
+    const acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const m = L.map;
+    g.save(); g.beginPath(); g.rect(m.x, m.y, m.w, m.h); g.clip();
+    if (S.wander) {
+      g.beginPath();
+      for (let i = 0; i <= 240; i++) { const [x, y] = toPx('map', ...cOnPath(i / 240 * Math.PI * 2, S.tw)); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+      g.strokeStyle = `rgba(${ink},.35)`; g.setLineDash([2, 4]); g.lineWidth = 1; g.stroke(); g.setLineDash([]);
+    }
+    const [cx, cy] = toPx('map', ...S.c);
+    g.lineWidth = 1.5; g.strokeStyle = light ? '#1b1d28' : '#ffffff';
+    g.beginPath(); g.arc(cx, cy, 7, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = acc; g.beginPath(); g.arc(cx, cy, 2.5, 0, Math.PI * 2); g.fill();
+    if (S.preview) {
+      const [px, py] = toPx('map', ...S.preview);
+      g.strokeStyle = `rgba(${ink},.9)`; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(px - 9, py); g.lineTo(px - 3, py); g.moveTo(px + 3, py); g.lineTo(px + 9, py);
+      g.moveTo(px, py - 9); g.lineTo(px, py - 3); g.moveTo(px, py + 3); g.lineTo(px, py + 9); g.stroke();
+    }
+    g.restore();
+    if (S.trace && S.hover && S.hover.r === 'jul' && !gest) drawOrbit(g, S.hover.x, S.hover.y, ink, acc, light);
+  }
+  function drawOrbit(g, hx, hy, ink, acc, light) {
+    const c = S.c, J = L.jul;
+    g.save(); g.beginPath(); g.rect(J.x, J.y, J.w, J.h); g.clip();
+    let [x, y] = toZ('jul', hx, hy);
+    const path = [[x, y]]; let fate = 0;
     for (let i = 0; i < 160; i++) {
-      const t = x * x - y * y + S.c[0]; y = 2 * x * y + S.c[1]; x = t;
-      pts2.push([x, y]);
+      const t = x * x - y * y + c[0]; y = 2 * x * y + c[1]; x = t;
+      path.push([x, y]);
       if (x * x + y * y > 4) { fate = i + 1; break; }
     }
-    const light = S.pal.light > 0.5, ink = light ? '27,29,40' : '236,229,214';
-    const acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
     g.lineWidth = 1; g.lineJoin = 'round';
-    for (let i = 1; i < pts2.length; i++) {
-      const a = toScr(...pts2[i - 1]), b = toScr(...pts2[i]);
+    for (let i = 1; i < path.length; i++) {
+      const a = toPx('jul', ...path[i - 1]), b = toPx('jul', ...path[i]);
       g.strokeStyle = `rgba(${ink},${0.75 * Math.pow(0.975, i)})`;
       g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
     }
     g.fillStyle = acc;
-    for (let i = 1; i < pts2.length; i++) {
-      const [sx, sy] = toScr(...pts2[i]);
+    for (let i = 1; i < path.length; i++) {
+      const [sx, sy] = toPx('jul', ...path[i]);
       g.globalAlpha = Math.max(0.15, Math.pow(0.97, i));
       g.beginPath(); g.arc(sx, sy, i < 4 ? 2.4 : 1.6, 0, Math.PI * 2); g.fill();
     }
     g.globalAlpha = 1;
-    const [ox, oy] = toScr(...pts2[0]);
-    g.strokeStyle = acc; g.lineWidth = 1.5; g.beginPath(); g.arc(ox, oy, 5, 0, Math.PI * 2); g.stroke();
-    const label = fate ? `escapes after ${fate} step${fate > 1 ? 's' : ''}` : 'stays bounded';
+    g.strokeStyle = acc; g.lineWidth = 1.5; g.beginPath(); g.arc(hx, hy, 5, 0, Math.PI * 2); g.stroke();
+    const label = fate ? `this point escapes after ${fate} step${fate > 1 ? 's' : ''}` : 'this point stays bounded';
     g.font = '400 11.5px "IBM Plex Mono", ui-monospace, monospace';
-    const tw = g.measureText(label).width, lx = Math.min(ox + 12, cssW - tw - 22), ly = oy - 12;
-    g.fillStyle = light ? 'rgba(246,242,233,.85)' : 'rgba(9,10,16,.72)';
+    const tw = g.measureText(label).width, lx = Math.min(hx + 12, J.x + J.w - tw - 22), ly = hy - 12;
+    g.fillStyle = light ? 'rgba(246,242,233,.88)' : 'rgba(9,10,16,.75)';
     g.beginPath(); if (g.roundRect) g.roundRect(lx - 7, ly - 13, tw + 14, 20, 6); else g.rect(lx - 7, ly - 13, tw + 14, 20); g.fill();
     g.fillStyle = `rgb(${ink})`; g.fillText(label, lx, ly + 1);
+    g.restore();
   }
-  function ensureFbo() {
-    const rw = Math.max(1, Math.round(W * S.rs)), rh = Math.max(1, Math.round(H * S.rs));
-    if (S.rs >= 0.999) { freeTarget(fbo); fbo = null; return; }
-    if (!fbo || fbo.w !== rw || fbo.h !== rh) { freeTarget(fbo); fbo = target(rw, rh, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR); }
+  function applyPalette() {
+    document.body.dataset.tone = S.pal.tone;
+    document.documentElement.style.setProperty('--accent', S.pal.accent);
+    S.mDirty = S.jDirty = S.oDirty = true;
   }
-  function zoomAt(cx, cy, f) {
-    const px = S.scale / Math.min(cssW, cssH);
-    const zx = S.center[0] + (cx - cssW / 2) * px, zy = S.center[1] - (cy - cssH / 2) * px;
-    S.scale = clamp(S.scale * f, 2e-5, 6);
-    const npx = S.scale / Math.min(cssW, cssH);
-    S.center = [zx - (cx - cssW / 2) * npx, zy + (cy - cssH / 2) * npx];
-    S.dirty = true;
+  function legendFor(r) {
+    if (TOUCH) return r === 'map'
+      ? [['touch', 'Touch the map', 'to choose c'], ['pinch', 'Pinch', 'to zoom and pan']]
+      : [['touch', 'Drag', 'to bend the shape'], ['pinch', 'Pinch', 'to zoom and pan']];
+    return r === 'map' ? [
+      ['hover', 'Hover', 'preview the Julia set for that point'],
+      ['left', 'Click or drag', 'choose c'],
+      ['right', 'Right-drag', 'pan the map', 'or Shift-drag, or two-finger scroll'],
+      ['wheel', 'Scroll', 'zoom the map', 'or pinch'],
+    ] : [
+      ['hover', 'Hover', 'trace where one point goes'],
+      ['left', 'Drag', 'bend the shape by nudging c'],
+      ['right', 'Right-drag', 'pan', 'or Shift-drag, or two-finger scroll'],
+      ['wheel', 'Scroll', 'zoom', 'or pinch'],
+    ];
   }
+  function onRegion(r) { if (X.legendRegion !== r) { X.legendRegion = r; legend(legendFor(r), r === 'map' ? 'On the map' : 'On the Julia set'); } }
 
   const X = {
-    id: 'julia', ready: false,
+    id: 'julia', ready: false, panelOpen: false, aboutOpen: false,
     title: 'Julia', kicker: 'Quadratic Julia sets',
-    blurb: 'Square a number, add c, repeat. Some starting points stay close forever and some fly off to infinity. The border between them is a Julia set, and every c draws a different one. Inside the dark shape on the map, the Mandelbrot set, the border is one connected piece. Step outside and it breaks into dust.',
-    eq: '<span><i>z</i><sub class="up">n+1</sub> = <i>z</i><sub class="up">n</sub>² + <i>c</i></span>',
-    hint: TOUCH ? 'Drag on the map to choose c  ·  pinch to zoom' : 'Drag the ring on the map to choose c  ·  drag to pan  ·  scroll to zoom',
-    init() {
-      prog = program(QUAD_VS, FS);
-      this.ready = true;
-    },
-    resize() { S.dirty = true; if (!$('#cmap').hidden) { buildMini(); drawMini(); } },
+    blurb: 'Take a complex number z, square it and add c, then repeat forever. Some starting points stay close and some fly off to infinity, and the border between them is a Julia set. The map on the left is the Mandelbrot set: every point on it is a choice of c. Inside the dark shape the Julia set holds together in one piece. Outside it shatters into dust.',
+    eq: '<span><i>z</i> ↦ <i>z</i>² + <i>c</i></span>',
+    hint: TOUCH ? 'Touch the map on top to choose c' : 'Move your cursor across the map on the left',
+    coach: true,
+    init() { prog = program(QUAD_VS, FS); this.ready = true; },
+    resize() { if (current !== X) return; L = layout(); placeLabels(); S.mDirty = S.jDirty = S.oDirty = true; },
     enter() {
-      applyPalette(); canvas.className = 'grab';
-      $('#cmap').hidden = false;
-      buildMini(); drawMini(); caption();
-      if (!mini.dataset.wired) {
-        mini.dataset.wired = '1';
-        mini.addEventListener('pointerdown', e => { mini.setPointerCapture(e.pointerId); miniPick(e); });
-        mini.addEventListener('pointermove', e => { if (mini.hasPointerCapture(e.pointerId)) miniPick(e); });
-      }
-      S.dirty = true;
+      L = layout(); applyPalette(); canvas.className = '';
+      $('#jlabel').hidden = $('#mlabel').hidden = $('#divider').hidden = false;
+      placeLabels(); caption(); onRegion('map');
+      S.mDirty = S.jDirty = S.oDirty = true;
     },
-    leave() { $('#cmap').hidden = true; hover = null; clearOrbit(); },
+    leave() { $('#jlabel').hidden = $('#mlabel').hidden = $('#divider').hidden = true; S.hover = null; S.preview = null; clearOverlay(); X.legendRegion = null; },
     frame(t, dt) {
-      if (S.drift) {
-        S.tDrift += dt; S.theta += dt * 0.045;
-        S.c = cOnPath(S.theta, S.tDrift); S.dirty = true; drawMini();
-        if ((S.tDrift * 4 | 0) !== ((S.tDrift - dt) * 4 | 0)) caption();
+      if (S.wander && !S.preview && !(gest && gest.kind === 'primary')) {
+        S.tw += dt; S.theta += dt * 0.045;
+        S.c = cOnPath(S.theta, S.tw); S.jDirty = S.oDirty = true;
+        if ((S.tw * 4 | 0) !== ((S.tw - dt) * 4 | 0)) caption();
       }
-      // adapt the render scale to keep the frame rate smooth
-      if (S.dirty) {
+      if (S.mDirty || S.jDirty) {
         if (dt > 0.03) { S.slow++; S.fast = 0; } else if (dt < 0.019) { S.fast++; S.slow = 0; }
-        if (S.slow > 6) { if (S.aa > 1) S.aa = 1; else S.rs = Math.max(0.4, S.rs * 0.85); S.slow = 0; }
-        if (S.fast > 40) { if (S.rs < 1) S.rs = Math.min(1, S.rs / 0.85); else if (S.aa < 2 && DPR < 1.5) S.aa = 2; S.fast = 0; }
-        S.idle = 0; S.hq = false;
+        if (S.slow > 5) { S.rs = Math.max(0.35, S.rs * 0.85); S.slow = 0; }
+        if (S.fast > 40 && S.rs < 1) { S.rs = Math.min(1, S.rs / 0.85); S.fast = 0; }
+        if (S.mDirty) renderView('map');
+        if (S.jDirty) renderView('jul');
+        composite();
+        S.mDirty = S.jDirty = false; S.idle = 0; S.hq = false; S.oDirty = true;
       } else {
         S.idle += dt;
-        if (S.idle > 0.35 && !S.hq) { S.hq = true; this.render(true); }
+        if (S.idle > 0.35 && !S.hq) { S.hq = true; renderView('map', true); renderView('jul', true); composite(); }
+      }
+      if (S.oDirty) { drawOverlay(); S.oDirty = false; }
+    },
+    render(hq) { L = L || layout(); renderView('map', hq); renderView('jul', hq); composite(); drawOverlay(); },
+    down(e) {
+      const x = e.clientX, y = e.clientY, r = regionAt(x, y);
+      pts.set(e.pointerId, [x, y]);
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; gest = { kind: 'pinch', r: gest ? gest.r : r, d: Math.hypot(a[0] - b[0], a[1] - b[1]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }; return; }
+      if (pts.size > 2) return;
+      const secondary = e.button === 1 || e.button === 2 || e.shiftKey || e.altKey;
+      gest = { kind: secondary ? 'pan' : 'primary', r };
+      canvas.className = secondary ? 'grabbing' : '';
+      if (!secondary && r === 'map') { setC(toZ('map', x, y)); coachDone('julia'); }
+      S.oDirty = true;
+    },
+    move(e) {
+      const x = e.clientX, y = e.clientY;
+      if (!pts.has(e.pointerId)) {
+        if (e.pointerType !== 'mouse') return;
+        const r = regionAt(x, y);
+        S.hover = { r, x, y }; onRegion(r);
+        if (r === 'map') { S.preview = toZ('map', x, y); S.jDirty = true; caption(); coachDone('julia'); }
+        else if (S.preview) { S.preview = null; S.jDirty = true; caption(); }
+        S.oDirty = true;
         return;
       }
-      this.render(false);
-      S.dirty = false;
-      drawOrbit();
-    },
-    render(hq) {
-      const rs = hq ? 1 : S.rs;
-      const saved = S.rs; S.rs = rs; ensureFbo(); S.rs = saved;
-      const rw = fbo ? fbo.w : W, rh = fbo ? fbo.h : H;
-      gl.useProgram(prog.p);
-      gl.uniform2f(prog.u.u_res, rw, rh);
-      gl.uniform2f(prog.u.u_c, S.c[0], S.c[1]);
-      gl.uniform2f(prog.u.u_center, S.center[0], S.center[1]);
-      gl.uniform1f(prog.u.u_scale, S.scale);
-      gl.uniform1f(prog.u.u_density, S.density);
-      gl.uniform1f(prog.u.u_light, S.pal.light);
-      gl.uniform1i(prog.u.u_iter, iterations());
-      gl.uniform1i(prog.u.u_aa, hq ? (DPR > 1.5 ? (TOUCH ? 1 : 2) : 3) : S.aa);
-      const st = S.pal.stops.map(hex);
-      gl.uniform3fv(prog.u.u_p0, st[0]); gl.uniform3fv(prog.u.u_p1, st[1]);
-      gl.uniform3fv(prog.u.u_p2, st[2]); gl.uniform3fv(prog.u.u_p3, st[3]);
-      gl.uniform3fv(prog.u.u_bg, hex(S.pal.bg));
-      bindOut(fbo, rw, rh); fullscreen();
-      if (fbo) {
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo.f); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-        gl.blitFramebuffer(0, 0, rw, rh, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.LINEAR);
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+      const prev = pts.get(e.pointerId); pts.set(e.pointerId, [x, y]);
+      if (!gest) return;
+      if (gest.kind === 'pinch' && pts.size === 2) {
+        const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        pan(gest.r, m[0] - gest.m[0], m[1] - gest.m[1]);
+        zoomAt(gest.r, m[0], m[1], gest.d / d);
+        gest.d = d; gest.m = m;
+      } else if (gest.kind === 'pan') pan(gest.r, x - prev[0], y - prev[1]);
+      else if (gest.kind === 'primary') {
+        if (gest.r === 'map') setC(toZ('map', x, y));
+        else {
+          const k = 0.18 * S.mv.scale / Math.min(L.map.w, L.map.h);
+          setC([S.c[0] + (x - prev[0]) * k, S.c[1] - (y - prev[1]) * k]);
+        }
       }
     },
-    down(e) { pts.set(e.pointerId, [e.clientX, e.clientY]); canvas.className = 'grabbing'; pinch = null; },
-    move(e) {
-      if (e.pointerType === 'mouse') { hover = [e.clientX, e.clientY]; if (!S.dirty) drawOrbit(); }
-      if (!pts.has(e.pointerId)) return;
-      const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
-      if (pts.size === 1) {
-        const px = S.scale / Math.min(cssW, cssH);
-        S.center = [S.center[0] - (e.clientX - prev[0]) * px, S.center[1] + (e.clientY - prev[1]) * px];
-        S.dirty = true;
-      } else if (pts.size === 2) {
-        const [a, b] = [...pts.values()];
-        const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
-        if (pinch) zoomAt(mx, my, pinch / d);
-        pinch = d;
-      }
+    up(e) { pts.delete(e.pointerId); if (!pts.size) { gest = null; canvas.className = ''; S.oDirty = true; } else if (gest && gest.kind === 'pinch') gest = null; },
+    out() { S.hover = null; if (S.preview) { S.preview = null; S.jDirty = true; caption(); } S.oDirty = true; },
+    wheel(e, kind) {
+      const r = regionAt(e.clientX, e.clientY);
+      if (kind === 'scroll') pan(r, -e.deltaX, -e.deltaY);
+      else zoomAt(r, e.clientX, e.clientY, Math.exp(e.deltaY * (kind === 'pinch' ? 0.012 : e.deltaMode ? 0.05 : 0.0015)));
     },
-    up(e) { pts.delete(e.pointerId); pinch = null; if (!pts.size) canvas.className = 'grab'; },
-    out() { hover = null; clearOrbit(); },
-    wheel(e) { zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * (e.deltaMode ? 0.05 : 0.0015))); },
-    dbl() { S.center = [0, 0]; S.scale = 3.5; S.dirty = true; },
-    _state: S, _presets: PRESETS, _setC(c) { setC(c); },
+    pinchZoom(f, x, y) { zoomAt(regionAt(x, y), x, y, 1 / f); },
+    dbl(e) {
+      const r = e ? regionAt(e.clientX, e.clientY) : 'jul';
+      if (r === 'map') { S.mv = { ...MAP0, center: MAP0.center.slice() }; S.mDirty = true; }
+      else { S.jv = { ...JUL0, center: JUL0.center.slice() }; S.jDirty = true; }
+      S.oDirty = true;
+    },
     key(e) {
       const step = e.shiftKey ? 0.01 : 0.0015;
       const m = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[e.key];
-      if (m) { if (S.drift) { S.drift = false; const t = $('#j-drift'); if (t) t.set(false); } setC([S.c[0] + m[0], S.c[1] + m[1]]); return true; }
-      if (e.key === '+' || e.key === '=') { zoomAt(cssW / 2, cssH / 2, 0.7); return true; }
-      if (e.key === '-') { zoomAt(cssW / 2, cssH / 2, 1 / 0.7); return true; }
-      if (e.key === ' ') { S.drift = !S.drift; const t = $('#j-drift'); if (t) t.set(S.drift); drawMini(); return true; }
+      if (m) { setC([S.c[0] + m[0], S.c[1] + m[1]]); return true; }
+      if (e.key === '+' || e.key === '=') { zoomAt('jul', L.jul.x + L.jul.w / 2, L.jul.y + L.jul.h / 2, 0.7); return true; }
+      if (e.key === '-') { zoomAt('jul', L.jul.x + L.jul.w / 2, L.jul.y + L.jul.h / 2, 1 / 0.7); return true; }
+      if (e.key === ' ' || e.key === 'w' || e.key === 'W') { S.wander = !S.wander; const t = $('#j-wander'); if (t) t.set(S.wander); S.oDirty = true; return true; }
     },
+    _state: S, _setC(c) { setC(c); }, _layout() { return L; },
     panel() {
       return [
         group('Famous values of c',
-          chips('j-pre', PRESETS, null, it => { S.drift = false; $('#j-drift').set(false); S.center = [0, 0]; S.scale = 3.5; setC(it.c.slice()); }),
-          toggle('j-drift', 'Drift along the cardioid', S.drift, v => { S.drift = v; if (v) { S.center = [0, 0]; S.scale = 3.5; } drawMini(); }),
-          TOUCH ? null : toggle('j-trace', 'Trace orbits under the cursor', S.trace, v => { S.trace = v; drawOrbit(); })),
-        group('Palette', swatches('j-pal', PALETTES, S.pal.id, it => { S.pal = it; applyPalette(); buildMini(); drawMini(); })),
+          chips('j-pre', PRESETS, null, it => { setC(it.c.slice()); S.jv = { ...JUL0, center: JUL0.center.slice() }; S.jDirty = true; })),
+        group('Palette', swatches('j-pal', PALETTES, S.pal.id, it => { S.pal = it; applyPalette(); })),
         group(null,
-          slider('j-dens', 'Color bands', 0.3, 3, 0.05, S.density, v => v.toFixed(2) + '×', v => { S.density = v; S.dirty = true; }),
-          slider('j-det', 'Detail', 0.4, 3, 0.05, S.detail, v => iterations() + ' iter', v => { S.detail = v; S.dirty = true; })),
-        group('Fine tuning',
-          note('Arrow keys nudge <b>c</b> by 0.0015 (hold Shift for 0.01). Space toggles drift. Double-click resets the view.'),
-          buttons([{ name: 'Reset view', on: () => X.dbl() }])),
+          slider('j-dens', 'Color bands', 0.3, 3, 0.05, S.density, v => v.toFixed(2) + '×', v => { S.density = v; S.mDirty = S.jDirty = true; }),
+          slider('j-det', 'Detail', 0.4, 3, 0.05, S.detail, v => Math.round(v * 100) + '%', v => { S.detail = v; S.mDirty = S.jDirty = true; })),
+        group('Play',
+          TOUCH ? null : toggle('j-trace', 'Trace orbits under the cursor', S.trace, v => { S.trace = v; S.oDirty = true; }),
+          toggle('j-wander', 'Let c wander along the edge', S.wander, v => { S.wander = v; S.oDirty = true; }),
+          buttons([{ name: 'Reset map', on: () => X.dbl({ clientX: L.map.x + 1, clientY: L.map.y + 1 }) }, { name: 'Reset Julia view', on: () => X.dbl() }]),
+          note('Arrow keys nudge <b>c</b> (hold Shift for bigger steps). W lets it wander. Double-click a view to reset it.')),
       ];
     },
   };
@@ -1014,41 +1197,47 @@ function Attractor() {
     { id: 'lorenz', name: 'Lorenz', k: 28, kmin: 14, kmax: 48, kstep: 0.1, kname: 'ρ', rate: 0.55, hmax: 0.005, ref: 3.4,
       map: k => ({ c: [0, 0, k - 3.2], s: 1.13 / k }),
       eq: '<span><i>ẋ</i> = σ (<i>y</i> − <i>x</i>)</span><span><i>ẏ</i> = <i>x</i> (ρ − <i>z</i>) − <i>y</i></span><span><i>ż</i> = <i>xy</i> − β<i>z</i></span>',
-      note: 'Edward Lorenz, 1963: a stripped-down model of air rising and falling. Turn <b>ρ</b> below about 24 and the butterfly drains into two still points. Turn it back up and the chaos returns.' },
+      klabel: 'how hard the air is heated', khelp: 'Below about 24 the chaos stops and the swarm drains into two still points.',
+      note: 'Edward Lorenz, 1963: a stripped-down model of air rising and falling.' },
     { id: 'aizawa', name: 'Aizawa', k: 0.95, kmin: 0.6, kmax: 1.05, kstep: 0.005, kname: 'a', rate: 1.1, hmax: 0.01, ref: 1.3,
       map: () => ({ c: [0, 0, 0.75], s: 0.57 }),
       eq: '<span><i>ẋ</i> = (<i>z</i> − <i>b</i>) <i>x</i> − <i>dy</i></span><span><i>ẏ</i> = <i>dx</i> + (<i>z</i> − <i>b</i>) <i>y</i></span><span><i>ż</i> = <i>c</i> + <i>az</i> − <i>z</i>³⁄3 − (<i>x</i>² + <i>y</i>²)(1 + <i>ez</i>) + <i>fzx</i>³</span>',
-      note: 'Particles spiral up and around a shell, then drop back down through a tube in its middle. Raise <b>a</b> past about 1 and the whole shape collapses to a point.' },
+      klabel: 'lift', khelp: 'Past about 1 the whole shape collapses to a single point.',
+      note: 'Particles spiral up and around a shell, then drop back down through a tube in its middle.' },
     { id: 'thomas', name: 'Thomas', k: 0.208186, kmin: 0.16, kmax: 0.32, kstep: 0.0005, kname: 'b', rate: 5, hmax: 0.05, ref: 0.27,
       map: () => ({ c: [0, 0, 0], s: 0.215 }),
       eq: '<span><i>ẋ</i> = sin <i>y</i> − <i>bx</i></span><span><i>ẏ</i> = sin <i>z</i> − <i>by</i></span><span><i>ż</i> = sin <i>x</i> − <i>bz</i></span>',
-      note: 'René Thomas, 1999. Each equation is the last one with the letters shifted. Lower <b>b</b> and the motion loosens into a random-looking walk through a lattice of cells.' },
+      klabel: 'friction', khelp: 'Less friction and the motion loosens into a random-looking walk between cells.',
+      note: 'René Thomas, 1999. Each equation is the last one with the letters shifted.' },
     { id: 'halvorsen', name: 'Halvorsen', k: 1.89, kmin: 1.35, kmax: 2.1, kstep: 0.005, kname: 'a', rate: 0.5, hmax: 0.005, ref: 3.3,
       map: () => ({ c: [-2.9, -2.9, -2.9], s: 0.08 }),
       eq: '<span><i>ẋ</i> = −<i>ax</i> − 4<i>y</i> − 4<i>z</i> − <i>y</i>²</span><span><i>ẏ</i> = −<i>ay</i> − 4<i>z</i> − 4<i>x</i> − <i>z</i>²</span><span><i>ż</i> = −<i>az</i> − 4<i>x</i> − 4<i>y</i> − <i>x</i>²</span>',
-      note: 'Three identical lobes, one per axis, wound around each other by the same cyclic symmetry as Thomas.' },
+      klabel: 'damping', khelp: 'Less damping and the three lobes reach further out.',
+      note: 'Three identical lobes, one per axis, wound around each other by a cyclic symmetry.' },
     { id: 'dadras', name: 'Dadras', k: 3, kmin: 2.4, kmax: 3.8, kstep: 0.01, kname: 'a', rate: 1.4, hmax: 0.005, ref: 0.6,
       map: () => ({ c: [0.4, -0.9, 0], s: 0.082 }),
       eq: '<span><i>ẋ</i> = <i>y</i> − <i>ax</i> + <i>byz</i></span><span><i>ẏ</i> = <i>cy</i> − <i>xz</i> + <i>z</i></span><span><i>ż</i> = <i>dxy</i> − <i>ez</i></span>',
-      note: 'A multi-scroll system from Dadras and Momeni. The swarm moves at wildly different speeds through different scrolls, and the color shows it: dark is slow, bright is fast.' },
+      klabel: 'damping', khelp: 'Changes how the scrolls fold through one another.',
+      note: 'A multi-scroll system from Dadras and Momeni. Color shows speed: dark is slow, bright is fast.' },
     { id: 'rossler', name: 'Rössler', k: 5.7, kmin: 2.2, kmax: 7, kstep: 0.01, kname: 'c', rate: 2.4, hmax: 0.01, ref: 0.7,
       map: k => ({ c: [0.2 * k, -0.26 * k, 0.5 * k], s: 0.5 / k }),
       eq: '<span><i>ẋ</i> = −<i>y</i> − <i>z</i></span><span><i>ẏ</i> = <i>x</i> + <i>ay</i></span><span><i>ż</i> = <i>b</i> + <i>z</i> (<i>x</i> − <i>c</i>)</span>',
-      note: 'Otto Rössler, 1976, built to be as simple as chaos gets. Slide <b>c</b> from 2.5 upward: one loop at 2.5, two at 3.5, four at 4, eight near 4.2, and chaos by 4.3.' },
+      klabel: 'fold', khelp: 'Slide up from 2.5: one loop, two at 3.5, four at 4, eight near 4.2, chaos by 4.3.',
+      note: 'Otto Rössler, 1976, built to be as simple as chaos can get.' },
   ];
   const PALETTES = [
-    { id: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg,#3b1f7a,#2fb6b0,#ffe3a1)', c: ['#2a1c78', '#1fa7a8', '#ffe2a0'], bg: '#04040a', accent: '#b6a8ff' },
-    { id: 'ember',  name: 'Ember',  css: 'linear-gradient(135deg,#5a0f18,#e8642c,#fff3d6)', c: ['#4a0b1a', '#e0582a', '#fff0cf'], bg: '#070304', accent: '#f19a62' },
-    { id: 'glacier',name: 'Glacier',css: 'linear-gradient(135deg,#0d2b6b,#4ec3f0,#f4fbff)', c: ['#0c2466', '#3fb4ee', '#f2fbff'], bg: '#020509', accent: '#8fd3f5' },
-    { id: 'orchid', name: 'Orchid', css: 'linear-gradient(135deg,#40104f,#e0559b,#f9e0f0)', c: ['#3a0f52', '#d64b93', '#fbe3f1'], bg: '#060308', accent: '#ee8cc0' },
+    { id: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg,#3b1f7a,#2fb6b0,#ffe3a1)', c: ['#2a1c78', '#1fa7a8', '#ffe2a0'], d: ['#ff4f9a', '#ffc94d', '#5df2ff'], bg: '#04040a', accent: '#b6a8ff' },
+    { id: 'ember',  name: 'Ember',  css: 'linear-gradient(135deg,#5a0f18,#e8642c,#fff3d6)', c: ['#4a0b1a', '#e0582a', '#fff0cf'], d: ['#6ff0ff', '#ffffff', '#9b8cff'], bg: '#070304', accent: '#f19a62' },
+    { id: 'glacier',name: 'Glacier',css: 'linear-gradient(135deg,#0d2b6b,#4ec3f0,#f4fbff)', c: ['#0c2466', '#3fb4ee', '#f2fbff'], d: ['#ff6b8a', '#ffd36e', '#ff9a3c'], bg: '#020509', accent: '#8fd3f5' },
+    { id: 'orchid', name: 'Orchid', css: 'linear-gradient(135deg,#40104f,#e0559b,#f9e0f0)', c: ['#3a0f52', '#d64b93', '#fbe3f1'], d: ['#7dffb2', '#fff27a', '#6fd6ff'], bg: '#060308', accent: '#ee8cc0' },
   ];
   const COUNTS = [{ id: 18, name: '262K' }, { id: 19, name: '524K' }, { id: 20, name: '1M' }, { id: 21, name: '2M' }];
   const S = {
     sys: SYS[0], prev: null, mix: 1, k: {}, style: 'streaks', pal: PALETTES[0], log2n: (window.__gardenTest && window.__gardenTest.log2n) || (matchMedia('(max-width: 760px)').matches ? 18 : 19), speed: 1, trails: false, glow: 1,
-    yaw: -0.55, pitch: 0.42, dist: 3.9, burst: [0, 0, 0, 0], burstT: 0, perf: 1 / 60, perfN: 0, userN: false, spin: !REDUCED, vyaw: 0, scatter: 0, seed: 7,
+    yaw: -0.55, pitch: 0.42, dist: 3.9, burst: [0, 0, 0, 0], burstT: 0, now: 0, dyeStart: 0, dyeReq: null, perf: 1 / 60, perfN: 0, userN: false, spin: !REDUCED, vyaw: 0, scatter: 0, seed: 7,
   };
   SYS.forEach(s => S.k[s.id] = s.k);
-  let upd, draw, fade, post, down, up, N = 0, bufs = [], vaos = [], cur = 0, tf, hdr = null, chain = [], drag = null, pinch = null;
+  let upd, draw, fade, post, down, up, N = 0, bufs = [], vaos = [], cur = 0, tf, hdr = null, chain = [], drag = false, gest = null;
   const pts = new Map();
 
   const FIELD = `
@@ -1073,7 +1262,7 @@ function Attractor() {
   precision highp float; precision highp int;
   layout(location = 0) in vec4 a_p;
   out vec4 v_p;
-  uniform float u_dt, u_respawn, u_scatter; uniform int u_steps; uniform uint u_seed; uniform vec4 u_burst;
+  uniform float u_dt, u_respawn, u_scatter, u_dyeRad, u_now; uniform int u_steps, u_dyeOn, u_dyeStart, u_dyeCount, u_n; uniform uint u_seed; uniform vec4 u_burst; uniform vec3 u_dyePos;
   ${FIELD}
   ${HASH}
   void main(){
@@ -1086,13 +1275,19 @@ function Attractor() {
     uint id = uint(gl_VertexID);
     float roll = float(hashu(id * 2654435761u ^ u_seed)) / 4294967295.0;
     vec3 r = vec3(hashu(id ^ u_seed * 3u), hashu(id * 7u + u_seed), hashu(id * 13u ^ (u_seed + 911u))) / 4294967295.0;
+    float w = a_p.w; bool dyed = false;
+    if (u_dyeOn == 1) {
+      // a drop of dye: recruit the next slice of particles into a small ball at the cursor
+      int rel = (gl_VertexID - u_dyeStart + u_n) % u_n;
+      if (rel < u_dyeCount) { p = u_dyePos + normalize(r * 2.0 - 1.0 + 1e-6) * u_dyeRad * pow(r.y, 0.333); w = u_now; dyed = true; }
+    }
     if (u_scatter > 1.5) {
       // butterfly effect: everyone starts inside one tiny ball
-      p = u_burst.xyz + normalize(r * 2.0 - 1.0 + 1e-6) * u_burst.w * pow(r.x, 0.333);
-    } else if (!(dot(p, p) < 7.0) || (roll < u_respawn && u_burst.w <= 0.0) || u_scatter > 0.5) {
-      p = (r * 2.0 - 1.0) * (u_scatter > 0.5 ? 1.25 : 0.7);
+      p = u_burst.xyz + normalize(r * 2.0 - 1.0 + 1e-6) * u_burst.w * pow(r.x, 0.333); w = u_now;
+    } else if (!dyed && (!(dot(p, p) < 7.0) || (roll < u_respawn && u_burst.w <= 0.0) || u_scatter > 0.5)) {
+      p = (r * 2.0 - 1.0) * (u_scatter > 0.5 ? 1.25 : 0.7); w = -1e4;
     }
-    v_p = vec4(p, a_p.w);
+    v_p = vec4(p, w);
   }`;
   const UPD_FS = `#version 300 es
   precision mediump float; out vec4 o; void main(){ o = vec4(0); }`;
@@ -1100,13 +1295,20 @@ function Attractor() {
   const DRAW_VS = `#version 300 es
   precision highp float; precision highp int;
   layout(location = 0) in vec4 a_p;
-  uniform mat4 u_mvp; uniform float u_size, u_ref, u_tail; uniform vec3 u_c0, u_c1, u_c2;
+  uniform mat4 u_mvp; uniform float u_size, u_ref, u_tail, u_now, u_life, u_dyeGain; uniform vec3 u_c0, u_c1, u_c2, u_d0, u_d1, u_d2;
   out vec3 v_c;
   ${FIELD}
   void main(){
     vec3 v = Fw(a_p.xyz);
     float t = clamp(0.5 + 0.42 * log2(length(v) / u_ref + 1e-6), 0.0, 1.0);
     vec3 col = t < 0.5 ? mix(u_c0, u_c1, t * 2.0) : mix(u_c1, u_c2, t * 2.0 - 1.0);
+    float age = u_now - a_p.w, dye = clamp(1.0 - age / u_life, 0.0, 1.0);
+    if (dye > 0.0) {
+      float hh = fract(a_p.w * 0.09) * 3.0;
+      vec3 dc = hh < 1.0 ? mix(u_d0, u_d1, hh) : hh < 2.0 ? mix(u_d1, u_d2, hh - 1.0) : mix(u_d2, u_d0, hh - 2.0);
+      // a fresh drop is packed tight, so it starts dim and brightens as it spreads
+      col = mix(col, dc * u_dyeGain * (0.12 + 0.88 * smoothstep(0.0, 9.0, age)), sqrt(dye));
+    }
     // streaks: vertex 1 of each instance trails behind along the velocity
     float tail = float(gl_VertexID & 1);
     vec3 pos = a_p.xyz - v * (u_tail * tail);
@@ -1161,7 +1363,7 @@ function Attractor() {
     const data = new Float32Array(N * 4);
     for (let i = 0; i < N; i++) {
       data[i * 4] = (Math.random() * 2 - 1) * 0.7; data[i * 4 + 1] = (Math.random() * 2 - 1) * 0.7;
-      data[i * 4 + 2] = (Math.random() * 2 - 1) * 0.7; data[i * 4 + 3] = Math.random();
+      data[i * 4 + 2] = (Math.random() * 2 - 1) * 0.7; data[i * 4 + 3] = -1e4;
     }
     bufs = [0, 1].map(() => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_COPY); return b; });
     vaos = bufs.map(b => {
@@ -1170,7 +1372,7 @@ function Attractor() {
       return v;
     });
     gl.bindVertexArray(null); gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    cur = 0;
+    cur = 0; S.dyeStart = 0;
   }
   function allocTargets() {
     freeTarget(hdr); chain.forEach(freeTarget); chain = [];
@@ -1205,6 +1407,13 @@ function Attractor() {
     gl.uniform1f(upd.u.u_respawn, S.trails ? 0.0004 : 0.00015);
     gl.uniform1f(upd.u.u_scatter, S.scatter);
     gl.uniform4f(upd.u.u_burst, ...S.burst);
+    gl.uniform1i(upd.u.u_n, N); gl.uniform1f(upd.u.u_now, S.now);
+    if (S.dyeReq) {
+      const cnt = Math.max(64, N >> 6);
+      gl.uniform1i(upd.u.u_dyeOn, 1); gl.uniform1i(upd.u.u_dyeStart, S.dyeStart); gl.uniform1i(upd.u.u_dyeCount, cnt);
+      gl.uniform3f(upd.u.u_dyePos, ...S.dyeReq); gl.uniform1f(upd.u.u_dyeRad, 0.04);
+      S.dyeStart = (S.dyeStart + cnt) % N; S.dyeReq = null;
+    } else gl.uniform1i(upd.u.u_dyeOn, 0);
     S.scatter = 0;
     S.seed = (Math.imul(S.seed, 1103515245) + 12345) >>> 0;
     gl.uniform1ui(upd.u.u_seed, S.seed);
@@ -1231,6 +1440,27 @@ function Attractor() {
     const proj = [fov / a, 0, 0, 0, 0, fov, 0, 0, 0, 0, (fr + n) / (n - fr), -1, 0, 0, 2 * fr * n / (n - fr), 0];
     return mul(proj, view);
   }
+  function camera() {
+    const cy = Math.cos(S.yaw), sy = Math.sin(S.yaw), cp = Math.cos(S.pitch), sp = Math.sin(S.pitch);
+    const e = [S.dist * cp * cy, S.dist * cp * sy, S.dist * sp];
+    const z = norm(e), x = norm(cross([0, 0, 1], z)), y = cross(z, x);
+    return { e, x, y, z };
+  }
+  // where the cursor's ray crosses the plane through the attractor's center, facing the camera
+  function pickWorld(px, py) {
+    const { e, x, y, z } = camera(), fy = projY(), a = W / H;
+    const nx = px / cssW * 2 - 1, ny = 1 - py / cssH * 2;
+    const d = norm([0, 1, 2].map(i => x[i] * nx * a / fy + y[i] * ny / fy - z[i]));
+    const t = -dot(e, z) / dot(d, z);
+    let P = e.map((v, i) => v + t * d[i]);
+    const l = Math.hypot(...P); if (l > 1.4) P = P.map(v => v * 1.4 / l);
+    return P;
+  }
+  function dropDye(px, py) { S.dyeReq = pickWorld(px, py); S.burst = [0, 0, 0, 0]; coachDone('attractor'); }
+  function orbitBy(dx, dy, fling) {
+    S.yaw -= dx * 0.006; S.pitch = clamp(S.pitch + dy * 0.005, -1.45, 1.45);
+    if (fling) S.vyaw = -dx * 0.18;
+  }
   function projY() { const f = 1 / Math.tan(0.38), a = W / H; return a < 1 ? f * a * 1.15 : f; }
   function butterfly() {
     // pick one particle that already lives on the attractor and pack everyone around it
@@ -1239,7 +1469,7 @@ function Attractor() {
     if (!(Math.hypot(d[0], d[1], d[2]) < 2.5)) return;
     S.burst = [d[0], d[1], d[2], 0.004]; S.scatter = 2; S.burstT = 0;
     if (S.trails) { S.trails = false; S.style = 'streaks'; rebuildPanel(); }
-    hint('Every particle now starts in one speck, 400 times smaller than the attractor. Watch chaos tear it apart.');
+    hint('The whole swarm now starts in one speck, 400 times smaller than the attractor. Watch chaos tear it apart.');
   }
   function setSystem(s) {
     if (s === S.sys) return;
@@ -1251,9 +1481,16 @@ function Attractor() {
   const X = {
     id: 'attractor', ready: false,
     title: 'Attractor', kicker: 'Strange attractors',
-    get blurb() { return `${(N || 524288).toLocaleString('en-US')} particles follow one set of equations. Each path is chaotic and never repeats, yet every particle settles onto the same shape. Switch systems and watch the swarm migrate from one to the next.`; },
+    get blurb() { return `${(N || 524288).toLocaleString('en-US')} particles follow one set of equations. Each path is chaotic and never repeats, yet every particle is pulled onto the same shape: that shape is the attractor. Drop dye anywhere, even far away, and watch it get pulled in and smeared across the whole thing. Switch systems and the swarm migrates from one shape to the next.`; },
     get eq() { return S.sys.eq; },
-    hint: TOUCH ? 'Drag to orbit  ·  pinch to zoom  ·  double-tap to scatter the swarm' : 'Drag to orbit  ·  scroll to zoom  ·  double-click or Space to scatter the swarm',
+    hint: TOUCH ? 'Tap anywhere to drop dye into the flow' : 'Click anywhere to drop glowing dye into the flow',
+    coach: true, panelOpen: true, aboutOpen: false,
+    legendRows: TOUCH ? [['touch', 'Tap or drag', 'to drop dye into the flow'], ['pinch', 'Two fingers', 'to orbit and zoom']] : [
+      ['left', 'Click or drag', 'drop glowing dye into the flow'],
+      ['right', 'Right-drag', 'orbit the camera', 'or Shift-drag, or two-finger scroll'],
+      ['wheel', 'Scroll', 'zoom', 'or pinch'],
+      ['key', '<kbd>[</kbd> <kbd>]</kbd>', 'change system', '<kbd>Space</kbd> scatter the swarm'],
+    ],
     init() {
       upd = program(UPD_VS, UPD_FS, ['v_p']);
       draw = program(DRAW_VS, DRAW_FS);
@@ -1272,7 +1509,7 @@ function Attractor() {
       if (!this.entered) { this.entered = true; if (W < H) S.dist = 3.45; }
       document.body.dataset.tone = 'dark';
       document.documentElement.style.setProperty('--accent', S.pal.accent);
-      canvas.className = 'grab';
+      canvas.className = '';
     },
     frame(t, dt) {
       // step the swarm down a size if this GPU cannot keep up
@@ -1282,6 +1519,7 @@ function Attractor() {
         document.querySelectorAll('#panelBody [id^="a-n-"]').forEach(b => b.setAttribute('aria-pressed', String(b.id === 'a-n-' + S.log2n)));
       }
       if (S.prev) { S.mix += dt / 2.6; if (S.mix >= 1) { S.mix = 1; S.prev = null; } }
+      S.now += dt;
       if (S.spin && !drag) S.yaw += dt * 0.11;
       S.yaw += S.vyaw * dt; S.vyaw *= Math.pow(0.04, dt);
       step(dt);
@@ -1303,6 +1541,9 @@ function Attractor() {
       gl.uniform1f(draw.u.u_ref, lerp(b.ref * b.rate, a.ref * a.rate, m));
       const pc = S.pal.c.map(hex);
       gl.uniform3fv(draw.u.u_c0, pc[0]); gl.uniform3fv(draw.u.u_c1, pc[1]); gl.uniform3fv(draw.u.u_c2, pc[2]);
+      const dc = S.pal.d.map(hex);
+      gl.uniform3fv(draw.u.u_d0, dc[0]); gl.uniform3fv(draw.u.u_d1, dc[1]); gl.uniform3fv(draw.u.u_d2, dc[2]);
+      gl.uniform1f(draw.u.u_now, S.now); gl.uniform1f(draw.u.u_life, 30); gl.uniform1f(draw.u.u_dyeGain, S.burst[3] > 0 ? 1.3 : 7);
       // keep brightness steady across screen sizes, zoom and particle counts
       const ppu = (H / 2) * projY() / S.dist, size = Math.max(1, DPR * 0.85), perN = 524288 / N;
       const gain = S.trails ? 0.0075 * (ppu / 288) ** 2 / (size * size)
@@ -1339,44 +1580,64 @@ function Attractor() {
       bindOut(null, W, H); fullscreen();
       gl.activeTexture(gl.TEXTURE0);
     },
-    down(e) { pts.set(e.pointerId, [e.clientX, e.clientY]); drag = true; canvas.className = 'grabbing'; pinch = null; },
-    move(e) {
-      if (!pts.has(e.pointerId)) return;
-      const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
-      if (pts.size === 1) {
-        const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
-        S.yaw -= dx * 0.006; S.pitch = clamp(S.pitch + dy * 0.005, -1.45, 1.45);
-        S.vyaw = -dx * 0.006 / Math.max(1 / 120, 1 / 60) * 0.5;
-      } else if (pts.size === 2) {
-        const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-        if (pinch) S.dist = clamp(S.dist * pinch / d, 1.2, 9);
-        pinch = d;
-      }
+    down(e) {
+      const x = e.clientX, y = e.clientY;
+      pts.set(e.pointerId, [x, y]);
+      if (pts.size === 2) { const [p, q] = [...pts.values()]; gest = { kind: 'pinch', d: Math.hypot(p[0] - q[0], p[1] - q[1]), m: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2] }; drag = true; return; }
+      if (pts.size > 2) return;
+      const secondary = e.button === 1 || e.button === 2 || e.shiftKey || e.altKey;
+      gest = { kind: secondary ? 'orbit' : 'dye', lx: x, ly: y };
+      if (secondary) { drag = true; canvas.className = 'grabbing'; } else dropDye(x, y);
     },
-    up(e) { pts.delete(e.pointerId); pinch = null; if (!pts.size) { drag = false; canvas.className = 'grab'; } },
-    wheel(e) { S.dist = clamp(S.dist * Math.exp(e.deltaY * (e.deltaMode ? 0.05 : 0.001)), 1.2, 9); },
-    dbl() { S.burst = [0, 0, 0, 0]; S.scatter = 1; },
-    key(e) { if (e.key === ' ') { S.burst = [0, 0, 0, 0]; S.scatter = 1; return true; } if (e.key === 'b' || e.key === 'B') { butterfly(); return true; } },
+    move(e) {
+      if (!pts.has(e.pointerId) || !gest) return;
+      const x = e.clientX, y = e.clientY, prev = pts.get(e.pointerId); pts.set(e.pointerId, [x, y]);
+      if (gest.kind === 'pinch' && pts.size === 2) {
+        const [p, q] = [...pts.values()], d = Math.hypot(p[0] - q[0], p[1] - q[1]), m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+        S.dist = clamp(S.dist * gest.d / d, 1.2, 9); orbitBy(m[0] - gest.m[0], m[1] - gest.m[1]);
+        gest.d = d; gest.m = m;
+      } else if (gest.kind === 'orbit') orbitBy(x - prev[0], y - prev[1], true);
+      else if (gest.kind === 'dye' && Math.hypot(x - gest.lx, y - gest.ly) > 9) { dropDye(x, y); gest.lx = x; gest.ly = y; }
+    },
+    up(e) { pts.delete(e.pointerId); if (!pts.size) { gest = null; drag = false; canvas.className = ''; } else if (gest && gest.kind === 'pinch') gest = null; },
+    wheel(e, kind) {
+      if (kind === 'scroll') orbitBy(-e.deltaX * 0.7, -e.deltaY * 0.7);
+      else S.dist = clamp(S.dist * Math.exp(e.deltaY * (kind === 'pinch' ? 0.01 : e.deltaMode ? 0.05 : 0.001)), 1.2, 9);
+    },
+    pinchZoom(f) { S.dist = clamp(S.dist / f, 1.2, 9); },
+    key(e) {
+      if (e.key === ' ') { S.burst = [0, 0, 0, 0]; S.scatter = 1; return true; }
+      if (e.key === 'b' || e.key === 'B') { butterfly(); return true; }
+      if (e.key === 'd' || e.key === 'D') { dropDye(cssW / 2, cssH / 2); return true; }
+      if (e.key === '[' || e.key === ']') { const i = SYS.indexOf(S.sys) + (e.key === ']' ? 1 : -1); setSystem(SYS[(i + SYS.length) % SYS.length]); return true; }
+      const o = { ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[e.key];
+      if (o) { orbitBy(o[0], o[1]); return true; }
+      if (e.key === '+' || e.key === '=') { S.dist = clamp(S.dist * 0.88, 1.2, 9); return true; }
+      if (e.key === '-') { S.dist = clamp(S.dist / 0.88, 1.2, 9); return true; }
+    },
     _butterfly() { butterfly(); },
     _state: S, _sys: SYS, _set(id) { setSystem(SYS.find(s => s.id === id)); }, _step(dt) { step(dt); }, _alloc(n) { allocParticles(n); }, _read() { const d = new Float32Array(N * 4); gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cur]); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, d); gl.bindBuffer(gl.ARRAY_BUFFER, null); return Array.from(d); },
     panel() {
       const s = S.sys;
+      const resetK = () => { S.k[s.id] = s.k; const r = $('#a-k-' + s.id); r.value = s.k; r.dispatchEvent(new Event('input')); };
       return [
-        group('System', chips('a-sys', SYS, s.id, it => setSystem(it))),
+        group('System', chips('a-sys', SYS, s.id, it => setSystem(it)), note(s.note)),
         group(null,
-          slider('a-k-' + s.id, `Parameter ${s.kname}`, s.kmin, s.kmax, s.kstep, S.k[s.id], v => v.toFixed(s.kstep < 0.001 ? 4 : s.kstep < 0.01 ? 3 : 2), v => S.k[s.id] = v),
-          note(s.note),
-          buttons([{ name: `Reset ${s.kname}`, on: () => { S.k[s.id] = s.k; $('#a-k-' + s.id).value = s.k; $('#a-k-' + s.id).dispatchEvent(new Event('input')); } }, { name: 'Scatter', on: () => { S.burst = [0, 0, 0, 0]; S.scatter = 1; } }])),
-        group('Butterfly effect',
-          note('Pack the whole swarm into one speck of dust and let it go. Chaos means nearby paths pull apart exponentially fast, so the speck stretches into a thread and then covers the whole attractor.'),
-          buttons([{ name: 'Release from one point', on: butterfly }])),
-        group('Exposure', chips('a-exp', [{ id: 'streaks', name: 'Streaks' }, { id: 'points', name: 'Points' }, { id: 'long', name: 'Long exposure' }], S.trails ? 'long' : S.style, it => { S.trails = it.id === 'long'; S.style = it.id === 'streaks' ? 'streaks' : 'points'; }),
-          toggle('a-spin', 'Slow orbit', S.spin, v => S.spin = v)),
-        group('Palette', swatches('a-pal', PALETTES, S.pal.id, it => { S.pal = it; document.documentElement.style.setProperty('--accent', it.accent); })),
-        group('Particles', chips('a-n', COUNTS, S.log2n, it => { S.userN = true; S.log2n = it.id; allocParticles(it.id); S.scatter = 1; placard(X); })),
-        group(null,
-          slider('a-speed', 'Time', 0.1, 2.5, 0.05, S.speed, v => v.toFixed(2) + '×', v => S.speed = v),
-          slider('a-glow', 'Glow', 0.3, 2.5, 0.05, S.glow, v => v.toFixed(2) + '×', v => S.glow = v)),
+          slider('a-k-' + s.id, `${s.kname}, ${s.klabel}`, s.kmin, s.kmax, s.kstep, S.k[s.id], v => v.toFixed(s.kstep < 0.001 ? 4 : s.kstep < 0.01 ? 3 : 2), v => S.k[s.id] = v),
+          note(s.khelp, 'note tip'),
+          buttons([{ name: `Reset ${s.kname}`, on: resetK }])),
+        group('Look',
+          swatches('a-pal', PALETTES, S.pal.id, it => { S.pal = it; document.documentElement.style.setProperty('--accent', it.accent); }),
+          chips('a-exp', [{ id: 'streaks', name: 'Streaks' }, { id: 'points', name: 'Points' }, { id: 'long', name: 'Long exposure' }], S.trails ? 'long' : S.style, it => { S.trails = it.id === 'long'; S.style = it.id === 'streaks' ? 'streaks' : 'points'; })),
+        more('More',
+          group('Particles', chips('a-n', COUNTS, S.log2n, it => { S.userN = true; S.log2n = it.id; allocParticles(it.id); S.scatter = 1; placard(X); })),
+          group(null,
+            slider('a-speed', 'Time', 0.1, 2.5, 0.05, S.speed, v => v.toFixed(2) + '×', v => S.speed = v),
+            slider('a-glow', 'Glow', 0.3, 2.5, 0.05, S.glow, v => v.toFixed(2) + '×', v => S.glow = v),
+            toggle('a-spin', 'Slow automatic orbit', S.spin, v => S.spin = v)),
+          group('Experiments',
+            note('Pack the whole swarm into one speck and let it go. Nearby paths pull apart exponentially fast, so the speck stretches into a thread and then covers the whole attractor.'),
+            buttons([{ name: 'Whole swarm from one point', on: butterfly }, { name: 'Scatter', on: () => { S.burst = [0, 0, 0, 0]; S.scatter = 1; } }]))),
       ];
     },
   };
@@ -1400,6 +1661,14 @@ function placard(x) {
   $('#eq').innerHTML = x.eq;
 }
 function rebuildPanel() { panelBody.replaceChildren(...current.panel()); }
+function chrome() {
+  const p = $('#panel'), a = $('#about');
+  p.classList.toggle('collapsed', !current.panelOpen);
+  $('#panelHead').setAttribute('aria-expanded', String(!!current.panelOpen));
+  $('#placard').classList.toggle('open', !!current.aboutOpen);
+  a.setAttribute('aria-expanded', String(!!current.aboutOpen));
+  a.textContent = current.aboutOpen ? 'Show less' : 'About this piece';
+}
 let switching = 0;
 function show(id) {
   const x = exhibits[id] || exhibits.morphogen;
@@ -1423,7 +1692,9 @@ function swap(x) {
   if (current && current.leave) current.leave();
   current = x;
   x.enter();
-  placard(x); rebuildPanel(); hint(x.hint);
+  placard(x); rebuildPanel(); chrome();
+  if (x.coach && !x.coached) coach(x.hint, x.id); else hint(x.hint);
+  if (x.legendRows) legend(x.legendRows);
   const pl = $('#placard'); pl.classList.remove('rise'); void pl.offsetWidth; pl.classList.add('rise');
   document.querySelectorAll('#switcher button').forEach(b => b.setAttribute('aria-current', String(b.dataset.x === x.id)));
   try { history.replaceState(null, '', '#' + x.id); } catch (e) {}
@@ -1436,7 +1707,7 @@ canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId); canvas.focus({ preventScroll: true });
   if (e.pointerType === 'touch') {
     const now = performance.now();
-    if (now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 32) { lastTap.t = 0; current && current.dbl && current.dbl(); }
+    if (now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 32) { lastTap.t = 0; current && current.dbl && current.dbl(e); }
     else lastTap = { t: now, x: e.clientX, y: e.clientY };
   }
   current && current.down && current.down(e);
@@ -1446,17 +1717,28 @@ const upHandler = e => current && current.up && current.up(e);
 canvas.addEventListener('pointerup', upHandler);
 canvas.addEventListener('pointercancel', upHandler);
 canvas.addEventListener('pointerleave', () => { if (current === exhibits.morphogen) $('#probe').hidden = true; current && current.out && current.out(); });
-canvas.addEventListener('wheel', e => { e.preventDefault(); current && current.wheel && current.wheel(e); }, { passive: false });
-canvas.addEventListener('dblclick', e => { if (!TOUCH) current && current.dbl && current.dbl(); });
+let gestureOn = false, gScale = 1;
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (gestureOn && e.ctrlKey) return;
+  current && current.wheel && current.wheel(e, wheelKind(e));
+}, { passive: false });
+// Safari reports trackpad pinches as gesture events
+canvas.addEventListener('gesturestart', e => { e.preventDefault(); gestureOn = true; gScale = 1; });
+canvas.addEventListener('gesturechange', e => { e.preventDefault(); const f = e.scale / gScale; gScale = e.scale; current && current.pinchZoom && current.pinchZoom(f, e.clientX, e.clientY); });
+canvas.addEventListener('gestureend', e => { e.preventDefault(); gestureOn = false; });
+canvas.addEventListener('dblclick', e => { if (!TOUCH) current && current.dbl && current.dbl(e); });
 
 function setBare(v) { document.body.classList.toggle('bare', v); }
 $('#hide').onclick = () => setBare(true);
 $('#show').onclick = () => setBare(false);
 $('#panelToggle').onclick = () => {
   const open = !$('#panel').classList.contains('open');
-  $('#panel').classList.toggle('open', open); $('#placard').classList.toggle('open', open);
+  $('#panel').classList.toggle('open', open);
   $('#panelToggle').setAttribute('aria-expanded', String(open));
 };
+$('#panelHead').onclick = () => { current.panelOpen = !current.panelOpen; chrome(); };
+$('#about').onclick = () => { current.aboutOpen = !current.aboutOpen; chrome(); };
 window.addEventListener('keydown', e => {
   if (e.target.closest && e.target.closest('input,textarea')) return;
   if (e.key === 'h' || e.key === 'H') { setBare(!document.body.classList.contains('bare')); return; }
