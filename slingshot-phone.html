@@ -85,6 +85,22 @@ a{color:var(--accent)}
 .tricks div{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.04)}
 .tricks b{font-family:var(--mono);font-weight:500;color:var(--hot)}
 .note{font:400 13px/1.3 var(--mono);color:var(--mist);min-height:1.3em}
+
+/* level title card: rises in at the centre, holds, then flies up into the top bar */
+.intro{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);display:grid;justify-items:center;gap:10px;text-align:center;
+  pointer-events:none;width:min(90vw,26rem);transition:transform .75s cubic-bezier(.65,0,.25,1),opacity .6s ease .1s}
+.intro .iw{font:500 11px/1 var(--body);letter-spacing:.3em;text-transform:uppercase;color:var(--accent)}
+.intro .in{font:300 italic clamp(46px,13vw,68px)/1 var(--display);text-shadow:0 0 30px rgba(5,6,12,.9)}
+.intro .ip{font:400 14px/1 var(--mono);color:var(--mist);letter-spacing:.08em}
+.intro .rule{width:0;height:1px;background:var(--accent);animation:rule .9s cubic-bezier(.2,.7,.2,1) .15s forwards}
+.intro.show>*{animation:rise .7s cubic-bezier(.2,.7,.2,1) both}
+.intro.show .in{animation-delay:.08s}.intro.show .ip{animation-delay:.22s}
+.intro.show .rule{animation:rule .9s cubic-bezier(.2,.7,.2,1) .15s forwards}
+.intro.fly{transform:translate(-50%,calc(-40vh + var(--top) + 20px)) scale(.38);opacity:0}
+@keyframes rise{from{opacity:0;transform:translateY(14px);filter:blur(4px)}}
+@keyframes rule{to{width:120px}}
+.lvname,.pips{transition:opacity .5s ease}
+body.titling .lvname,body.titling .pips{opacity:0}
 @media (prefers-reduced-motion:reduce){.sheet{animation:none}.ff i{animation:none}}
 </style>
 
@@ -101,6 +117,7 @@ a{color:var(--accent)}
   </button>
 </div>
 <div class="ff" id="ff" hidden aria-label="Fast-forward"><i></i><i></i><i></i></div>
+<div class="intro" id="intro" hidden aria-live="polite"><div class="iw" id="iw"></div><div class="in" id="in"></div><div class="rule"></div><div class="ip" id="ip"></div></div>
 <div class="replay" id="replayTag" hidden>Replay</div>
 <button class="skip" id="skipBtn" type="button" hidden>Skip this level</button>
 <div class="corner"><button class="round speed" id="speedBtn" type="button" aria-label="Speed of time">1×</button></div>
@@ -111,7 +128,6 @@ a{color:var(--accent)}
       <button class="round" id="closeMenu" type="button" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <h1>Slingshot</h1>
     <div id="worlds" style="display:grid;gap:24px"></div>
-    <div><h2>Aiming help</h2><div class="row" id="assistRow"></div></div>
     <div><h2>Sound</h2><div class="row" id="soundRow"></div></div>
     <p class="muted">Drag back anywhere and let go. Comets never stop on their own: a bad throw can still loop around and score. Loops, close shaves and long flights earn trick points.</p>
     <p class="muted"><a href="https://areabake.com/" target="_blank" rel="noopener">More from areabake</a></p>
@@ -201,7 +217,7 @@ if (store.sound === false) Sound.on = false;
 const S = {
   idx: 0, L: null, tick: 0, acc: 0, speed: 1, ffK: 1, ff: false, comets: [], ghosts: [], dust: [], sparks: [], waves: [], labels: [],
   got: [], shots: 0, score: 0, tricks: [], won: false, wonAt: 0, aim: null, flash: 0, hitStop: 0, throws: [], replay: null,
-  assist: store.assist || 'short', coached: !!store.coached, time: 0,
+  assist: 'long', coached: !!store.coached, time: 0,
 };
 const level = () => ALL[S.idx];
 const world = () => WORLDS[level().wi];
@@ -302,12 +318,29 @@ function load(i, replay) {
   $('#lvname').textContent = `${L.li + 1}. ${L.name}`;
   $('#win').hidden = true; $('#replayTag').hidden = !replay; $('#skipBtn').hidden = true;
   store.last = S.idx; save();
-  hudPips();
+  hudPips(); titleCard();
+}
+let titleTimer = 0;
+function titleCard() {
+  const L = level(), el = $('#intro');
+  $('#iw').textContent = S.replay ? 'Replay' : `${world().name} · ${L.li + 1}`;
+  $('#in').textContent = L.name;
+  $('#ip').textContent = `par ${L.par}  ·  ${L.targets.length} target${L.targets.length > 1 ? 's' : ''}`;
+  clearTimeout(titleTimer);
+  el.hidden = false; el.className = 'intro'; void el.offsetWidth; el.className = 'intro show';
+  document.body.classList.add('titling');
+  titleTimer = setTimeout(titleAway, REDUCED ? 900 : 1700);
+}
+function titleAway() {
+  clearTimeout(titleTimer);
+  const el = $('#intro'); if (el.hidden || el.classList.contains('fly')) return;
+  el.classList.add('fly'); document.body.classList.remove('titling');
+  setTimeout(() => { if (el.classList.contains('fly')) el.hidden = true; }, 800);
 }
 function hudPips() {
   const L = level(), p = $('#pips'); p.replaceChildren();
   L.targets.forEach((_, i) => { const d = document.createElement('span'); d.className = 'pip' + (S.got[i] ? ' on' : ''); d.style.setProperty('--pc', TH[i % TH.length]); p.append(d); });
-  const s = document.createElement('span'); s.className = 'shots'; s.textContent = `${S.shots}/${L.par}`; p.append(s);
+  const s = document.createElement('span'); s.className = 'shots'; s.textContent = `${S.shots} · par ${L.par}`; p.append(s);
   $('#skipBtn').hidden = S.won || !!S.replay || S.shots < L.par + 4;
 }
 function fire(vx, vy) {
@@ -569,6 +602,7 @@ let pointer = null;
 cvs.addEventListener('contextmenu', e => e.preventDefault());
 cvs.addEventListener('pointerdown', e => {
   Sound.wake();
+  titleAway();
   if (S.won || S.replay || pointer) return;
   cvs.setPointerCapture(e.pointerId);
   pointer = e.pointerId;
@@ -623,7 +657,6 @@ function buildMenu() {
     sec.append(h, grid); box.append(sec);
   });
   const opt = (row, items, cur, on) => { const r = $(row); r.replaceChildren(); items.forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === cur)); b.onclick = () => { on(id); buildMenu(); }; r.append(b); }); };
-  opt('#assistRow', [['off', 'Off'], ['short', 'Short'], ['long', 'Long']], S.assist, v => { S.assist = store.assist = v; save(); });
   opt('#soundRow', [[true, 'On'], [false, 'Off']], Sound.on, v => { Sound.on = store.sound = v; save(); if (v) Sound.wake(); });
 }
 
