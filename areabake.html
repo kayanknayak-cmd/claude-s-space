@@ -89,6 +89,10 @@ details.more>summary::after{content:"+";font-size:15px;letter-spacing:0;line-hei
 details.more[open]>summary::after{content:"−"}
 details.more>.grp:first-of-type{border-top:0;padding-top:4px}
 .note.tip{color:var(--paper);opacity:.8}
+.render-status{display:grid;gap:7px;font-size:12.5px;color:var(--mist)}
+.render-status:empty{display:none}
+.render-status .bar{display:block;height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+.render-status .bar i{display:block;height:100%;background:var(--accent)}
 .grp{display:grid;gap:9px;padding:13px 0 12px;border-top:1px solid var(--line)}
 .grp:first-of-type{border-top:0}
 .grp h3{margin:0;font:500 10.5px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--mist)}
@@ -278,6 +282,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TOUCH = matchMedia('(pointer: coarse)').matches;
+let RENDERING = false;
 
 const canvas = $('#gl');
 const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
@@ -503,7 +508,7 @@ function Morphogen() {
     { id: 'lacquer',  name: 'Lacquer',  css: 'radial-gradient(circle at 35% 35%,#ffd479,#c2311f 50%,#120406)', mode: 3, bg: '#0b0405', lo: '#5e120f', hi: '#e9973f', gl: '#fff0c8', tone: 'dark', accent: '#f0a24a' },
     { id: 'spectrum', name: 'Spectrum', css: 'repeating-radial-gradient(circle at 50% 50%,#05060b 0 2px,#7a5cff 2px 3px,#05060b 3px 5px,#2fc9b5 5px 6px,#05060b 6px 8px,#f3d27a 8px 9px)', mode: 4, bg: '#04050a', lo: '#6d4dff', hi: '#25c3b0', gl: '#f5d37c', tone: 'dark', accent: '#9a86ff' },
   ];
-  const S = { tool: 'seed', species: SPECIES[0], pal: PALETTES[1], tempo: 10, brush: 7, map: false, warm: 0 };
+  const S = { tool: 'seed', species: SPECIES[0], pal: PALETTES[1], tempo: 10, brush: 7, map: false, warm: 0, frozen: false, view: { x: 0.5, y: 0.5, z: 1 }, pan: null };
   let sim, disp, copy, A = null, B = null, w = 0, h = 0, fmt;
   let drag = null, seed = 1;
 
@@ -543,7 +548,7 @@ function Morphogen() {
   const DISP_FS = `#version 300 es
   precision highp float; precision highp int;
   uniform sampler2D u_s; uniform int u_mode; uniform vec3 u_bg, u_lo, u_hi, u_gl;
-  uniform vec2 u_sp[6]; uniform vec3 u_spc[6]; uniform float u_time, u_cellpx;
+  uniform vec2 u_sp[6]; uniform vec3 u_spc[6]; uniform float u_time, u_cellpx; uniform vec3 u_view;
   in vec2 v_uv; out vec4 o;
   ${HASH}
   vec4 S(vec2 g){
@@ -566,7 +571,7 @@ function Morphogen() {
   }
   void main(){
     vec2 res = vec2(textureSize(u_s, 0));
-    vec2 g = v_uv * res;
+    vec2 g = (u_view.xy + (v_uv - 0.5) * u_view.z) * res;
     vec4 c = S(g);
     float B = c.g;
     float hx = S(g + vec2(1,0)).g - S(g - vec2(1,0)).g;
@@ -645,10 +650,20 @@ function Morphogen() {
         const a = sm(0.36, 0.42, n), b = sm(0.58, 0.64, n);
         f = lerp(lerp(sp[0].f, sp[1].f, a), sp[2].f, b);
         k = lerp(lerp(sp[0].k, sp[1].k, a), sp[2].k, b);
+        if (kind === 'intro') {
+          // coral around the middle, so the very first seed grows outward in every direction
+          const r = Math.hypot(x - w / 2, y - h / 2) / Math.min(w, h), wc = 1 - sm(0.1, 0.32, r);
+          f = lerp(f, SPECIES[0].f, wc); k = lerp(k, SPECIES[0].k, wc);
+        }
       }
       d[i] = 1; d[i + 1] = 0; d[i + 2] = f; d[i + 3] = k;
     }
-    if (kind !== 'clear') {
+    if (kind === 'intro') {
+      for (let y = -5; y <= 5; y++) for (let x = -5; x <= 5; x++) {
+        if (x * x + y * y > 25) continue;
+        const i = ((Math.floor(h / 2) + y) * w + Math.floor(w / 2) + x) * 4; d[i] = 0.5; d[i + 1] = 0.25 + Math.random() * 0.1;
+      }
+    } else if (kind !== 'clear') {
       const count = Math.round(w * h / (kind === 'map' ? 260 : 1700));
       for (let s = 0; s < count; s++) {
         const cx = Math.random() * w, cy = Math.random() * h, r = 1.5 + Math.random() * (kind === 'map' ? 2.5 : 4.5);
@@ -696,7 +711,12 @@ function Morphogen() {
     document.body.dataset.tone = S.pal.tone;
     document.documentElement.style.setProperty('--accent', S.pal.accent);
   }
-  function toSim(cx, cy) { return [cx / cssW * w, (1 - cy / cssH) * h]; }
+  function toUV(cx, cy) { const v = S.view; return [v.x + (cx / cssW - 0.5) * v.z, v.y + (0.5 - cy / cssH) * v.z]; }
+  function toSim(cx, cy) { const [u, v] = toUV(cx, cy); return [((u % 1) + 1) % 1 * w, ((v % 1) + 1) % 1 * h]; }
+  function setFrozen(v) {
+    S.frozen = v; const t = $('#m-freeze'); if (t) t.set(v);
+    canvas.className = v ? 'grab' : ''; if (v) clearOverlay(); legend(X.legendRows);
+  }
   let hoverAt = null;
   function ring() {
     if (!hoverAt) return;
@@ -705,6 +725,11 @@ function Morphogen() {
     g.lineWidth = 1.25; g.strokeStyle = erase ? 'rgba(236,229,214,.8)' : S.species.col;
     if (erase) g.setLineDash([3, 3]);
     g.beginPath(); g.arc(hoverAt[0], hoverAt[1], r, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
+  }
+  function zoomAt(cx, cy, f) {
+    const [u, v] = toUV(cx, cy), V = S.view;
+    V.z = clamp(V.z * f, 0.002, 1);
+    V.x = u - (cx / cssW - 0.5) * V.z; V.y = v - (0.5 - cy / cssH) * V.z;
   }
   function setBrush(v) {
     S.brush = clamp(v, 2, 24);
@@ -719,20 +744,26 @@ function Morphogen() {
     eq: '<span>∂<i>A</i>/∂<i>t</i> = <i>D<sub>A</sub></i><svg class="nabla" viewBox="0 0 10 10" aria-label="nabla"><path d="M.8 1.2h8.4L5 9.4z"/><path d="M2.1 1.7 5 7.9" style="stroke-width:1.2"/></svg>²<i>A</i> − <i>AB</i>² + <i>f</i> (1 − <i>A</i>)</span><span>∂<i>B</i>/∂<i>t</i> = <i>D<sub>B</sub></i><svg class="nabla" viewBox="0 0 10 10" aria-label="nabla"><path d="M.8 1.2h8.4L5 9.4z"/><path d="M2.1 1.7 5 7.9" style="stroke-width:1.2"/></svg>²<i>B</i> + <i>AB</i>² − (<i>k</i> + <i>f</i>) <i>B</i></span>',
     hint: TOUCH ? 'Drag to seed growth  ·  pick a species, or Erase, in the controls' : 'Drag to seed growth  ·  right-drag to erase  ·  pick a species to paint with it',
     panelOpen: true, aboutOpen: !TOUCH && innerWidth > 760,
-    legendRows: TOUCH ? [['touch', 'Drag', 'to seed growth'], ['key', 'Controls', 'switch to Erase or pick a species']] : [
-      ['left', 'Drag', 'seed growth'],
-      ['right', 'Right-drag', 'erase', 'or Alt-drag'],
-      ['wheel', 'Scroll', 'change the brush size'],
-      ['key', '<kbd>Space</kbd>', 'bake a fresh batch'],
-    ],
+    get legendRows() {
+      if (S.frozen) return TOUCH ? [['touch', 'Drag', 'to look around'], ['pinch', 'Pinch', 'to zoom']] : [
+        ['left', 'Drag', 'look around'], ['wheel', 'Scroll', 'zoom in as far as you like'], ['key', '<kbd>F</kbd>', 'unfreeze'],
+      ];
+      return TOUCH ? [['touch', 'Drag', 'to seed growth'], ['key', 'Controls', 'switch to Erase or pick a species']] : [
+        ['left', 'Drag', 'seed growth'],
+        ['right', 'Right-drag', 'erase', 'or Alt-drag'],
+        ['wheel', 'Scroll', 'change the brush size'],
+        ['key', '<kbd>F</kbd>', 'freeze and look closer', '<kbd>Space</kbd> bake a fresh batch'],
+      ];
+    },
     init() {
       if (!HAS_HALF) throw new Error('This exhibit needs floating-point render targets.');
       fmt = HAS_FLOAT ? gl.RGBA32F : gl.RGBA16F;
       sim = program(QUAD_VS, SIM_FS); disp = program(QUAD_VS, DISP_FS); copy = program(QUAD_VS, COPY_FS);
       alloc(Math.max(48, Math.round(cssW / CELL)), Math.max(48, Math.round(cssH / CELL)));
-      upload(seedData('mixed'));
-      steps(REDUCED ? 600 : 260, null);
-      S.warm = REDUCED ? 0 : 2.2;
+      // the opening: one seed in the middle, growing out to fill the screen
+      upload(seedData(REDUCED ? 'mixed' : 'intro'));
+      if (REDUCED) steps(600, null);
+      S.warm = REDUCED ? 0 : 6;
       this.ready = true;
     },
     resize() {
@@ -740,7 +771,7 @@ function Morphogen() {
       if (Math.abs(nw - w) > 2 || Math.abs(nh - h) > 2) alloc(nw, nh);
     },
     enter() { applyPalette(); canvas.className = ''; $('#axes').hidden = !S.map; },
-    leave() { $('#axes').hidden = true; $('#probe').hidden = true; hoverAt = null; clearOverlay(); },
+    leave() { $('#axes').hidden = true; $('#probe').hidden = true; hoverAt = null; S.pan = null; clearOverlay(); },
     frame(t, dt) {
       let n = S.tempo;
       if (S.warm > 0) { S.warm -= dt; n = Math.round(lerp(S.tempo, 34, clamp(S.warm / 2.2, 0, 1))); }
@@ -749,7 +780,8 @@ function Morphogen() {
         brush = { mode: drag.mode, x0: drag.px, y0: drag.py, x1: drag.x, y1: drag.y };
         drag.px = drag.x; drag.py = drag.y;
       }
-      steps(n, brush);
+      if (!S.frozen) steps(n, brush);
+      if (!S.frozen) { const v = S.view, k = 1 - Math.exp(-dt * 6); v.x += (0.5 - v.x) * k; v.y += (0.5 - v.y) * k; v.z += (1 - v.z) * k; if (Math.abs(1 - v.z) < 1e-3) { v.x = v.y = 0.5; v.z = 1; } }
       gl.useProgram(disp.p);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, A.t);
       gl.uniform1i(disp.u.u_s, 0);
@@ -759,15 +791,21 @@ function Morphogen() {
       gl.uniform2fv(disp.u.u_sp, SPECIES.flatMap(s => [s.f, s.k]));
       gl.uniform3fv(disp.u.u_spc, SPECIES.flatMap(s => hex(s.col)));
       gl.uniform1f(disp.u.u_time, t % 100);
-      gl.uniform1f(disp.u.u_cellpx, W / w);
+      gl.uniform1f(disp.u.u_cellpx, W / w / S.view.z);
+      gl.uniform3f(disp.u.u_view, S.view.x, S.view.y, S.view.z);
       bindOut(null, W, H); fullscreen();
     },
     down(e) {
+      if (S.frozen) { S.pan = [e.clientX, e.clientY]; canvas.className = 'grabbing'; return; }
       const [x, y] = toSim(e.clientX, e.clientY);
       const erase = e.button === 2 || e.altKey || S.tool === 'erase';
       drag = { mode: erase ? 2 : 1, x, y, px: x, py: y };
     },
     move(e) {
+      if (S.frozen) {
+        if (S.pan) { const v = S.view; v.x -= (e.clientX - S.pan[0]) / cssW * v.z; v.y += (e.clientY - S.pan[1]) / cssH * v.z; S.pan = [e.clientX, e.clientY]; }
+        return;
+      }
       if (drag) { const [x, y] = toSim(e.clientX, e.clientY); drag.x = x; drag.y = y; }
       if (e.pointerType === 'mouse') { hoverAt = [e.clientX, e.clientY, e.altKey]; ring(); }
       if (S.map) {
@@ -777,11 +815,14 @@ function Morphogen() {
         p.style.left = e.clientX + 'px'; p.style.top = e.clientY + 'px';
       }
     },
-    up() { drag = null; ring(); },
+    up() { drag = null; if (S.pan) { S.pan = null; canvas.className = 'grab'; } else ring(); },
     out() { hoverAt = null; clearOverlay(); },
-    wheel(e, kind) { setBrush(S.brush * Math.exp(-e.deltaY * (kind === 'pinch' ? 0.02 : e.deltaMode ? 0.1 : 0.0025))); },
-    pinchZoom(f) { setBrush(S.brush * f); },
-    key(e) { if (e.key === ' ') { upload(seedData(S.map ? 'map' : 'mixed')); S.warm = 1.5; return true; } },
+    wheel(e, kind) {
+      if (S.frozen) { zoomAt(e.clientX, e.clientY, Math.exp(e.deltaY * (kind === 'pinch' ? 0.012 : e.deltaMode ? 0.05 : 0.0016))); return; }
+      setBrush(S.brush * Math.exp(-e.deltaY * (kind === 'pinch' ? 0.02 : e.deltaMode ? 0.1 : 0.0025)));
+    },
+    pinchZoom(f, x, y) { if (S.frozen) zoomAt(x, y, 1 / f); else setBrush(S.brush * f); },
+    key(e) { if (e.key === 'f' || e.key === 'F') { setFrozen(!S.frozen); return true; } if (e.key === ' ') { upload(seedData(S.map ? 'map' : 'mixed')); S.warm = 1.5; return true; } },
     _steps(n) { steps(n, null); },
     _state: S, _species: SPECIES, _seed(kind) { upload(seedData(kind)); },
     panel() {
@@ -799,6 +840,7 @@ function Morphogen() {
           buttons([{ name: 'Show the map', on: () => { S.map = true; $('#axes').hidden = false; upload(seedData('map')); S.warm = 2.5; hint('Each point runs its own (f, k). The border regions are where the life is.'); } }])),
         group('Palette', swatches('m-pal', PALETTES, S.pal.id, it => { S.pal = it; applyPalette(); })),
         group(null,
+          toggle('m-freeze', 'Freeze and look closer', S.frozen, v => setFrozen(v)),
           slider('m-tempo', 'Tempo', 1, 30, 1, S.tempo, v => v + ' steps/frame', v => S.tempo = v),
           slider('m-brush', 'Brush', 2, 24, 1, S.brush, v => v * CELL + ' px', v => S.brush = v)),
       ];
@@ -919,7 +961,7 @@ function Slingshot() {
   const C = SL, LV = SL.LEVELS;
   const S = {
     mode: 'level', li: 0, shots: 0, got: [], comets: [], ghosts: [], sparks: [], t: 0, acc: 0, speed: 1, won: false,
-    assist: 'short', aim: null, hover: null, drag: null, best: {}, burst: [], dust: [], waves: [], ff: false, ffK: 1, ffWhy: '',
+    assist: 'short', aim: null, hover: null, drag: null, best: {}, burst: [], dust: [], waves: [], ff: false, ffK: 1, ffWhy: '', flash: 0, hitStop: 0,
     sb: { stars: [], move: false, place: false },
   };
   try { S.best = JSON.parse(localStorage.getItem('areabake.slingshot') || '{}') || {}; } catch (e) { S.best = {}; }
@@ -928,7 +970,7 @@ function Slingshot() {
   const FS = `#version 300 es
   precision highp float; precision highp int;
   uniform vec2 u_center; uniform float u_scale; uniform int u_n, u_rot; uniform vec4 u_b[12]; uniform float u_kind[12];
-  uniform vec3 u_acc; uniform float u_time;
+  uniform vec3 u_acc; uniform float u_time, u_flash;
   out vec4 o;
   float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
@@ -971,10 +1013,13 @@ function Slingshot() {
     float fw = max(fwidth(v), 1e-4);
     float dl = abs(fract(v + 0.5) - 0.5) / fw;
     float line = (1.0 - smoothstep(0.35, 1.35, dl)) * clamp(0.16 / fw, 0.0, 1.0);
-    vec3 lc = mix(u_acc, vec3(1.0, 0.72, 0.48), smoothstep(1.2, 5.0, phi));
+    // the gravity lines run violet at the rim, teal on the slopes, gold deep in the wells
+    float dpth = smoothstep(0.35, 5.5, phi);
+    vec3 lc = dpth < 0.5 ? mix(vec3(0.52, 0.38, 1.0), vec3(0.22, 0.86, 0.82), dpth * 2.0) : mix(vec3(0.22, 0.86, 0.82), vec3(1.0, 0.8, 0.45), dpth * 2.0 - 1.0);
     col += lc * line * (0.06 + 0.2 * smoothstep(0.0, 2.4, log(phi + 1.0)));
     col += u_acc * 0.025 * smoothstep(0.2, 3.0, phi);
     col += light;
+    col += vec3(0.55, 0.85, 1.0) * u_flash * 0.07;
     col = 1.0 - exp(-col * 1.15);
     vec2 uv = gl_FragCoord.xy / vec2(textureSize(u_dummy, 0)) - 0.5;
     o = vec4(col, 1.0);
@@ -1114,7 +1159,9 @@ function Slingshot() {
   }
   function simulate(dt) {
     S.ffK += ((S.ff ? FF : 1) - S.ffK) * (1 - Math.exp(-dt * (S.ff ? 2.2 : 7)));
-    S.acc += dt * S.speed * S.ffK;
+    S.flash *= Math.exp(-dt * 3);
+    const stop = S.hitStop > 0 ? 0.2 : 1; S.hitStop -= dt;
+    S.acc += dt * S.speed * S.ffK * stop;
     let n = 0;
     while (S.acc >= C.DT && n < 8000) {
       S.acc -= C.DT; S.t += C.DT; n++;
@@ -1127,7 +1174,11 @@ function Slingshot() {
         if (S.mode === 'level' && !S.won) {
           const before = S.got.filter(Boolean).length, k = C.hits(c, T, S.got);
           if (k) {
-            S.got.forEach((g, i) => { if (g && !(S.gotSeen && S.gotSeen[i])) { const [tx, ty] = T[i]; burst(tx, ty, '#bff7ff', 26); S.waves.push({ x: tx, y: ty, age: 0, r0: C.TR, col: '191,247,255' }); } });
+            S.got.forEach((g, i) => { if (g && !(S.gotSeen && S.gotSeen[i])) {
+              const [tx, ty] = T[i], hc = hex(TH[i % TH.length]).map(v => Math.round(v * 255)).join(',');
+              burst(tx, ty, TH[i % TH.length], 34); S.waves.push({ x: tx, y: ty, age: 0, r0: C.TR, col: hc });
+            } });
+            S.hitStop = 0.45; S.flash = 1;
             S.gotSeen = S.got.slice();
             c.fresh = c.t;
             Sound.chime(before); hud();
@@ -1141,7 +1192,7 @@ function Slingshot() {
     else S.comets = S.comets.filter(c => c.alive || (c.fadeT = (c.fadeT || 0) + dt) < 2);
     // comets shed glowing dust
     for (const c of S.comets) if (c.alive && S.dust.length < 1400) for (let i = 0; i < 2; i++)
-      S.dust.push({ x: c.x, y: c.y, vx: -c.vx * 0.04 + (Math.random() - 0.5) * 0.05, vy: -c.vy * 0.04 + (Math.random() - 0.5) * 0.05, age: 0, life: 0.8 + Math.random() * 1.2, col: c.color });
+      S.dust.push({ x: c.x, y: c.y, vx: -c.vx * 0.04 + (Math.random() - 0.5) * 0.05, vy: -c.vy * 0.04 + (Math.random() - 0.5) * 0.05, age: 0, life: 0.8 + Math.random() * 1.2, col: c.color || spCol(Math.hypot(c.vx, c.vy), 1) });
     for (const p of S.dust) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; }
     S.dust = S.dust.filter(p => p.age < p.life);
     for (const p of S.sparks) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; }
@@ -1173,8 +1224,16 @@ function Slingshot() {
     gl.uniform2f(prog.u.u_center, cx, cy); gl.uniform1f(prog.u.u_scale, G.s * DPR);
     gl.uniform1i(prog.u.u_rot, G.rot ? 1 : 0); gl.uniform1i(prog.u.u_n, Math.min(12, B.length));
     gl.uniform4fv(prog.u.u_b, arr); gl.uniform1fv(prog.u.u_kind, kind);
-    gl.uniform3fv(prog.u.u_acc, acc); gl.uniform1f(prog.u.u_time, t % 1000);
+    gl.uniform3fv(prog.u.u_acc, acc); gl.uniform1f(prog.u.u_time, t % 1000); gl.uniform1f(prog.u.u_flash, S.flash);
     bindOut(null, W, H); fullscreen();
+  }
+  // each target its own color; comets colored by speed, violet when slow and gold-white when fast
+  const TH = ['#ff7aa8', '#ffd166', '#6ef0c8', '#8fb0ff', '#c79bff'];
+  const rgba = (h, a) => { const c = hex(h).map(v => Math.round(v * 255)); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+  function spCol(v, a) {
+    const t = clamp((v - 0.25) / 1.7, 0, 1), A = [122, 108, 255], B = [79, 216, 232], C2 = [255, 241, 196];
+    const m = t < 0.5 ? A.map((x, i) => x + (B[i] - x) * t * 2) : B.map((x, i) => x + (C2[i] - x) * (t * 2 - 1));
+    return `rgba(${m[0] | 0},${m[1] | 0},${m[2] | 0},${a})`;
   }
   function trailPath(g, tr, from = 0) {
     g.beginPath();
@@ -1190,33 +1249,34 @@ function Slingshot() {
     const T = targets();
     T.forEach(([x, y], i) => {
       const [sx, sy] = toScr(x, y), r = C.TR * G.s;
-      const glow = g.createRadialGradient(sx, sy, 0, sx, sy, r * 2.2);
-      glow.addColorStop(0, S.got[i] ? 'rgba(191,247,255,.22)' : 'rgba(154,215,255,.16)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+      const hue = TH[i % TH.length], glow = g.createRadialGradient(sx, sy, 0, sx, sy, r * 2.4);
+      glow.addColorStop(0, rgba(hue, S.got[i] ? 0.3 : 0.2)); glow.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, r * 2.2, 0, Math.PI * 2); g.fill();
       if (!S.got[i]) {
         const a = t * 1.6 + i * 2.1;
         g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.arc(sx + Math.cos(a) * r * 1.15, sy + Math.sin(a) * r * 1.15, 1.6, 0, Math.PI * 2); g.fill();
       }
       if (S.got[i]) {
-        g.fillStyle = 'rgba(191,247,255,.22)'; g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill();
-        g.strokeStyle = '#bff7ff'; g.lineWidth = 1.5; g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.stroke();
+        g.fillStyle = rgba(hue, 0.25); g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = hue; g.lineWidth = 1.5; g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.stroke();
         g.beginPath(); g.moveTo(sx - r * 0.38, sy); g.lineTo(sx - r * 0.08, sy + r * 0.3); g.lineTo(sx + r * 0.42, sy - r * 0.32); g.stroke();
       } else {
         const pulse = 1 + 0.08 * Math.sin(t * 3 + i);
-        g.strokeStyle = acc; g.lineWidth = 1.5; g.setLineDash([4, 5]); g.lineDashOffset = -t * 12;
+        g.strokeStyle = hue; g.lineWidth = 1.5; g.setLineDash([4, 5]); g.lineDashOffset = -t * 12;
         g.beginPath(); g.arc(sx, sy, r * pulse, 0, Math.PI * 2); g.stroke(); g.setLineDash([]);
-        g.fillStyle = acc; g.beginPath(); g.arc(sx, sy, 2.2, 0, Math.PI * 2); g.fill();
+        g.fillStyle = hue; g.beginPath(); g.arc(sx, sy, 2.2, 0, Math.PI * 2); g.fill();
       }
     });
     // comets: glowing trail and head
     g.globalCompositeOperation = 'lighter';
     for (const c of S.comets) {
-      const tr = c.trail, col = c.color || '#ffffff', fade = c.alive ? 1 : Math.max(0, 1 - (c.fadeT || 0) / 2);
+      const tr = c.trail, sp0 = Math.hypot(c.vx, c.vy), col = c.color || spCol(sp0, 1), fade = c.alive ? 1 : Math.max(0, 1 - (c.fadeT || 0) / 2);
       if (tr.length > 1) {
         const n = tr.length, seg = Math.max(1, Math.floor(n / 24));
         for (let k = 0; k < n - 1; k += seg) {
           const a = Math.pow(k / n, 1.6) * 0.85 * fade;
-          g.strokeStyle = c.color ? c.color.replace(')', ` / ${a})`) : `rgba(255,244,226,${a})`;
+          const q0 = tr[k], q1 = tr[Math.min(n - 1, k + seg)], v = Math.hypot(q1[0] - q0[0], q1[1] - q0[1]) / (0.01 * Math.max(1, Math.min(n - 1, k + seg) - k));
+          g.strokeStyle = c.color ? c.color.replace(')', ` / ${a})`) : spCol(v, a);
           g.lineWidth = 1 + 1.6 * (k / n);
           trailPath(g, tr.slice(k, Math.min(n, k + seg + 1))); g.stroke();
         }
@@ -1224,7 +1284,7 @@ function Slingshot() {
       if (c.alive) {
         const [sx, sy] = toScr(c.x, c.y), grd = g.createRadialGradient(sx, sy, 0, sx, sy, 14);
         g.fillStyle = '#ffffff'; g.beginPath(); g.arc(sx, sy, 1.8, 0, Math.PI * 2); g.fill();
-        grd.addColorStop(0, col); grd.addColorStop(0.25, c.color ? c.color.replace(')', ' / .5)') : 'rgba(255,236,200,.5)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+        grd.addColorStop(0, col); grd.addColorStop(0.25, c.color ? c.color.replace(')', ' / .5)') : spCol(sp0, 0.5)); grd.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = grd; g.beginPath(); g.arc(sx, sy, 14, 0, Math.PI * 2); g.fill();
       }
     }
@@ -1468,15 +1528,15 @@ function Attractor() {
       note: 'Otto Rössler, 1976, built to be as simple as chaos can get.' },
   ];
   const PALETTES = [
-    { id: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg,#3b1f7a,#2fb6b0,#ffe3a1)', c: ['#2a1c78', '#1fa7a8', '#ffe2a0'], d: ['#ff4f9a', '#ffc94d', '#5df2ff'], bg: '#04040a', accent: '#b6a8ff' },
-    { id: 'ember',  name: 'Ember',  css: 'linear-gradient(135deg,#5a0f18,#e8642c,#fff3d6)', c: ['#4a0b1a', '#e0582a', '#fff0cf'], d: ['#6ff0ff', '#ffffff', '#9b8cff'], bg: '#070304', accent: '#f19a62' },
-    { id: 'glacier',name: 'Glacier',css: 'linear-gradient(135deg,#0d2b6b,#4ec3f0,#f4fbff)', c: ['#0c2466', '#3fb4ee', '#f2fbff'], d: ['#ff6b8a', '#ffd36e', '#ff9a3c'], bg: '#020509', accent: '#8fd3f5' },
-    { id: 'orchid', name: 'Orchid', css: 'linear-gradient(135deg,#40104f,#e0559b,#f9e0f0)', c: ['#3a0f52', '#d64b93', '#fbe3f1'], d: ['#7dffb2', '#fff27a', '#6fd6ff'], bg: '#060308', accent: '#ee8cc0' },
+    { id: 'aurora', name: 'Aurora', css: 'linear-gradient(135deg,#3b2a8f,#1fa7a8)', c: ['#2a1c78', '#1fa7a8', '#ffe2a0'], d: ['#ff4f9a', '#ffc94d', '#5df2ff'], bg: '#04040a', accent: '#b6a8ff' },
+    { id: 'ember',  name: 'Ember',  css: 'linear-gradient(135deg,#6a1424,#e0582a)', c: ['#4a0b1a', '#e0582a', '#fff0cf'], d: ['#6ff0ff', '#ffffff', '#9b8cff'], bg: '#070304', accent: '#f19a62' },
+    { id: 'glacier',name: 'Glacier',css: 'linear-gradient(135deg,#123a8a,#3fb4ee)', c: ['#0c2466', '#3fb4ee', '#f2fbff'], d: ['#ff6b8a', '#ffd36e', '#ff9a3c'], bg: '#020509', accent: '#8fd3f5' },
+    { id: 'orchid', name: 'Orchid', css: 'linear-gradient(135deg,#4c1766,#d64b93)', c: ['#3a0f52', '#d64b93', '#fbe3f1'], d: ['#7dffb2', '#fff27a', '#6fd6ff'], bg: '#060308', accent: '#ee8cc0' },
   ];
   const COUNTS = [{ id: 18, name: '262K' }, { id: 19, name: '524K' }, { id: 20, name: '1M' }, { id: 21, name: '2M' }];
   const S = {
     sys: SYS[0], prev: null, mix: 1, k: {}, style: 'points', pal: PALETTES[0], log2n: (window.__areabakeTest && window.__areabakeTest.log2n) || (matchMedia('(max-width: 760px)').matches ? 18 : 19), speed: 1, trails: false, glow: 1,
-    yaw: -0.55, pitch: 0.42, dist: 3.9, target: [0, 0, 0], frozen: false, fly: false, flyT: 0, burst: [0, 0, 0, 0], burstT: 0, now: 0, dyeStart: 0, dyeReq: null, perf: 1 / 60, perfN: 0, userN: false, spin: !REDUCED, vyaw: 0, scatter: 0, seed: 7,
+    vlen: 60, vres: '4k', yaw: -0.55, pitch: 0.42, dist: 3.9, distT: 3.9, target: [0, 0, 0], tgtT: [0, 0, 0], vpitch: 0, frozen: false, fly: false, flyT: 0, burst: [0, 0, 0, 0], burstT: 0, now: 0, dyeStart: 0, dyeReq: null, perf: 1 / 60, perfN: 0, userN: false, spin: !REDUCED, vyaw: 0, scatter: 0, seed: 7,
   };
   SYS.forEach(s => S.k[s.id] = s.k);
   let upd, draw, fade, post, down, up, N = 0, bufs = [], vaos = [], cur = 0, tf, hdr = null, chain = [], drag = false, gest = null;
@@ -1705,17 +1765,114 @@ function Attractor() {
     return P;
   }
   function dropDye(px, py) { S.dyeReq = pickWorld(px, py); S.burst = [0, 0, 0, 0]; coachDone('attractor'); }
-  function zoom(f) { S.dist = clamp(S.dist * f, 0.0008, 12); }
+  // the point under the cursor on the plane through the camera's target
+  function underCursor(px, py) {
+    const [e, T] = eyeAndTarget(), z = norm([e[0] - T[0], e[1] - T[1], e[2] - T[2]]), x = norm(cross([0, 0, 1], z)), y = cross(z, x);
+    const fy = projY(), a = W / H, nx = px / cssW * 2 - 1, ny = 1 - py / cssH * 2;
+    const d = norm([0, 1, 2].map(i => x[i] * nx * a / fy + y[i] * ny / fy - z[i]));
+    const t = dot([T[0] - e[0], T[1] - e[1], T[2] - e[2]], z) / dot(d, z);
+    return e.map((v, i) => v + t * d[i]);
+  }
+  function zoom(f, px, py) {
+    if (S.fly) { S.fly = false; S.distT = S.dist = 2.2; const t = $('#a-fly'); if (t) t.set(false); }
+    const nd = clamp(S.distT * f, 0.0008, 12); f = nd / S.distT; S.distT = nd;
+    if (px != null) { const P = underCursor(px, py); S.tgtT = S.tgtT.map((v, i) => P[i] + (v - P[i]) * f); }
+  }
   function panBy(dx, dy) {
     // slide the point the camera circles, in the plane of the screen
     const [e, T] = eyeAndTarget(), z = norm([e[0] - T[0], e[1] - T[1], e[2] - T[2]]), x = norm(cross([0, 0, 1], z)), y = cross(z, x);
     const k = S.dist * 2 / (H / DPR) / projY();
-    S.target = S.target.map((v, i) => v - x[i] * dx * k + y[i] * dy * k);
+    S.tgtT = S.tgtT.map((v, i) => v - x[i] * dx * k + y[i] * dy * k);
   }
-  function resetCam() { S.target = [0, 0, 0]; S.dist = W < H ? 3.45 : 3.9; S.yaw = -0.55; S.pitch = 0.42; S.fly = false; const t = $('#a-fly'); if (t) t.set(false); }
+  function resetCam() { S.tgtT = [0, 0, 0]; S.distT = W < H ? 3.45 : 3.9; S.yaw = -0.55; S.pitch = 0.42; S.vyaw = S.vpitch = 0; S.fly = false; const t = $('#a-fly'); if (t) t.set(false); }
+  // back to exactly how it looked the first time it opened
+  /* Render frames one at a time at full quality, encode them with the browser's
+     own H.264 encoder, and hand the finished MP4 to the viewer to save. */
+  let muxerLib = null, cancelRender = false;
+  function loadMuxer() {
+    if (window.Mp4Muxer) return Promise.resolve(window.Mp4Muxer);
+    return muxerLib || (muxerLib = new Promise((ok, no) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.min.js';
+      sc.onload = () => ok(window.Mp4Muxer); sc.onerror = () => { muxerLib = null; no(new Error('The video library could not load.')); };
+      document.head.append(sc);
+    }));
+  }
+  function renderStatus(html, busy) {
+    const st = document.querySelector('.render-status'); if (!st) return;
+    st.innerHTML = html;
+    if (busy) { const b = el('button', 'ghost'); b.type = 'button'; b.textContent = 'Cancel'; b.onclick = () => cancelRender = true; st.append(b); }
+  }
+  async function renderVideo() {
+    if (RENDERING) return;
+    if (!('VideoEncoder' in window)) { renderStatus('This browser cannot encode video. Try a recent Chrome, Edge or Safari.'); return; }
+    const [vw, vh] = S.vres === '4k' ? [3840, 2160] : [1920, 1080], fps = 60, frames = S.vlen * fps;
+    const bitrate = S.vres === '4k' ? 45e6 : 16e6;
+    let cfg = null;
+    for (const codec of ['avc1.640034', 'avc1.640033', 'avc1.4d0034']) {
+      const c = { codec, width: vw, height: vh, bitrate, framerate: fps, avc: { format: 'avc' } };
+      try { if ((await VideoEncoder.isConfigSupported(c)).supported) { cfg = c; break; } } catch (e) {}
+    }
+    if (!cfg) { renderStatus(`This device cannot encode ${S.vres === '4k' ? '4K' : '1080p'} video. Try 1080p.`); return; }
+    let M;
+    try { M = await loadMuxer(); } catch (e) { renderStatus(e.message); return; }
+    const muxer = new M.Muxer({ target: new M.ArrayBufferTarget(), video: { codec: 'avc', width: vw, height: vh, frameRate: fps }, fastStart: 'in-memory' });
+    let failed = null;
+    const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: e => failed = e });
+    enc.configure(cfg);
+    RENDERING = true; cancelRender = false;
+    const saved = { W, H, cw: canvas.width, ch: canvas.height };
+    canvas.width = W = vw; canvas.height = H = vh; allocTargets();
+    const t0 = performance.now();
+    try {
+      for (let f = 0; f < frames && !cancelRender && !failed; f++) {
+        X.frame(f / fps, 1 / fps);
+        const vf = new VideoFrame(canvas, { timestamp: Math.round(f * 1e6 / fps), duration: Math.round(1e6 / fps) });
+        enc.encode(vf, { keyFrame: f % (fps * 2) === 0 }); vf.close();
+        while (enc.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 2));
+        if (f % 10 === 0) {
+          const pct = Math.round(f / frames * 100), el2 = (performance.now() - t0) / 1000, left = f ? el2 / f * (frames - f) : 0;
+          renderStatus(`<span class="bar"><i style="width:${pct}%"></i></span>Rendering ${pct}%${f > 60 ? `, about ${Math.ceil(left / 60) > 1 ? Math.ceil(left / 60) + ' min' : Math.ceil(left) + ' s'} left` : ''}`, true);
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+      if (!failed && !cancelRender) await enc.flush();
+    } finally {
+      try { enc.close(); } catch (e) {}
+      RENDERING = false;
+      canvas.width = saved.cw; canvas.height = saved.ch; W = saved.W; H = saved.H; allocTargets();
+      last = performance.now();
+    }
+    if (failed) { renderStatus('The encoder stopped: ' + failed.message); return; }
+    if (cancelRender) { renderStatus('Render cancelled.'); return; }
+    muxer.finalize();
+    const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
+    const mb = (blob.size / 1048576).toFixed(0);
+    const name = `areabake-${S.sys.id}-${S.vres}-${S.vlen}s.mp4`;
+    const save = async () => {
+      const dl = window.claude ? await window.claude.use('downloads').catch(() => null) : null;
+      if (!dl) { renderStatus('Saving files is not available in this view.'); return; }
+      try { await dl.save({ filename: name, data: blob }); renderStatus(`Saved ${name} (${mb} MB).`); }
+      catch (e) {
+        if (e && e.code === 'declined') renderStatus(`Not saved. <button class="ghost" type="button">Save ${mb} MB video</button>`);
+        else renderStatus('Could not save the video: ' + ((e && e.message) || 'unknown error'));
+        const b = document.querySelector('.render-status button'); if (b) b.onclick = save;
+      }
+    };
+    renderStatus(`Done: ${mb} MB.`); save();
+  }
+  function startOver() {
+    SYS.forEach(s => S.k[s.id] = s.k);
+    S.sys = SYS[0]; S.prev = null; S.mix = 1; S.pal = PALETTES[0]; S.style = 'points'; S.trails = false;
+    S.speed = 1; S.glow = 1; S.spin = !REDUCED; S.frozen = false; S.burst = [0, 0, 0, 0];
+    resetCam(); S.target = [0, 0, 0]; S.dist = S.distT;
+    allocParticles(S.log2n); for (let i = 0; i < 120; i++) step(1 / 15);
+    document.documentElement.style.setProperty('--accent', S.pal.accent);
+    placard(X); rebuildPanel();
+  }
   function orbitBy(dx, dy, fling) {
     S.yaw -= dx * 0.006; S.pitch = clamp(S.pitch + dy * 0.005, -1.45, 1.45);
-    if (fling) S.vyaw = -dx * 0.18;
+    if (fling) { S.vyaw = -dx * 0.18; S.vpitch = dy * 0.15; }
   }
   function projY() { const f = 1 / Math.tan(0.38), a = W / H; return a < 1 ? f * a * 1.15 : f; }
   function butterfly() {
@@ -1743,9 +1900,9 @@ function Attractor() {
     coach: false, panelOpen: true, aboutOpen: false,
     legendRows: TOUCH ? [['touch', 'Drag', 'to orbit'], ['pinch', 'Two fingers', 'to zoom and pan']] : [
       ['left', 'Drag', 'orbit'],
-      ['right', 'Right-drag', 'pan', 'or Shift-drag, or two-finger scroll'],
-      ['wheel', 'Scroll', 'zoom, as far in as you like'],
-      ['key', '<kbd>F</kbd>', 'freeze time', '<kbd>0</kbd> reset the camera'],
+      ['right', 'Right-drag', 'pan', 'or Shift-drag'],
+      ['wheel', 'Scroll', 'zoom toward the cursor', 'as far in as you like'],
+      ['key', '<kbd>Space</kbd>', 'freeze time', '<kbd>0</kbd> reset the camera'],
     ],
     init() {
       upd = program(UPD_VS, UPD_FS, ['v_p']);
@@ -1762,7 +1919,7 @@ function Attractor() {
     },
     resize() { allocTargets(); },
     enter() {
-      if (!this.entered) { this.entered = true; if (W < H) S.dist = 3.45; }
+      if (!this.entered) { this.entered = true; if (W < H) S.dist = S.distT = 3.45; }
       document.body.dataset.tone = 'dark';
       document.documentElement.style.setProperty('--accent', S.pal.accent);
       canvas.className = 'grab';
@@ -1770,7 +1927,7 @@ function Attractor() {
     frame(t, dt) {
       // step the swarm down a size if this GPU cannot keep up
       S.perf = lerp(S.perf, dt, 0.05); S.perfN++;
-      if (!S.userN && S.perfN > 150 && S.perf > 0.034 && S.log2n > 18) {
+      if (!RENDERING && !S.userN && S.perfN > 150 && S.perf > 0.034 && S.log2n > 18) {
         S.log2n--; S.perfN = 0; allocParticles(S.log2n); placard(X);
         document.querySelectorAll('#panelBody [id^="a-n-"]').forEach(b => b.setAttribute('aria-pressed', String(b.id === 'a-n-' + S.log2n)));
       }
@@ -1778,6 +1935,9 @@ function Attractor() {
       S.now += dt;
       if (S.spin && !drag && !S.fly) S.yaw += dt * 0.11;
       S.yaw += S.vyaw * dt; S.vyaw *= Math.pow(0.04, dt);
+      S.pitch = clamp(S.pitch + S.vpitch * dt, -1.45, 1.45); S.vpitch *= Math.pow(0.04, dt);
+      const ke = 1 - Math.exp(-dt * 9);
+      S.dist += (S.distT - S.dist) * ke; S.target = S.target.map((v, i) => v + (S.tgtT[i] - v) * ke);
       if (S.fly) S.flyT += dt;
       // flying through the swarm slows time to a crawl; freezing stops it
       if (!S.frozen) step(S.fly ? dt * 0.08 : dt);
@@ -1852,28 +2012,26 @@ function Attractor() {
       const x = e.clientX, y = e.clientY, prev = pts.get(e.pointerId); pts.set(e.pointerId, [x, y]);
       if (gest.kind === 'pinch' && pts.size === 2) {
         const [p, q] = [...pts.values()], d = Math.hypot(p[0] - q[0], p[1] - q[1]), m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-        zoom(gest.d / d); panBy(m[0] - gest.m[0], m[1] - gest.m[1]);
+        zoom(gest.d / d, m[0], m[1]); panBy(m[0] - gest.m[0], m[1] - gest.m[1]);
         gest.d = d; gest.m = m;
       } else if (gest.kind === 'orbit') orbitBy(x - prev[0], y - prev[1], true);
       else if (gest.kind === 'pan') panBy(x - prev[0], y - prev[1]);
     },
     up(e) { pts.delete(e.pointerId); if (!pts.size) { gest = null; drag = false; canvas.className = 'grab'; } else if (gest && gest.kind === 'pinch') gest = null; },
-    wheel(e, kind) {
-      if (kind === 'scroll') panBy(-e.deltaX, -e.deltaY);
-      else zoom(Math.exp(e.deltaY * (kind === 'pinch' ? 0.01 : e.deltaMode ? 0.05 : 0.0012)));
-    },
-    pinchZoom(f) { zoom(1 / f); },
+    // scrolling always zooms, toward whatever is under the cursor; mouse, trackpad and pinch alike
+    wheel(e, kind) { zoom(Math.exp(e.deltaY * (kind === 'pinch' ? 0.012 : e.deltaMode ? 0.05 : 0.0016)), e.clientX, e.clientY); },
+    pinchZoom(f, x, y) { zoom(1 / f, x, y); },
     dbl() { resetCam(); },
     key(e) {
-      if (e.key === ' ') { S.burst = [0, 0, 0, 0]; S.scatter = 1; return true; }
+      if (e.key === ' ') { S.frozen = !S.frozen; const t = $('#a-freeze'); if (t) t.set(S.frozen); return true; }
       if (e.key === 'b' || e.key === 'B') { butterfly(); return true; }
       if (e.key === 'f' || e.key === 'F') { S.frozen = !S.frozen; const t = $('#a-freeze'); if (t) t.set(S.frozen); return true; }
       if (e.key === '0') { resetCam(); return true; }
       if (e.key === '[' || e.key === ']') { const i = SYS.indexOf(S.sys) + (e.key === ']' ? 1 : -1); setSystem(SYS[(i + SYS.length) % SYS.length]); return true; }
       const o = { ArrowLeft: [-12, 0], ArrowRight: [12, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] }[e.key];
       if (o) { orbitBy(o[0], o[1]); return true; }
-      if (e.key === '+' || e.key === '=') { zoom(0.85); return true; }
-      if (e.key === '-') { zoom(1 / 0.85); return true; }
+      if (e.key === '+' || e.key === '=') { zoom(0.8); return true; }
+      if (e.key === '-') { zoom(1 / 0.8); return true; }
     },
     _butterfly() { butterfly(); },
     _state: S, _sys: SYS, _set(id) { setSystem(SYS.find(s => s.id === id)); }, _step(dt) { step(dt); }, _alloc(n) { allocParticles(n); }, _read() { const d = new Float32Array(N * 4); gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cur]); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, d); gl.bindBuffer(gl.ARRAY_BUFFER, null); return Array.from(d); },
@@ -1881,7 +2039,7 @@ function Attractor() {
       const s = S.sys;
       const resetK = () => { S.k[s.id] = s.k; const r = $('#a-k-' + s.id); r.value = s.k; r.dispatchEvent(new Event('input')); };
       return [
-        group('System', chips('a-sys', SYS, s.id, it => setSystem(it)), note(s.note)),
+        group('System', chips('a-sys', SYS, s.id, it => setSystem(it)), note(s.note), buttons([{ name: 'Start over', on: startOver }])),
         group(null,
           slider('a-k-' + s.id, `${s.kname}, ${s.klabel}`, s.kmin, s.kmax, s.kstep, S.k[s.id], v => v.toFixed(s.kstep < 0.001 ? 4 : s.kstep < 0.01 ? 3 : 2), v => S.k[s.id] = v),
           note(s.khelp, 'note tip'),
@@ -1898,10 +2056,12 @@ function Attractor() {
           group(null,
             slider('a-speed', 'Time', 0.1, 2.5, 0.05, S.speed, v => v.toFixed(2) + '×', v => S.speed = v),
             slider('a-glow', 'Glow', 0.3, 2.5, 0.05, S.glow, v => v.toFixed(2) + '×', v => S.glow = v),
-            toggle('a-spin', 'Slow automatic orbit', S.spin, v => S.spin = v)),
-          group('Experiments',
-            note('Pack the whole swarm into one speck and let it go. Nearby paths pull apart exponentially fast, so the speck stretches into a thread and then covers the whole attractor.'),
-            buttons([{ name: 'Whole swarm from one point', on: butterfly }, { name: 'Scatter', on: () => { S.burst = [0, 0, 0, 0]; S.scatter = 1; } }]))),
+            toggle('a-spin', 'Slow automatic orbit', S.spin, v => S.spin = v))),
+        group('Video',
+          chips('a-vlen', [{ id: 10, name: '10 s' }, { id: 30, name: '30 s' }, { id: 60, name: '1 min' }], S.vlen, it => S.vlen = it.id),
+          chips('a-vres', [{ id: '1080', name: '1080p' }, { id: '4k', name: '4K' }], S.vres, it => S.vres = it.id),
+          buttons([{ name: 'Render video', on: () => renderVideo() }]),
+          el('div', 'render-status')),
       ];
     },
   };
@@ -2019,7 +2179,7 @@ let last = performance.now(), failed = false;
 function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000)); last = now;
-  if (!current || document.hidden || window.__areabake.paused) return;
+  if (!current || document.hidden || window.__areabake.paused || RENDERING) return;
   try { current.frame(now / 1000, dt); }
   catch (err) { if (!failed) { failed = true; console.error(err); hint('Something went wrong drawing this exhibit. Try another one, or reload.'); } }
 }
