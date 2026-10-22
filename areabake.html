@@ -1851,7 +1851,12 @@ function Attractor() {
     const name = `areabake-${S.sys.id}-${S.vres}-${S.vlen}s.mp4`;
     const save = async () => {
       const dl = window.claude ? await window.claude.use('downloads').catch(() => null) : null;
-      if (!dl) { renderStatus('Saving files is not available in this view.'); return; }
+      if (!dl) {
+        // outside the Claude viewer (for example on areabake.com) an ordinary browser download works
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+        document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+        renderStatus(`Saved ${name} (${mb} MB).`); return;
+      }
       try { await dl.save({ filename: name, data: blob }); renderStatus(`Saved ${name} (${mb} MB).`); }
       catch (e) {
         if (e && e.code === 'declined') renderStatus(`Not saved. <button class="ghost" type="button">Save ${mb} MB video</button>`);
