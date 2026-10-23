@@ -1,6 +1,9 @@
 const fs = require('fs');
 const DT = 1 / 600;
 const read = f => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : [];
+// rock piles chosen by place.js, keyed by layout; none on the first build
+const PILES = process.env.NOPILES ? {} : (fs.existsSync('piles.json') ? JSON.parse(fs.readFileSync('piles.json', 'utf8')) : {});
+const withPiles = L => { const p = PILES[JSON.stringify([L.launch, L.targets])]; return p ? { ...L, piles: p } : L; };
 // moons advance by an exact rotation each step; these constants make that identical on every device
 const exact = L => ({ ...L, bodies: L.bodies.map(b => b.orbit ? { ...b, orbit: { ...b.orbit,
   ox: b.orbit.R * Math.cos(b.orbit.phase), oy: b.orbit.R * Math.sin(b.orbit.phase),
@@ -60,6 +63,10 @@ spare.length = 0; spare.push(...daily);
 WORLDS.push({ id: 'd', name: 'Today', daily: true, theme: { acc: '#ffe3a3', neb: '#5d7bff' },
   levels: spare.map((L, i) => exact({ name: STARS[i % STARS.length] + (i >= STARS.length ? ' ' + (1 + Math.floor(i / STARS.length)) : ''), par: L.par, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol })) });
 for (let i = WORLDS.length - 1; i >= 0; i--) if (!WORLDS[i].levels.length) WORLDS.splice(i, 1);
+fs.writeFileSync('worlds.json', JSON.stringify(WORLDS));
+for (const w of WORLDS) w.levels = w.levels.map(withPiles);
+fs.writeFileSync('worlds-piles.json', JSON.stringify(WORLDS));
 const head = fs.readFileSync('phone-head.html', 'utf8'), script = fs.readFileSync('phone-script.js', 'utf8');
-fs.writeFileSync('/home/user/claude-s-space/slingshot-phone.html', head + script.replace('const WORLDS = /*LEVELS*/[];', 'const WORLDS = /*LEVELS*/' + JSON.stringify(WORLDS) + ';'));
+const phys = fs.readFileSync('phys.js', 'utf8').replace(/\nif \(typeof module[^\n]*\n?$/, '\n');
+fs.writeFileSync('/home/user/claude-s-space/slingshot-phone.html', head + script.replace('/*PHYS*/', () => phys).replace('const WORLDS = /*LEVELS*/[];', () => 'const WORLDS = /*LEVELS*/' + JSON.stringify(WORLDS) + ';'));
 console.log(WORLDS.map(w => `${w.name}: ${w.levels.length}`).join(', '));

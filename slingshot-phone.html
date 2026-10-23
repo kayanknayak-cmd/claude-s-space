@@ -3,21 +3,24 @@
 <meta name="description" content="A gravity game for your phone. Throw a comet past stars and moons and collect every target.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,300;1,400;1,500&family=Jost:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,300;1,400;1,500&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: a portrait arena that fills the phone, a thin top bar with the two
-   controls you need mid-level, and full-screen sheets for everything else. */
+   controls you need mid-level, and full-screen sheets for everything else.
+   Type: two faces with fixed jobs. Cormorant Garamond italic for names and words
+   (levels, worlds, the title), IBM Plex Mono for numbers and small spaced labels.
+   Controls are hairline glyphs lit like the sky, with no boxes around them. */
 :root{
   color-scheme:dark;
   --ink:#05060c; --paper:#efe8da; --mist:#9b98aa; --line:rgba(239,232,218,.14);
   --glass:rgba(8,9,16,.72); --accent:#9ad7ff; --hot:#ffd36e;
   --display:"Cormorant Garamond",Garamond,"Times New Roman",serif;
-  --body:"Jost","Avenir Next","Futura",system-ui,sans-serif;
+  --body:"IBM Plex Mono",ui-monospace,Menlo,monospace;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
   --top:env(safe-area-inset-top,0px); --bot:env(safe-area-inset-bottom,0px);
 }
 html,body{height:100%}
-body{margin:0;background:var(--ink);color:var(--paper);font:400 16px/1.4 var(--body);overflow:hidden;
+body{margin:0;background:var(--ink);color:var(--paper);font:400 14px/1.5 var(--body);overflow:hidden;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;overscroll-behavior:none}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
@@ -29,26 +32,37 @@ button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;touch-
 .bar{position:fixed;left:0;right:0;top:0;padding:calc(var(--top) + 10px) max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));
   display:grid;grid-template-columns:56px 1fr 56px;align-items:center;gap:8px;pointer-events:none}
 .bar>*{pointer-events:auto}
-.round{appearance:none;width:52px;height:52px;border-radius:50%;border:1px solid var(--line);background:var(--glass);
-  display:grid;place-items:center;cursor:pointer;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
-.round:active{transform:scale(.94)}
-.round svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.round{appearance:none;width:52px;height:52px;border:0;background:none;padding:0;display:grid;place-items:center;cursor:pointer;color:var(--paper);
+  opacity:.8;filter:drop-shadow(0 0 5px color-mix(in srgb,var(--accent) 60%,transparent));transition:opacity .2s,color .2s}
+.round:active{transform:scale(.92);opacity:1}
+.round svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round}
+.round svg .dot{fill:currentColor;stroke:none}
 .mid{display:grid;justify-items:center;gap:6px;pointer-events:none;text-align:center;min-width:0}
 .lvname{font:400 italic 22px/1 var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .pips{display:flex;gap:7px;align-items:center}
 .pip{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--pc,var(--accent));opacity:.85}
 .pip.on{background:var(--pc,var(--accent));box-shadow:0 0 10px var(--pc,var(--accent))}
 .shots{font:400 12px/1 var(--mono);color:var(--mist);margin-left:4px}
-.corner{position:fixed;right:max(14px,env(safe-area-inset-right,0px));bottom:calc(var(--bot) + 16px);display:flex;gap:10px}
-.speed{width:auto;padding:0 16px;border-radius:26px;font:500 15px/1 var(--mono);gap:6px;display:flex;align-items:center}
-.skip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bot) + 22px);appearance:none;border:1px solid var(--line);
-  background:var(--glass);border-radius:22px;padding:11px 18px;font-size:15px;cursor:pointer;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+.corner{position:fixed;right:max(8px,env(safe-area-inset-right,0px));bottom:calc(var(--bot) + 12px);display:flex;gap:0}
+.speed{width:auto;min-width:52px;padding:0 8px;font:400 16px/1 var(--mono);letter-spacing:.04em;display:flex;align-items:center;justify-content:center}
+.skip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bot) + 72px);appearance:none;border:0;background:none;color:var(--paper);
+  padding:10px 14px;font:400 italic 19px/1 var(--display);cursor:pointer;opacity:.8;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:5px}
+/* the comet picker: one glyph per kind, the chosen one lit in the world's color */
+.picker{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bot) + 12px);display:flex;gap:0}
+.kind{width:46px;height:52px;opacity:.42}
+.kind[aria-pressed="true"]{opacity:1;color:var(--accent)}
+.kind[aria-pressed="true"]::after{content:"";position:absolute;bottom:6px;width:3px;height:3px;border-radius:50%;background:currentColor}
+.kind{position:relative}
+#hardBtn .shut{display:none}
+#hardBtn[aria-pressed="true"]{color:var(--hot);opacity:1}
+#hardBtn[aria-pressed="true"] .open{display:none}
+#hardBtn[aria-pressed="true"] .shut{display:inline}
 .ff{position:fixed;left:50%;top:calc(var(--top) + 78px);transform:translateX(-50%);display:flex;gap:2px;pointer-events:none}
 .ff i{width:0;height:0;border-left:9px solid var(--accent);border-top:6px solid transparent;border-bottom:6px solid transparent;animation:ffc .8s linear infinite}
 .ff i:nth-child(2){animation-delay:.13s}.ff i:nth-child(3){animation-delay:.26s}
 @keyframes ffc{0%,100%{opacity:.2}40%{opacity:1}}
-.replay{position:fixed;left:50%;top:calc(var(--top) + 76px);transform:translateX(-50%);font:500 11px/1 var(--body);letter-spacing:.22em;text-transform:uppercase;
-  color:var(--hot);padding:7px 12px;border-radius:14px;border:1px solid rgba(255,211,110,.4);background:var(--glass)}
+.replay{position:fixed;left:50%;top:calc(var(--top) + 76px);transform:translateX(-50%);font:500 10px/1 var(--mono);letter-spacing:.3em;text-transform:uppercase;
+  color:var(--hot);text-shadow:0 0 8px rgba(255,211,110,.6)}
 
 /* sheets */
 .sheet{position:fixed;inset:0;background:rgba(4,5,10,.82);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
@@ -57,15 +71,15 @@ button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;touch-
 @keyframes fade{from{opacity:0}}
 .sheet-in{max-width:30rem;margin:0 auto;display:grid;gap:22px}
 .sh-head{display:flex;justify-content:space-between;align-items:center}
-.brand{font:500 14px/1 var(--body);letter-spacing:.06em;color:var(--mist)}
+.brand{font:400 12px/1 var(--mono);letter-spacing:.12em;color:var(--mist)}
 .brand b{color:var(--paper);font-weight:500}
 h1{margin:0;font:300 italic 54px/1 var(--display)}
-h2{margin:0 0 10px;font:500 11px/1 var(--body);letter-spacing:.24em;text-transform:uppercase;color:var(--mist);display:flex;justify-content:space-between}
+h2{margin:0 0 10px;font:500 10px/1 var(--mono);letter-spacing:.3em;text-transform:uppercase;color:var(--mist);display:flex;justify-content:space-between}
 h2 span{letter-spacing:0;text-transform:none;font-family:var(--mono)}
 .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 .tile{appearance:none;aspect-ratio:1;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;
   display:grid;place-items:center;align-content:center;gap:3px;font:500 19px/1 var(--mono)}
-.tile small{font:400 10px/1 var(--body);letter-spacing:.08em;color:var(--hot)}
+.tile small{font:400 10px/1 var(--mono);letter-spacing:.08em;color:var(--hot)}
 .today{appearance:none;width:100%;min-height:64px;padding:0 20px;border-radius:18px;border:1px solid color-mix(in srgb,var(--dc) 45%,transparent);
   background:linear-gradient(100deg,color-mix(in srgb,var(--dc) 14%,transparent),rgba(255,255,255,.02));cursor:pointer;color:inherit;
   display:flex;align-items:center;justify-content:space-between;font:400 italic 22px/1 var(--display,serif)}
@@ -73,26 +87,25 @@ h2 span{letter-spacing:0;text-transform:none;font-family:var(--mono)}
 .tile.cur{border-color:var(--wc,var(--accent));box-shadow:inset 0 0 0 1px var(--wc,var(--accent))}
 .tile:disabled{opacity:.3;cursor:default}
 .row{display:flex;flex-wrap:wrap;gap:10px}
-.pill{appearance:none;min-height:46px;padding:0 18px;border-radius:23px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;font-size:15px}
+.pill{appearance:none;min-height:46px;padding:0 18px;border-radius:23px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;font:400 13px/1 var(--mono);letter-spacing:.04em}
 .pill[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
-.big{appearance:none;width:100%;min-height:58px;border-radius:29px;border:0;background:var(--accent);color:#08101a;font:500 18px/1 var(--body);cursor:pointer}
-.ghost{appearance:none;min-height:52px;flex:1;border-radius:26px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:16px;cursor:pointer}
-.muted{color:var(--mist);font-size:14px;margin:0}
+.muted{color:var(--mist);font:400 italic 18px/1.4 var(--display);margin:0}
 a{color:var(--accent)}
 
 
 .lvname,.pips{transition:opacity .5s ease}
 body.titling .lvname,body.titling .pips{opacity:0}
 /* after a win: a row of quiet icons instead of a panel */
-.winbar{position:fixed;left:0;right:0;bottom:calc(var(--bot) + 22px);display:flex;justify-content:center;align-items:center;gap:16px;animation:fade .5s ease both}
+.winbar{position:fixed;left:0;right:0;bottom:calc(var(--bot) + 22px);display:flex;justify-content:center;align-items:center;gap:14px;animation:fade .5s ease both}
 .winbar .round{width:56px;height:56px}
-.winbar .go{width:72px;height:72px;background:var(--accent);color:#07101a;border:0}
-.winbar .go svg{width:28px;height:28px;stroke-width:2.2}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bot) + 110px);font:400 13px/1.35 var(--mono);color:var(--paper);
-  padding:8px 14px;border-radius:16px;background:var(--glass);border:1px solid var(--line);text-align:center;max-width:calc(100vw - 40px);
-  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+/* the way on: a lit ring, like the photon ring around a black hole */
+.winbar .go{width:74px;height:74px;border-radius:50%;color:var(--accent);opacity:1;box-shadow:inset 0 0 0 1px var(--accent),0 0 18px color-mix(in srgb,var(--accent) 45%,transparent);
+  background:radial-gradient(circle,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%)}
+.winbar .go svg{width:28px;height:28px;stroke-width:1.5}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bot) + 110px);font:400 italic 19px/1.3 var(--display);color:var(--paper);
+  padding:8px 16px;border-radius:14px;background:rgba(5,6,12,.6);text-align:center;max-width:calc(100vw - 40px);text-shadow:0 0 10px rgba(5,6,12,.9)}
 .toast button{appearance:none;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;padding:4px;cursor:pointer}
-.hintb{position:fixed;left:max(14px,env(safe-area-inset-left,0px));bottom:calc(var(--bot) + 16px)}
+.hintb{position:fixed;left:max(8px,env(safe-area-inset-left,0px));bottom:calc(var(--bot) + 12px)}
 @media (prefers-reduced-motion:reduce){.sheet{animation:none}.ff i{animation:none}}
 </style>
 
@@ -111,7 +124,19 @@ body.titling .lvname,body.titling .pips{opacity:0}
 <div class="ff" id="ff" hidden aria-label="Fast-forward"><i></i><i></i><i></i></div>
 <div class="replay" id="replayTag" hidden>Replay</div>
 <button class="skip" id="skipBtn" type="button" hidden>Skip this level</button>
-<div class="corner"><button class="round speed" id="speedBtn" type="button" aria-label="Speed of time">1×</button></div>
+<div class="picker" id="picker" role="group" aria-label="Choose a comet">
+  <button class="round kind" type="button" data-k="n" aria-label="Comet"><svg viewBox="0 0 24 24"><circle class="dot" cx="14.5" cy="9.5" r="2.6"/><path d="M12.4 11.6L5.5 18.5M14 13.5l-4 4.5M10.5 10l-4.5 4"/></svg></button>
+  <button class="round kind" type="button" data-k="s" aria-label="Splitting comet: tap while it flies to split it in two"><svg viewBox="0 0 24 24"><circle class="dot" cx="18" cy="6.5" r="2.1"/><circle class="dot" cx="18" cy="17.5" r="2.1"/><path d="M3.5 12h6.5l5.5-4.2M10 12l5.5 4.2"/></svg></button>
+  <button class="round kind" type="button" data-k="b" aria-label="Burn comet: tap while it flies to fire its burn"><svg viewBox="0 0 24 24"><circle class="dot" cx="17" cy="12" r="2.6"/><path d="M3.5 8.5l5 3.5-5 3.5M8.5 8.5l5 3.5-5 3.5"/></svg></button>
+  <button class="round kind" type="button" data-k="h" aria-label="Heavy comet: four times the mass, for knocking rubble about"><svg viewBox="0 0 24 24"><circle class="dot" cx="12" cy="12" r="4.4"/><circle cx="12" cy="12" r="8.2"/></svg></button>
+</div>
+<div class="corner">
+  <button class="round" id="hardBtn" type="button" aria-pressed="false" aria-label="Hard mode: no aiming guide, half again the score">
+    <svg viewBox="0 0 24 24"><g class="open"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.6"/></g>
+    <g class="shut"><path d="M3 10.5c2.5 3.3 5.6 5 9 5s6.5-1.7 9-5M6.6 14.2l-1.5 2.3M12 15.6v2.7M17.4 14.2l1.5 2.3"/></g></svg>
+  </button>
+  <button class="round speed" id="speedBtn" type="button" aria-label="Speed of time">1×</button>
+</div>
 <button class="round hintb" id="hintBtn" type="button" hidden aria-label="Show me a throw that works">
   <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>
 </button>
@@ -129,8 +154,9 @@ body.titling .lvname,body.titling .pips{opacity:0}
       <button class="round" id="closeMenu" type="button" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <h1>Slingshot</h1>
     <div id="worlds" style="display:grid;gap:24px"></div>
+    <div><h2>Comets per attempt</h2><div class="row" id="cometRow"></div></div>
     <div><h2>Sound</h2><div class="row" id="soundRow"></div></div>
-    <p class="muted">Drag back anywhere and let go. Comets never stop on their own: a bad throw can still loop around and score. Loops, close shaves and long flights earn trick points. After a win, the film button saves a video of your run.</p>
+    <p class="muted">Drag back anywhere and let go. A bad throw can still loop around and score. Split and burn comets use their power when you tap mid-flight; heavy comets knock rubble into the moons. The closed eye hides the aiming guide for half again the score.</p>
     <p class="muted"><a href="https://areabake.com/" target="_blank" rel="noopener">More from areabake</a></p>
   </div>
 </div>
@@ -145,7 +171,7 @@ const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const ON_SITE = /(^|\.)areabake\.com$/.test(location.hostname);
 
 /* ======================= levels ======================= */
-const WORLDS = /*LEVELS*/[{"id":"w1","name":"First light","theme":{"acc":"#9ad7ff","neb":"#d65fae"},"levels":[{"name":"Bend it","launch":[0.3,-1.25],"bodies":[{"x":0,"y":0.15,"m":0.28,"r":0.075}],"targets":[[-0.3,1.15]],"par":1,"sol":[0.36592,0.23763]},{"name":"One lap","launch":[0.58,0.1],"bodies":[{"x":0,"y":0.1,"m":0.3,"r":0.08}],"targets":[[0,0.68],[-0.58,0.1],[0,-0.48]],"par":1,"sol":[0.03802,0.72538]},{"name":"Perihelion","par":1,"launch":[0.36540016990620644,-1.38],"bodies":[{"x":-0.034,"y":-0.232,"m":0.218,"r":0.072}],"targets":[[-0.281,0.156]],"sol":[0.35344,0]},{"name":"Drift","par":1,"launch":[0.298,-1.38],"bodies":[{"x":0.574,"y":0.72,"m":0.195,"r":0.07}],"targets":[[0.745,1.148]],"sol":[-0.04886,0.93228]},{"name":"Halo","par":1,"launch":[-0.19776360578835012,-1.38],"bodies":[{"x":-0.316,"y":0.491,"m":0.331,"r":0.081}],"targets":[[-0.36,1.055]],"sol":[0.27019,0.01416]},{"name":"Sunward","par":1,"launch":[0.17121125806588683,-1.38],"bodies":[{"x":-0.308,"y":0.398,"m":0.301,"r":0.079}],"targets":[[-0.711,1.003]],"sol":[0.312,0]},{"name":"Gentle arc","par":1,"launch":[-0.173,-1.38],"bodies":[{"x":0.234,"y":-0.729,"m":0.358,"r":0.083}],"targets":[[0.78,-0.635],[0.417,-0.514]],"sol":[0.05103,0.97366]},{"name":"Long fall","par":1,"launch":[0.172,-1.38],"bodies":[{"x":-0.42,"y":-0.254,"m":0.239,"r":0.074}],"targets":[[0.655,1.159]],"sol":[0.39657,0.89071]},{"name":"Aphelion","par":1,"launch":[0.15971828789915893,-1.38],"bodies":[{"x":0.202,"y":-0.399,"m":0.252,"r":0.075}],"targets":[[-0.131,0.031],[0.516,-0.122]],"sol":[0.39488,0]},{"name":"Ember","par":1,"launch":[0.067,-1.38],"bodies":[{"x":-0.025,"y":-0.558,"m":0.359,"r":0.083}],"targets":[[-0.363,-0.332],[0.336,0.079]],"sol":[-0.63218,0.56922]},{"name":"Slow burn","par":1,"launch":[0.415,-1.38],"bodies":[{"x":0.375,"y":0.676,"m":0.31,"r":0.08}],"targets":[[0.586,1.173],[-0.179,0.944]],"sol":[-0.25241,0.18339]},{"name":"Undertow","par":1,"launch":[0.312,-1.38],"bodies":[{"x":0.251,"y":0.318,"m":0.262,"r":0.076}],"targets":[[-0.011,0.798],[-0.711,0.339],[0.603,0.528]],"sol":[0.2365,0.26266]}]},{"id":"w2","name":"Two suns","theme":{"acc":"#ffb48a","neb":"#ff5f9a"},"levels":[{"name":"Duet","par":1,"launch":[-0.417,-1.38],"bodies":[{"x":-0.024,"y":-0.317,"m":0.215,"r":0.072},{"x":-0.474,"y":-0.36,"m":0.167,"r":0.068}],"targets":[[-0.023,0.009],[-0.812,-0.011],[0.496,-0.042]],"sol":[0.35298,-0.25646]},{"name":"Crossfire","par":1,"launch":[0.243,-1.38],"bodies":[{"x":-0.656,"y":-0.375,"m":0.212,"r":0.072},{"x":-0.219,"y":-0.739,"m":0.188,"r":0.07}],"targets":[[-0.79,0.055],[-0.008,-0.198],[0.276,0.322]],"sol":[0.4847,0.18606]},{"name":"Lagrange","par":1,"launch":[-0.361,-1.38],"bodies":[{"x":0.555,"y":0.213,"m":0.236,"r":0.074},{"x":-0.306,"y":-0.538,"m":0.142,"r":0.065}],"targets":[[-0.315,-0.117],[-0.654,0.151],[0.305,0.494]],"sol":[0.28081,0.38651]},{"name":"Seesaw","par":1,"launch":[0.301,-1.38],"bodies":[{"x":0.673,"y":0.853,"m":0.23,"r":0.073},{"x":-0.185,"y":0.374,"m":0.173,"r":0.068}],"targets":[[-0.74,0.935],[-0.178,0.823]],"sol":[0,0.18769]},{"name":"Saddle","par":1,"launch":[0.17,-1.38],"bodies":[{"x":-0.166,"y":0.35,"m":0.24,"r":0.074},{"x":0.156,"y":-0.152,"m":0.151,"r":0.066}],"targets":[[-0.663,0.52],[0.534,0.296],[-0.459,0.248]],"sol":[-0.06726,0.17522]},{"name":"Tidal","par":1,"launch":[0.143,-1.38],"bodies":[{"x":0.316,"y":-0.124,"m":0.145,"r":0.066},{"x":-0.557,"y":-0.503,"m":0.165,"r":0.068}],"targets":[[-0.396,-0.123],[-0.848,-0.542],[0.641,0.557]],"sol":[0.13948,-0.12559]},{"name":"Mirror","par":1,"launch":[-0.411,-1.38],"bodies":[{"x":-0.361,"y":0.188,"m":0.204,"r":0.071},{"x":0.182,"y":-0.105,"m":0.185,"r":0.069}],"targets":[[0.754,0.179],[-0.648,0.395],[-0.014,0.397]],"sol":[0.39271,0.04128]},{"name":"Pivot","par":1,"launch":[-0.255,-1.38],"bodies":[{"x":0.051,"y":0.217,"m":0.171,"r":0.068},{"x":-0.688,"y":-0.173,"m":0.155,"r":0.066}],"targets":[[0.331,0.72],[0.293,0.365],[0.619,-0.506]],"sol":[0.29673,-0.09641]},{"name":"Eclipse","par":1,"launch":[-0.39,-1.38],"bodies":[{"x":-0.119,"y":-0.008,"m":0.209,"r":0.072},{"x":-0.474,"y":-0.21,"m":0.131,"r":0.064}],"targets":[[0.121,0.94],[-0.776,0.42],[0.364,0.285]],"sol":[0,0.43631]},{"name":"Twin spiral","par":1,"launch":[0.057,-1.38],"bodies":[{"x":0.169,"y":0.458,"m":0.144,"r":0.065},{"x":0.527,"y":0.007,"m":0.135,"r":0.064}],"targets":[[-0.463,0.735],[0.813,0.082],[0.581,0.313]],"sol":[-0.22062,0.22062]},{"name":"Figure eight","par":1,"launch":[0.366,-1.38],"bodies":[{"x":-0.357,"y":0.888,"m":0.194,"r":0.07},{"x":-0.301,"y":0.039,"m":0.136,"r":0.065}],"targets":[[-0.244,0.452],[0.496,1.251],[0.221,-0.136]],"sol":[0.08521,0.16723]},{"name":"Gemini","par":1,"launch":[-0.263,-1.38],"bodies":[{"x":-0.136,"y":0.163,"m":0.187,"r":0.07},{"x":0.661,"y":0.444,"m":0.231,"r":0.073}],"targets":[[-0.387,0.547],[-0.305,1.195],[0.244,0.469]],"sol":[0.14586,0.11812]}]},{"id":"w5","name":"Waltz","theme":{"acc":"#ffc4dc","neb":"#7a8cff"},"levels":[{"name":"Barycenter","par":1,"launch":[0.228,-1.38],"bodies":[{"m":0.212,"r":0.072,"star":true,"orbit":{"cx":0.127,"cy":-0.072,"R":0.225,"period":4.2016,"phase":4.769,"ox":0.01273067697521344,"oy":-0.2246395554299215,"c":0.9999968940274968,"s":0.0024923754450862532}},{"m":0.149,"r":0.066,"star":true,"orbit":{"cx":0.127,"cy":-0.072,"R":0.32,"period":4.2016,"phase":7.91,"ox":-0.01791650319405721,"oy":0.31949804211183724,"c":0.9999968940274968,"s":0.0024923754450862532}}],"targets":[[0.784,0.214],[0.491,0.497],[-0.162,0.536]],"sol":[0.40067,0.2602]},{"name":"Minuet","par":1,"launch":[-0.291,-1.38],"bodies":[{"m":0.145,"r":0.065,"star":true,"orbit":{"cx":0.075,"cy":0.379,"R":0.257,"period":3.2019,"phase":3.424,"ox":-0.24681955418402568,"oy":-0.07161778879858564,"c":0.9999946517546177,"s":0.003270544627583964}},{"m":0.196,"r":0.07,"star":true,"orbit":{"cx":0.075,"cy":0.379,"R":0.189,"period":3.2019,"phase":6.566,"ox":0.18149174368322277,"oy":0.05274226933706369,"c":0.9999946517546177,"s":0.003270544627583964}}],"targets":[[-0.414,0.766],[0.559,0.691],[0.083,0.986]],"sol":[0.42572,0.42572]},{"name":"Do-si-do","par":1,"launch":[-0.145,-1.38],"bodies":[{"m":0.218,"r":0.072,"star":true,"orbit":{"cx":-0.241,"cy":0.777,"R":0.224,"period":-5.2629,"phase":5.914,"ox":0.2089072477330573,"oy":-0.0808316883690983,"c":0.9999980204026635,"s":-0.0019897715331598145}},{"m":0.123,"r":0.063,"star":true,"orbit":{"cx":-0.241,"cy":0.777,"R":0.397,"period":-5.2629,"phase":9.055,"ox":-0.37016582332774967,"oy":0.14347913869301437,"c":0.9999980204026635,"s":-0.0019897715331598145}}],"targets":[[0.493,1.094],[-0.845,1.044]],"sol":[-0.27922,0.27922]},{"name":"Pas de deux","par":1,"launch":[-0.227,-1.38],"bodies":[{"m":0.173,"r":0.068,"star":true,"orbit":{"cx":0.275,"cy":-0.049,"R":0.226,"period":2.9497,"phase":5.149,"ox":0.0955688096819196,"oy":-0.2047989321651386,"c":0.9999936981060894,"s":0.003550175785400945}},{"m":0.19,"r":0.07,"star":true,"orbit":{"cx":0.275,"cy":-0.049,"R":0.205,"period":2.9497,"phase":8.29,"ox":-0.08657841020801248,"oy":0.1858202865293591,"c":0.9999936981060894,"s":0.003550175785400945}}],"targets":[[-0.347,0.894],[0.814,0.692]],"sol":[0.47187,-0.07474]},{"name":"Roche","par":1,"launch":[-0.385,-1.38],"bodies":[{"m":0.201,"r":0.071,"star":true,"orbit":{"cx":0.265,"cy":0.818,"R":0.263,"period":3.9671,"phase":5.272,"ox":0.13961528372872306,"oy":-0.22288241866362668,"c":0.9999965159795775,"s":0.0026397023897652286}},{"m":0.192,"r":0.07,"star":true,"orbit":{"cx":0.265,"cy":0.818,"R":0.276,"period":3.9671,"phase":8.414,"ox":-0.14661168535711813,"oy":0.23383971800518707,"c":0.9999965159795775,"s":0.0026397023897652286}}],"targets":[[-0.115,1.03],[-0.277,1.338]],"sol":[0.10795,0.50784]},{"name":"Promenade","par":1,"launch":[-0.126,-1.38],"bodies":[{"m":0.125,"r":0.063,"star":true,"orbit":{"cx":0.015,"cy":0.739,"R":0.315,"period":4.9904,"phase":4.218,"ox":-0.1494655736132482,"oy":-0.27728152175084203,"c":0.9999977983090053,"s":0.0020984225365929497}},{"m":0.159,"r":0.067,"star":true,"orbit":{"cx":0.015,"cy":0.739,"R":0.249,"period":4.9904,"phase":7.359,"ox":0.11827885692610098,"oy":0.21911438109867395,"c":0.9999977983090053,"s":0.0020984225365929497}}],"targets":[[0.608,1.105],[-0.607,1.037],[-0.365,1.351]],"sol":[0.33782,0.33782]},{"name":"Tango","par":1,"launch":[0.119,-1.38],"bodies":[{"m":0.132,"r":0.064,"star":true,"orbit":{"cx":0.042,"cy":0.472,"R":0.23,"period":4.6774,"phase":3.955,"ox":-0.15801610371372346,"oy":-0.16712543483005152,"c":0.9999974937866661,"s":0.0022388435377837324}},{"m":0.108,"r":0.061,"star":true,"orbit":{"cx":0.042,"cy":0.472,"R":0.28,"period":4.6774,"phase":7.096,"ox":0.19248797636925263,"oy":0.2033430081248678,"c":0.9999974937866661,"s":0.0022388435377837324}}],"targets":[[0.667,0.926],[-0.817,1.114]],"sol":[0.26908,0.02828]},{"name":"Contra","par":1,"launch":[0.064,-1.38],"bodies":[{"m":0.22,"r":0.072,"star":true,"orbit":{"cx":0.038,"cy":0.12,"R":0.193,"period":-3.35,"phase":1.113,"ox":0.08530067778181698,"oy":0.17312652705452922,"c":0.9999951141821419,"s":-0.003125957748429483}},{"m":0.152,"r":0.066,"star":true,"orbit":{"cx":0.038,"cy":0.12,"R":0.279,"period":-3.35,"phase":4.254,"ox":-0.12345860855970148,"oy":-0.25019786564337915,"c":0.9999951141821419,"s":-0.003125957748429483}}],"targets":[[-0.558,0.602],[0.448,0.521],[-0.35,0.319]],"sol":[0.31492,-0.16046]},{"name":"Allemande","par":1,"launch":[-0.286,-1.38],"bodies":[{"m":0.181,"r":0.069,"star":true,"orbit":{"cx":0.137,"cy":0.333,"R":0.169,"period":3.2276,"phase":4.674,"ox":-0.006486144290985003,"oy":-0.16887548647520315,"c":0.9999947365870373,"s":0.0032445027696066157}},{"m":0.118,"r":0.062,"star":true,"orbit":{"cx":0.137,"cy":0.333,"R":0.259,"period":3.2276,"phase":7.815,"ox":0.010093686406003338,"oy":0.25880324088916906,"c":0.9999947365870373,"s":0.0032445027696066157}}],"targets":[[0.826,0.6],[-0.769,0.885],[0.182,0.927]],"sol":[0.31029,-0.03261]},{"name":"Gavotte","par":1,"launch":[-0.139,-1.38],"bodies":[{"m":0.15,"r":0.066,"star":true,"orbit":{"cx":-0.102,"cy":0.489,"R":0.345,"period":5.4451,"phase":0.245,"ox":0.3346973771155592,"oy":0.08368193205205736,"c":0.9999981506658633,"s":0.0019231913200072085}},{"m":0.182,"r":0.069,"star":true,"orbit":{"cx":-0.102,"cy":0.489,"R":0.284,"period":5.4451,"phase":3.386,"ox":-0.27555977743638843,"oy":-0.06872269682723488,"c":0.9999981506658633,"s":0.0019231913200072085}}],"targets":[[-0.772,0.828],[0.581,0.854],[-0.165,1.226]],"sol":[0.34139,0.09148]},{"name":"Reel","par":1,"launch":[0.341,-1.38],"bodies":[{"m":0.16,"r":0.067,"star":true,"orbit":{"cx":0.263,"cy":-0.052,"R":0.216,"period":3.2552,"phase":2.36,"ox":-0.15331519217421802,"oy":0.15215272540635807,"c":0.9999948254628168,"s":0.0032169935639645873}},{"m":0.155,"r":0.066,"star":true,"orbit":{"cx":0.263,"cy":-0.052,"R":0.223,"period":3.2552,"phase":5.501,"ox":0.1581906161166574,"oy":-0.15717738060112954,"c":0.9999948254628168,"s":0.0032169935639645873}}],"targets":[[0.56,1.007],[-0.375,0.192],[-0.254,-0.144]],"sol":[0.38391,0.66495]},{"name":"Last dance","par":1,"launch":[0.068,-1.38],"bodies":[{"m":0.162,"r":0.067,"star":true,"orbit":{"cx":0.105,"cy":0.327,"R":0.226,"period":3.3122,"phase":3.25,"ox":-0.22467330679420347,"oy":-0.024452100403804494,"c":0.9999950020285283,"s":0.003161632167667576}},{"m":0.164,"r":0.067,"star":true,"orbit":{"cx":0.105,"cy":0.327,"R":0.223,"period":3.3122,"phase":6.391,"ox":0.2217051780903355,"oy":0.02399612485241363,"c":0.9999950020285283,"s":0.003161632167667576}}],"targets":[[0.761,0.583],[0.386,0.883],[0.562,-0.148]],"sol":[0.31157,-0.01633]}]},{"id":"w3","name":"Moons","theme":{"acc":"#b6a8ff","neb":"#5df2ff"},"levels":[{"name":"Moonrise","par":1,"launch":[0.065,-1.38],"bodies":[{"x":0.101,"y":-0.046,"m":0.28,"r":0.077},{"m":0.087,"r":0.045,"orbit":{"cx":0.101,"cy":-0.046,"R":0.495,"period":5.23,"phase":2.01,"ox":-0.21048333178858533,"oy":0.44801982884597447,"c":0.9999979954185025,"s":0.0020022884349245873}}],"targets":[[0.29,0.803]],"sol":[-0.25235,0.94178]},{"name":"Tug","par":1,"launch":[-0.272,-1.38],"bodies":[{"x":-0.202,"y":-0.263,"m":0.235,"r":0.074},{"m":0.078,"r":0.044,"orbit":{"cx":-0.202,"cy":-0.263,"R":0.719,"period":7.25,"phase":1.01,"ox":0.38240785866816157,"oy":0.6088720962803529,"c":0.9999989568394573,"s":0.0014444099131928972}}],"targets":[[0.658,0.452]],"sol":[-0.20271,0.95369]},{"name":"Tidewater","par":1,"launch":[-0.372,-1.38],"bodies":[{"x":-0.245,"y":-0.207,"m":0.299,"r":0.079},{"m":0.073,"r":0.044,"orbit":{"cx":-0.245,"cy":-0.207,"R":0.399,"period":5.52,"phase":6.26,"ox":0.3988927618894575,"oy":-0.0092501087669594,"c":0.9999982005120013,"s":0.0018970958751027428}}],"targets":[[-0.436,0.64],[0.06,0.403]],"sol":[0.47018,0.30534]},{"name":"Perigee","par":1,"launch":[-0.352,-1.38],"bodies":[{"x":-0.475,"y":-0.499,"m":0.25,"r":0.075},{"m":0.074,"r":0.044,"orbit":{"cx":-0.475,"cy":-0.499,"R":0.503,"period":5.36,"phase":2.12,"ox":-0.2625701121028178,"oy":0.4290290622210967,"c":0.9999980914764521,"s":0.001953725531709175}}],"targets":[[-0.486,-0.218],[-0.795,0.228]],"sol":[-0.33614,0.10922]},{"name":"Rendezvous","par":1,"launch":[0.085,-1.38],"bodies":[{"x":-0.439,"y":0.028,"m":0.266,"r":0.076},{"m":0.052,"r":0.041,"orbit":{"cx":-0.439,"cy":0.028,"R":0.51,"period":6.4,"phase":0.49,"ox":0.44998975789116197,"oy":0.2400192029672906,"c":0.9999986613495281,"s":0.001636245443624048}}],"targets":[[0.002,0.58],[-0.672,0.756]],"sol":[0.25646,0.35298]},{"name":"Swing-by","par":2,"launch":[-0.304,-1.38],"bodies":[{"x":0.59,"y":-0.613,"m":0.211,"r":0.072},{"m":0.074,"r":0.044,"orbit":{"cx":0.59,"cy":-0.613,"R":0.48,"period":-5.74,"phase":5.38,"ox":0.29717360744620736,"oy":-0.37694541652261465,"c":0.9999983358083638,"s":-0.0018243849656516807}}],"targets":[[0.656,0.305],[0.126,1.202],[-0.293,1.161]],"sol":[0.76361,0.08026]},{"name":"Capture","par":1,"launch":[-0.236,-1.38],"bodies":[{"x":0.483,"y":-0.443,"m":0.283,"r":0.078},{"m":0.056,"r":0.042,"orbit":{"cx":0.483,"cy":-0.443,"R":0.716,"period":-8.18,"phase":0.58,"ox":0.5989072573392739,"oy":0.3923851387429815,"c":0.9999991805535585,"s":-0.0012801922556917031}}],"targets":[[0.72,-0.144],[0.476,0.087],[-0.505,-0.631]],"sol":[-0.27922,0.27922]},{"name":"Shepherd","par":1,"launch":[-0.229,-1.38],"bodies":[{"x":-0.698,"y":-0.664,"m":0.218,"r":0.072},{"m":0.07,"r":0.043,"orbit":{"cx":-0.698,"cy":-0.664,"R":0.506,"period":7.97,"phase":0.06,"ox":0.5050894732072133,"oy":0.030341787278598965,"c":0.9999991368017822,"s":0.0013139237765163873}}],"targets":[[-0.341,1.456]],"sol":[0.4875,0.84437]},{"name":"Moonlit","par":1,"launch":[0.205,-1.38],"bodies":[{"x":-0.397,"y":0.435,"m":0.319,"r":0.08},{"m":0.061,"r":0.042,"orbit":{"cx":-0.397,"cy":0.435,"R":0.428,"period":5.63,"phase":4.09,"ox":-0.24951451565150687,"oy":-0.3477448870640572,"c":0.9999982701425139,"s":0.0018600301018869515}}],"targets":[[-0.542,0.64],[-0.198,0.638],[-0.745,1.018]],"sol":[0.09148,0.34139]},{"name":"Syzygy","par":1,"launch":[0.262,-1.38],"bodies":[{"x":0.597,"y":0.416,"m":0.271,"r":0.077},{"m":0.062,"r":0.042,"orbit":{"cx":0.597,"cy":0.416,"R":0.542,"period":-8.43,"phase":2.88,"ox":-0.5235607873197023,"oy":0.14017168751632209,"c":0.9999992284358592,"s":-0.0012422269061327298}}],"targets":[[0.308,0.517],[0.074,0.943],[0.773,0.786]],"sol":[-0.312,0]},{"name":"Lunation","par":1,"launch":[0.167,-1.38],"bodies":[{"x":-0.478,"y":0.675,"m":0.295,"r":0.078},{"m":0.055,"r":0.042,"orbit":{"cx":-0.478,"cy":0.675,"R":0.664,"period":6.65,"phase":1.19,"ox":0.24678215518099392,"oy":0.6164369942534467,"c":0.9999987601079942,"s":0.0015747325088610593}}],"targets":[[-0.762,0.972],[0.055,1.23],[0.71,0.004]],"sol":[-0.29128,0.11181]},{"name":"Apsis","par":1,"launch":[0.091,-1.38],"bodies":[{"x":-0.277,"y":-0.548,"m":0.316,"r":0.08},{"m":0.065,"r":0.043,"orbit":{"cx":-0.277,"cy":-0.548,"R":0.565,"period":5.67,"phase":4.26,"ox":-0.2469702243384707,"oy":-0.5081640564721254,"c":0.9999982944635749,"s":0.0018469082113792019}},{"m":0.054,"r":0.042,"orbit":{"cx":-0.277,"cy":-0.548,"R":0.418,"period":8.59,"phase":2.29,"ox":-0.27537245600580246,"oy":0.31447418093276336,"c":0.9999992569109549,"s":0.001219088814679366}}],"targets":[[-0.658,0.141],[-0.624,1.02]],"sol":[-0.86173,0.2309]}]},{"id":"w4","name":"Crowds","theme":{"acc":"#8fe3a8","neb":"#ffd166"},"levels":[{"name":"Cluster","par":2,"launch":[0.333,-1.38],"bodies":[{"x":0.052,"y":0.355,"m":0.114,"r":0.062},{"x":-0.106,"y":-0.517,"m":0.161,"r":0.067},{"x":0.354,"y":-0.141,"m":0.118,"r":0.062}],"targets":[[-0.312,0.857],[0.066,0.068],[-0.724,0.11],[-0.62,-0.627]],"sol":[0.51848,0.02717]},{"name":"Pinball","par":1,"launch":[-0.123,-1.38],"bodies":[{"x":-0.492,"y":-0.144,"m":0.122,"r":0.063},{"x":0.079,"y":-0.121,"m":0.14,"r":0.065},{"x":0.324,"y":0.56,"m":0.147,"r":0.066}],"targets":[[0.352,0.043],[-0.763,0.294],[-0.39,0.352]],"sol":[0.26167,0.16993]},{"name":"Thicket","par":1,"launch":[0.182,-1.38],"bodies":[{"x":0.435,"y":-0.076,"m":0.15,"r":0.066},{"x":-0.636,"y":0.232,"m":0.155,"r":0.067},{"x":-0.448,"y":-0.672,"m":0.143,"r":0.065},{"x":-0.12,"y":0.938,"m":0.101,"r":0.06}],"targets":[[0.112,1.169],[-0.641,-0.63],[0.138,-0.515]],"sol":[0.0877,0.55372]},{"name":"Constellation","par":1,"launch":[0.053,-1.38],"bodies":[{"x":-0.522,"y":0.625,"m":0.099,"r":0.06},{"x":0.29,"y":-0.077,"m":0.141,"r":0.065},{"x":0.475,"y":-0.461,"m":0.083,"r":0.058}],"targets":[[0.785,-0.091],[0.293,0.663],[-0.794,-0.471]],"sol":[0.0593,0.22132]},{"name":"Bramble","par":1,"launch":[-0.24,-1.38],"bodies":[{"x":-0.514,"y":0.675,"m":0.092,"r":0.059},{"x":0.655,"y":0.861,"m":0.146,"r":0.066},{"x":0.451,"y":-0.456,"m":0.137,"r":0.065}],"targets":[[-0.758,0.993],[-0.641,0.491],[0.817,-0.273]],"sol":[-0.15741,0.10222]},{"name":"Swarm","par":1,"launch":[0.071,-1.38],"bodies":[{"x":-0.155,"y":0.417,"m":0.148,"r":0.066},{"x":0.48,"y":-0.296,"m":0.122,"r":0.063},{"x":-0.467,"y":-0.386,"m":0.133,"r":0.064}],"targets":[[-0.424,-0.065],[0.642,0.279],[-0.77,0.241]],"sol":[-0.09641,0.29673]},{"name":"Lantern","par":1,"launch":[0.026,-1.38],"bodies":[{"x":-0.001,"y":0.096,"m":0.164,"r":0.067},{"x":-0.589,"y":0.071,"m":0.145,"r":0.065},{"x":-0.54,"y":-0.335,"m":0.122,"r":0.063}],"targets":[[0.422,0.693],[0.571,-0.161],[-0.631,-0.655],[0.583,-0.527]],"sol":[0.40733,0.15636]},{"name":"Archipelago","par":1,"launch":[-0.376,-1.38],"bodies":[{"x":-0.626,"y":0.56,"m":0.13,"r":0.064},{"x":-0.51,"y":-0.452,"m":0.113,"r":0.062},{"x":0.06,"y":0.163,"m":0.093,"r":0.059},{"x":-0.136,"y":-0.736,"m":0.085,"r":0.058}],"targets":[[0.353,-0.708],[-0.064,-0.409],[-0.434,0.777],[-0.585,0.129]],"sol":[0.5726,-0.18605]},{"name":"Maze of suns","par":1,"launch":[-0.147,-1.38],"bodies":[{"x":-0.355,"y":0.405,"m":0.164,"r":0.067},{"x":-0.495,"y":1.056,"m":0.152,"r":0.066},{"x":0.287,"y":-0.693,"m":0.09,"r":0.059},{"x":0.027,"y":0.262,"m":0.1,"r":0.06}],"targets":[[0.508,0.588],[-0.239,0.842],[-0.718,0.518]],"sol":[-0.42678,0.09071]},{"name":"Orrery","par":1,"launch":[0.029,-1.38],"bodies":[{"x":-0.578,"y":-0.209,"m":0.09,"r":0.059},{"x":0.69,"y":0.053,"m":0.105,"r":0.061},{"x":0.311,"y":0.999,"m":0.156,"r":0.067},{"x":0.652,"y":-0.588,"m":0.109,"r":0.061}],"targets":[[0.582,1.303],[-0.827,0.246],[0.388,0.066],[0.567,-0.349]],"sol":[0.13483,0.41496]},{"name":"Starfield","par":1,"launch":[-0.134,-1.38],"bodies":[{"x":0.64,"y":-0.744,"m":0.113,"r":0.062},{"x":-0.026,"y":-0.091,"m":0.15,"r":0.066},{"x":-0.407,"y":-0.606,"m":0.092,"r":0.059}],"targets":[[0.734,0.388],[-0.251,-0.225],[-0.413,0.269]],"sol":[0.17324,-0.53319]},{"name":"Labyrinth","par":1,"launch":[-0.305,-1.38],"bodies":[{"x":0.345,"y":-0.058,"m":0.106,"r":0.061},{"x":0.085,"y":0.621,"m":0.135,"r":0.064},{"x":0.441,"y":1.052,"m":0.092,"r":0.059},{"x":-0.452,"y":-0.683,"m":0.117,"r":0.062}],"targets":[[-0.239,1.224],[0.359,1.285],[0.739,-0.267],[-0.328,-0.223]],"sol":[-0.28081,-0.38651]}]},{"id":"w6","name":"Event horizon","theme":{"acc":"#ffcf9a","neb":"#8a5cff"},"levels":[{"name":"Shadow","par":1,"launch":[-0.41,-1.38],"bodies":[{"x":-0.272,"y":-0.338,"m":0.322,"rs":0.048,"r":0.126,"bh":true}],"targets":[[0.256,0.247],[0.155,-0.133]],"sol":[0.30688,-0.2485]},{"name":"Photon ring","par":1,"launch":[-0.307,-1.38],"bodies":[{"x":0.281,"y":-0.431,"m":0.3,"rs":0.045,"r":0.117,"bh":true}],"targets":[[0.317,-0.103],[0.111,0.247],[0.763,-0.548]],"sol":[-0.14151,0.36865]},{"name":"Einstein ring","par":1,"launch":[0.139,-1.38],"bodies":[{"x":-0.108,"y":-0.123,"m":0.336,"rs":0.05,"r":0.131,"bh":true}],"targets":[[-0.19,0.186],[-0.469,0.525]],"sol":[0.26167,0.16993]},{"name":"Precession","par":1,"launch":[0.275,-1.38],"bodies":[{"x":-0.246,"y":-0.354,"m":0.225,"rs":0.034,"r":0.088,"bh":true}],"targets":[[-0.029,0.292],[-0.734,-0.027],[0.028,-0.035]],"sol":[-0.14736,-0.22691]},{"name":"Zoom-whirl","par":1,"launch":[-0.04,-1.38],"bodies":[{"x":-0.487,"y":0.144,"m":0.297,"rs":0.045,"r":0.116,"bh":true}],"targets":[[-0.211,0.513],[0.678,1.273]],"sol":[0.19132,0.19132]},{"name":"Lensing","par":1,"launch":[0.036,-1.38],"bodies":[{"x":-0.277,"y":-0.047,"m":0.229,"rs":0.034,"r":0.089,"bh":true}],"targets":[[-0.529,0.427],[-0.179,0.645],[-0.376,-0.375]],"sol":[0.15331,0.17027]},{"name":"Perihelion shift","par":1,"launch":[-0.152,-1.38],"bodies":[{"x":0.18,"y":-0.044,"m":0.323,"rs":0.048,"r":0.126,"bh":true}],"targets":[[-0.261,0.583],[0.463,0.313],[0.027,1.16]],"sol":[-0.26167,0.16993]},{"name":"Redshift","par":1,"launch":[-0.062,-1.38],"bodies":[{"x":0.432,"y":-0.137,"m":0.317,"rs":0.048,"r":0.124,"bh":true}],"targets":[[0.655,1.247],[0.232,0.514],[0.629,0.158]],"sol":[-0.20877,0.23186]},{"name":"Last stable orbit","par":1,"launch":[-0.358,-1.38],"bodies":[{"x":0.186,"y":-0.294,"m":0.327,"rs":0.049,"r":0.128,"bh":true},{"x":0.167,"y":0.185,"m":0.107,"r":0.061}],"targets":[[-0.351,0.258],[-0.085,0.067],[-0.102,0.797]],"sol":[-0.29642,0.1925]},{"name":"Escape velocity","par":1,"launch":[-0.203,-1.38],"bodies":[{"x":0.086,"y":0.009,"m":0.257,"rs":0.039,"r":0.1,"bh":true}],"targets":[[0.465,1.219],[0.722,0.115],[0.233,0.28]],"sol":[-0.2263,-0.03584]},{"name":"Event horizon","par":1,"launch":[0.384,-1.38],"bodies":[{"x":0.254,"y":0.319,"m":0.273,"rs":0.041,"r":0.107,"bh":true}],"targets":[[-0.543,0.907],[0.735,0.893],[-0.064,0.934]],"sol":[0.31492,0.16046]},{"name":"Singularity","par":1,"launch":[-0.315,-1.38],"bodies":[{"x":-0.421,"y":-0.489,"m":0.311,"rs":0.047,"r":0.121,"bh":true}],"targets":[[-0.374,-0.149],[0.433,0.977]],"sol":[0.35048,0.53968]}]},{"id":"d","name":"Today","daily":true,"theme":{"acc":"#ffe3a3","neb":"#5d7bff"},"levels":[{"name":"Vega","par":1,"launch":[0.255,-1.38],"bodies":[{"x":0.178,"y":0.742,"m":0.308,"rs":0.046,"r":0.12,"bh":true},{"x":-0.428,"y":0.535,"m":0.097,"r":0.06}],"targets":[[-0.121,1.387]],"sol":[0.25235,0.94178]},{"name":"Deneb","par":2,"launch":[0.439,-1.38],"bodies":[{"x":0.16,"y":0.959,"m":0.14,"r":0.065},{"x":-0.209,"y":0.082,"m":0.137,"r":0.065},{"x":0.422,"y":-0.019,"m":0.163,"r":0.067}],"targets":[[0.41,1.132],[-0.713,0.488],[0.796,1.03],[-0.136,0.523]],"sol":[0.43094,0.06825]},{"name":"Altair","par":1,"launch":[-0.22,-1.38],"bodies":[{"x":0.343,"y":0.333,"m":0.181,"r":0.069},{"x":0.062,"y":1.051,"m":0.138,"r":0.065}],"targets":[[-0.504,1.438],[0.772,0.971],[-0.121,1.388]],"sol":[0.35184,0.17927]},{"name":"Rigel","par":2,"launch":[-0.17,-1.38],"bodies":[{"x":-0.171,"y":0.902,"m":0.152,"r":0.066},{"x":-0.605,"y":0.767,"m":0.142,"r":0.065}],"targets":[[-0.204,-0.062],[-0.81,0.985],[0.266,1.45]],"sol":[0.17806,0.14419]},{"name":"Sirius","par":2,"launch":[-0.24171165854204446,-1.38],"bodies":[{"x":-0.379,"y":-0.715,"m":0.291,"r":0.078}],"targets":[[-0.132,-0.43],[-0.737,-0.518],[0.174,-0.32]],"sol":[0.56062,0]},{"name":"Arcturus","par":1,"launch":[-0.145,-1.38],"bodies":[{"x":0.271,"y":0.912,"m":0.295,"rs":0.044,"r":0.115,"bh":true},{"x":-0.487,"y":0.671,"m":0.085,"r":0.058}],"targets":[[0.089,1.449]],"sol":[-0.30129,0.92728]},{"name":"Capella","par":2,"launch":[0.242,-1.38],"bodies":[{"x":0.659,"y":1.13,"m":0.089,"r":0.059},{"x":0.601,"y":-0.124,"m":0.091,"r":0.059},{"x":0.25,"y":0.68,"m":0.132,"r":0.064}],"targets":[[0.654,0.38],[0.441,0.903],[-0.568,-0.579],[0.175,0.321]],"sol":[-0.09148,0.34139]},{"name":"Procyon","par":1,"launch":[-0.024,-1.38],"bodies":[{"x":-0.11,"y":0.372,"m":0.316,"rs":0.047,"r":0.123,"bh":true}],"targets":[[-0.535,0.741],[-0.217,0.925],[0.685,1.418]],"sol":[-0.37304,0.57444]},{"name":"Aldebaran","par":2,"launch":[0.321,-1.38],"bodies":[{"x":0.676,"y":-0.193,"m":0.182,"r":0.069},{"x":0.459,"y":-0.582,"m":0.13,"r":0.064}],"targets":[[-0.225,-0.597],[-0.397,1.33],[0.16,0.071]],"sol":[0.47775,0]},{"name":"Antares","par":2,"launch":[0.05,-1.38],"bodies":[{"x":-0.436,"y":0.989,"m":0.137,"r":0.065},{"x":-0.119,"y":0.544,"m":0.151,"r":0.066}],"targets":[[-0.248,0.911],[0.107,0.881],[-0.021,-0.59]],"sol":[0.17146,0.07634]},{"name":"Spica","par":1,"launch":[0.138,-1.38],"bodies":[{"x":-0.175,"y":0.936,"m":0.285,"rs":0.043,"r":0.111,"bh":true}],"targets":[[-0.67,0.985],[0.208,1.532]],"sol":[-0.28277,0.43543]},{"name":"Pollux","par":2,"launch":[0.321,-1.38],"bodies":[{"x":0.464,"y":-0.064,"m":0.157,"r":0.067},{"x":-0.435,"y":0.125,"m":0.14,"r":0.065},{"x":-0.638,"y":-0.535,"m":0.116,"r":0.062}],"targets":[[0.418,0.651],[0.172,1.434],[-0.714,-0.128],[0.521,-0.586]],"sol":[0.56062,0]},{"name":"Castor","par":1,"launch":[0.185,-1.38],"bodies":[{"x":0.167,"y":-0.052,"m":0.32,"rs":0.048,"r":0.125,"bh":true}],"targets":[[0.45,0.502],[-0.235,0.337]],"sol":[-0.42003,0.30517]},{"name":"Regulus","par":1,"launch":[-0.179,-1.38],"bodies":[{"x":0.405,"y":0.259,"m":0.312,"r":0.08}],"targets":[[0.086,0.906],[0.405,0.705]],"sol":[0.53102,0.8177]},{"name":"Fomalhaut","par":1,"launch":[0.411,-1.38],"bodies":[{"x":-0.142,"y":0.161,"m":0.277,"rs":0.042,"r":0.108,"bh":true}],"targets":[[-0.52,0.474],[-0.068,0.502]],"sol":[-0.05103,0.97366]},{"name":"Achernar","par":2,"launch":[-0.118,-1.38],"bodies":[{"m":0.12,"r":0.063,"star":true,"orbit":{"cx":0.243,"cy":0.488,"R":0.303,"period":-4.1044,"phase":3.288,"ox":-0.2997583772607225,"oy":-0.044203113714062714,"c":0.9999967451749723,"s":-0.002551399510398804}},{"m":0.181,"r":0.069,"star":true,"orbit":{"cx":0.243,"cy":0.488,"R":0.202,"period":-4.1044,"phase":6.429,"ox":0.19985634783327008,"oy":0.029350302055463937,"c":0.9999967451749723,"s":-0.002551399510398804}}],"targets":[[-0.442,1.381],[-0.078,0.196],[-0.27,1.028]],"sol":[0.25732,0.08361]},{"name":"Canopus","par":1,"launch":[-0.247,-1.38],"bodies":[{"x":-0.212,"y":0.905,"m":0.332,"rs":0.05,"r":0.129,"bh":true}],"targets":[[-0.107,1.215],[0.22,1.205],[-0.731,1.15]],"sol":[0.22691,0.14736]},{"name":"Mira","par":2,"launch":[0.192,-1.38],"bodies":[{"x":-0.184,"y":0.548,"m":0.167,"r":0.068},{"x":0.441,"y":0.432,"m":0.138,"r":0.065}],"targets":[[-0.647,0.753],[-0.094,0.242],[0.837,0.659]],"sol":[0.29128,0.11181]},{"name":"Polaris","par":2,"launch":[0.047,-1.38],"bodies":[{"x":-0.197,"y":0.426,"m":0.259,"rs":0.039,"r":0.101,"bh":true}],"targets":[[-0.438,0.983],[0.416,0.901],[0.778,1.325]],"sol":[0.27056,0]},{"name":"Alnitak","par":1,"launch":[0.343,-1.38],"bodies":[{"x":0.455,"y":1.007,"m":0.174,"r":0.068},{"x":0.229,"y":0.512,"m":0.209,"r":0.072}],"targets":[[0.726,0.984],[-0.08,1.023]],"sol":[0.25959,0.44963]},{"name":"Alnilam","par":1,"launch":[-0.177,-1.38],"bodies":[{"x":-0.299,"y":0.124,"m":0.271,"rs":0.041,"r":0.106,"bh":true}],"targets":[[0.409,1.329],[-0.292,1.205]],"sol":[-0.42003,0.30517]},{"name":"Mintaka","par":1,"launch":[0.116,-1.38],"bodies":[{"x":0.167,"y":-0.525,"m":0.167,"r":0.068},{"x":-0.034,"y":-0.108,"m":0.204,"r":0.071}],"targets":[[0.025,0.424],[0.408,-0.38],[-0.495,-0.171]],"sol":[-0.21391,0.08211]},{"name":"Bellatrix","par":2,"launch":[-0.22118060162756592,-1.38],"bodies":[{"x":-0.535,"y":-0.23,"m":0.34,"r":0.082}],"targets":[[-0.3,0.218],[-0.651,0.178],[0.693,0.688]],"sol":[0.39488,0]},{"name":"Saiph","par":2,"launch":[0.29109408615622673,-1.38],"bodies":[{"x":-0.546,"y":0.387,"m":0.331,"r":0.081}],"targets":[[-0.645,1.183],[0.552,0.179],[-0.807,0.711]],"sol":[0.22132,0.0593]},{"name":"Algol","par":2,"launch":[0.18,-1.38],"bodies":[{"x":0.326,"y":0.285,"m":0.112,"r":0.062},{"x":-0.173,"y":-0.169,"m":0.074,"r":0.057},{"x":-0.621,"y":0.462,"m":0.098,"r":0.06}],"targets":[[0.453,0.879],[-0.333,0.235],[-0.837,1.016],[0.705,0.642]],"sol":[0.3515,0.03694]},{"name":"Mizar","par":2,"launch":[0.124,-1.38],"bodies":[{"x":-0.337,"y":0.674,"m":0.128,"r":0.064},{"x":0.578,"y":0.865,"m":0.083,"r":0.058},{"x":0.267,"y":-0.267,"m":0.159,"r":0.067},{"x":0.318,"y":-0.694,"m":0.092,"r":0.059}],"targets":[[-0.745,-0.346],[0.396,-0.111],[-0.083,-0.415]],"sol":[0.51919,0]},{"name":"Alcor","par":2,"launch":[-0.20679911677725613,-1.38],"bodies":[{"x":-0.157,"y":-0.6,"m":0.253,"r":0.075}],"targets":[[-0.231,0.058],[-0.186,0.564],[-0.598,-0.155]],"sol":[-0.59695,0.66298]},{"name":"Dubhe","par":1,"launch":[-0.25,-1.38],"bodies":[{"x":-0.244,"y":-0.541,"m":0.236,"r":0.074}],"targets":[[-0.19,0.176]],"sol":[-0.4875,0.84437]},{"name":"Merak","par":1,"launch":[-0.275,-1.38],"bodies":[{"x":0.353,"y":0.222,"m":0.249,"rs":0.037,"r":0.097,"bh":true}],"targets":[[0.649,0.274],[0.425,0.674]],"sol":[0.57309,0.78879]},{"name":"Alioth","par":1,"launch":[0.238,-1.38],"bodies":[{"m":0.215,"r":0.072,"star":true,"orbit":{"cx":0,"cy":0.542,"R":0.209,"period":-3.6671,"phase":2.539,"ox":-0.17218860434760933,"oy":0.1184570999679734,"c":0.9999959226176472,"s":-0.0028556519536453127}},{"m":0.154,"r":0.066,"star":true,"orbit":{"cx":0,"cy":0.542,"R":0.292,"period":-3.6671,"phase":5.681,"ox":0.24063712055223266,"oy":-0.16540186278373722,"c":0.9999959226176472,"s":-0.0028556519536453127}}],"targets":[[-0.662,0.725],[0.241,1.113],[0.518,0.902]],"sol":[-0.40348,0.32674]},{"name":"Thuban","par":2,"launch":[0.353,-1.38],"bodies":[{"x":0.05,"y":0.314,"m":0.283,"r":0.078}],"targets":[[0.417,0.727],[-0.437,0.394],[-0.02,0.586]],"sol":[0.22913,0]},{"name":"Sadr","par":1,"launch":[-0.401,-1.38],"bodies":[{"x":-0.001,"y":-0.066,"m":0.217,"r":0.072},{"x":0.517,"y":0.362,"m":0.221,"r":0.073}],"targets":[[-0.361,0.449],[0.685,-0.047],[0.572,0.911]],"sol":[-0.17027,0.15331]},{"name":"Albireo","par":1,"launch":[-0.399,-1.38],"bodies":[{"x":0.228,"y":0.736,"m":0.172,"r":0.068},{"x":-0.214,"y":0.719,"m":0.203,"r":0.071}],"targets":[[0.42,0.878],[-0.523,0.932],[-0.819,-0.494]],"sol":[-0.19635,0.24247]},{"name":"Hadar","par":2,"launch":[-0.048,-1.38],"bodies":[{"x":0.516,"y":0.984,"m":0.336,"r":0.081}],"targets":[[0.558,1.533],[0.718,1.235],[0.408,0.346]],"sol":[0.30066,0.37128]},{"name":"Mimosa","par":1,"launch":[0.109,-1.38],"bodies":[{"x":-0.54,"y":0.412,"m":0.33,"rs":0.05,"r":0.129,"bh":true}],"targets":[[-0.799,0.631],[-0.274,0.717]],"sol":[-0.38583,0.3474]},{"name":"Acrux","par":2,"launch":[-0.152,-1.38],"bodies":[{"x":-0.176,"y":1.003,"m":0.209,"r":0.072},{"x":0.135,"y":0.754,"m":0.165,"r":0.067}],"targets":[[0.51,0.983],[-0.438,1.065],[-0.66,1.509]],"sol":[0.22913,0]},{"name":"Shaula","par":1,"launch":[-0.13719660630449654,-1.38],"bodies":[{"x":-0.318,"y":-0.357,"m":0.265,"r":0.076}],"targets":[[-0.051,0.025],[-0.577,0.075]],"sol":[0.39488,0]},{"name":"Nunki","par":1,"launch":[0.348,-1.38],"bodies":[{"x":0.427,"y":-0.051,"m":0.309,"rs":0.046,"r":0.121,"bh":true}],"targets":[[0.833,0.201],[-0.053,0.202],[0.34,0.287]],"sol":[0.36074,0.16061]},{"name":"Alphard","par":1,"launch":[0.001,-1.38],"bodies":[{"x":0.132,"y":0.12,"m":0.204,"r":0.071},{"x":-0.474,"y":-0.254,"m":0.169,"r":0.068}],"targets":[[0.758,0.438],[-0.612,0.27]],"sol":[-0.4847,0.18606]},{"name":"Hamal","par":2,"launch":[-0.325,-1.38],"bodies":[{"x":-0.632,"y":-0.036,"m":0.339,"r":0.082}],"targets":[[-0.829,0.348],[-0.266,0.569],[-0.4,0.154]],"sol":[0.2485,0.30688]},{"name":"Mirfak","par":1,"launch":[0.234,-1.38],"bodies":[{"x":0.525,"y":-0.307,"m":0.248,"r":0.075}],"targets":[[0.672,0.391]],"sol":[0.61359,0.75772]},{"name":"Elnath","par":1,"launch":[-0.428,-1.38],"bodies":[{"x":0.011,"y":-0.51,"m":0.124,"r":0.063},{"x":0.356,"y":-0.737,"m":0.152,"r":0.066}],"targets":[[-0.48,0.185],[0.22,0.151]],"sol":[0.5015,-0.13438]},{"name":"Alhena","par":2,"launch":[0.246,-1.38],"bodies":[{"x":-0.228,"y":-0.57,"m":0.297,"r":0.079},{"m":0.077,"r":0.044,"orbit":{"cx":-0.228,"cy":-0.57,"R":0.505,"period":5.57,"phase":0.45,"ox":0.4547257866881018,"oy":0.21965759472617127,"c":0.9999982326737746,"s":0.001880066309305733}},{"m":0.051,"r":0.041,"orbit":{"cx":-0.228,"cy":-0.57,"R":0.678,"period":6.89,"phase":0.96,"ox":0.38884655055712564,"oy":0.5554118833080769,"c":0.9999988449821051,"s":0.001519879750390803}}],"targets":[[-0.557,-0.47],[0.088,1.439],[0.218,0.719]],"sol":[0.7105,0.15102]},{"name":"Wezen","par":1,"launch":[0.306,-1.38],"bodies":[{"x":0.337,"y":-0.092,"m":0.244,"rs":0.037,"r":0.095,"bh":true},{"x":0.625,"y":-0.493,"m":0.075,"r":0.057}],"targets":[[0.654,-0.03],[0.5,0.33],[0.343,0.658]],"sol":[0.07348,0.34571]},{"name":"Adhara","par":1,"launch":[-0.03,-1.38],"bodies":[{"x":0.156,"y":0.686,"m":0.252,"rs":0.038,"r":0.098,"bh":true}],"targets":[[-0.037,1.102],[0.457,0.998]],"sol":[0.25959,0.44963]},{"name":"Naos","par":2,"launch":[0.09688904879149046,-1.38],"bodies":[{"x":-0.401,"y":0.158,"m":0.325,"r":0.081}],"targets":[[-0.29,0.665],[-0.563,0.497],[-0.754,0.794]],"sol":[0.312,0]},{"name":"Avior","par":2,"launch":[-0.216,-1.38],"bodies":[{"x":-0.26,"y":-0.193,"m":0.183,"r":0.069}],"targets":[[-0.471,0.22],[-0.653,0.62]],"sol":[0.3515,0.03694]},{"name":"Atria","par":1,"launch":[-0.185,-1.38],"bodies":[{"x":-0.201,"y":0.543,"m":0.333,"rs":0.05,"r":0.13,"bh":true}],"targets":[[-0.816,-0.002],[-0.118,1.014],[0.48,0.86]],"sol":[-0.28081,0.38651]},{"name":"Enif","par":1,"launch":[0.412,-1.38],"bodies":[{"x":0.26,"y":0.885,"m":0.239,"rs":0.036,"r":0.093,"bh":true}],"targets":[[0.519,1.103]],"sol":[0.15252,0.963]},{"name":"Scheat","par":2,"launch":[-0.292,-1.38],"bodies":[{"x":-0.614,"y":-0.269,"m":0.253,"r":0.075}],"targets":[[-0.515,0.112],[0.356,-0.507],[0.168,0.805]],"sol":[0.35344,0]},{"name":"Markab","par":2,"launch":[-0.391,-1.38],"bodies":[{"x":-0.471,"y":1.006,"m":0.296,"rs":0.044,"r":0.116,"bh":true}],"targets":[[0.137,1.462],[-0.281,1.314],[-0.462,-0.582]],"sol":[0.18769,0]},{"name":"Alpheratz","par":1,"launch":[0.104,-1.38],"bodies":[{"x":0.636,"y":0.396,"m":0.185,"r":0.069},{"x":-0.317,"y":0.531,"m":0.163,"r":0.067}],"targets":[[-0.409,0.909],[0.141,0.777],[-0.753,0.986]],"sol":[0.40502,0.79489]},{"name":"Mirach","par":2,"launch":[0.385,-1.38],"bodies":[{"x":-0.438,"y":0.477,"m":0.238,"rs":0.036,"r":0.093,"bh":true}],"targets":[[-0.664,0.968],[0.519,0.901],[-0.448,1.26]],"sol":[0.22132,0.0593]},{"name":"Almach","par":1,"launch":[-0.107,-1.38],"bodies":[{"x":0.279,"y":0.701,"m":0.266,"rs":0.04,"r":0.104,"bh":true}],"targets":[[0.243,1.354]],"sol":[-0.10192,0.96966]},{"name":"Ankaa","par":2,"launch":[-0.394,-1.38],"bodies":[{"x":-0.076,"y":-0.415,"m":0.152,"r":0.066},{"x":0.062,"y":0.113,"m":0.118,"r":0.063},{"x":0.218,"y":0.86,"m":0.109,"r":0.061}],"targets":[[0.272,-0.274],[0.519,1.336],[-0.235,0.581],[-0.691,0.838]],"sol":[0.43571,0.02283]},{"name":"Diphda","par":1,"launch":[-0.297,-1.38],"bodies":[{"m":0.134,"r":0.064,"star":true,"orbit":{"cx":0.051,"cy":0.277,"R":0.232,"period":3.3657,"phase":3.373,"ox":-0.22581594430663876,"oy":-0.05320863930698684,"c":0.9999951596575972,"s":0.0031113761226425874}},{"m":0.153,"r":0.066,"star":true,"orbit":{"cx":0.051,"cy":0.277,"R":0.203,"period":3.3657,"phase":6.515,"ox":0.19756996982107086,"oy":0.04663804267870974,"c":0.9999951596575972,"s":0.0031113761226425874}}],"targets":[[0.604,0.903],[-0.405,0.639]],"sol":[-0.23571,0.4626]},{"name":"Kochab","par":2,"launch":[-0.35,-1.38],"bodies":[{"x":0.214,"y":-0.103,"m":0.12,"r":0.063},{"x":-0.343,"y":0.337,"m":0.114,"r":0.062},{"x":-0.187,"y":0.922,"m":0.131,"r":0.064}],"targets":[[0.062,0.644],[0.588,-0.486],[-0.017,0.238],[0.157,1.254]],"sol":[0.31157,0.01633]},{"name":"Pherkad","par":1,"launch":[-0.236,-1.38],"bodies":[{"m":0.126,"r":0.063,"star":true,"orbit":{"cx":-0.029,"cy":-0.147,"R":0.271,"period":-4.2194,"phase":0.311,"ox":0.25799959752114265,"oy":0.08292893149515669,"c":0.9999969201779764,"s":-0.002481861108536008}},{"m":0.149,"r":0.066,"star":true,"orbit":{"cx":-0.029,"cy":-0.147,"R":0.228,"period":-4.2194,"phase":3.452,"ox":-0.217103703605022,"oy":-0.06964181129883651,"c":0.9999969201779764,"s":-0.002481861108536008}}],"targets":[[-0.479,0.306],[-0.037,1.28]],"sol":[-0.33456,0.87156]},{"name":"Denebola","par":2,"launch":[-0.36,-1.38],"bodies":[{"x":-0.126,"y":-0.414,"m":0.186,"r":0.069}],"targets":[[0.551,-0.001],[0.21,0.871],[-0.079,0.333]],"sol":[0.52339,0.20091]},{"name":"Algieba","par":2,"launch":[-0.262,-1.38],"bodies":[{"x":0.683,"y":0.185,"m":0.156,"r":0.067},{"x":-0.279,"y":-0.388,"m":0.165,"r":0.068},{"x":-0.013,"y":0.964,"m":0.108,"r":0.061}],"targets":[[-0.102,1.462],[-0.598,-0.017],[-0.169,-0.098],[0.633,0.524]],"sol":[0.27019,0.01416]},{"name":"Alkaid","par":2,"launch":[0.259,-1.38],"bodies":[{"x":-0.08,"y":-0.568,"m":0.146,"r":0.066},{"x":-0.172,"y":0.437,"m":0.156,"r":0.067},{"x":0.447,"y":-0.011,"m":0.129,"r":0.064}],"targets":[[0.588,0.353],[-0.366,-0.319],[-0.163,0.789],[0.169,0.17]],"sol":[0.43571,0.02283]},{"name":"Izar","par":1,"launch":[0.236,-1.38],"bodies":[{"x":-0.353,"y":-0.042,"m":0.317,"rs":0.048,"r":0.124,"bh":true}],"targets":[[-0.446,0.644],[0.033,0.461],[0.585,-0.099]],"sol":[0.29195,0.32424]},{"name":"Alphecca","par":2,"launch":[-0.151,-1.38],"bodies":[{"x":0.525,"y":-0.224,"m":0.289,"r":0.078}],"targets":[[0.814,1.222],[-0.387,-0.461],[0.479,0.186]],"sol":[-0.27333,0.53644]},{"name":"Sabik","par":1,"launch":[0.338,-1.38],"bodies":[{"x":0.057,"y":0.561,"m":0.188,"r":0.07}],"targets":[[0.356,0.851],[0.124,1.11]],"sol":[0.10192,0.96966]},{"name":"Eltanin","par":1,"launch":[-0.353,-1.38],"bodies":[{"x":0.347,"y":-0.089,"m":0.278,"rs":0.042,"r":0.108,"bh":true}],"targets":[[-0.579,-0.67],[0.573,0.119],[0.164,0.307]],"sol":[-0.18339,0.25241]},{"name":"Errai","par":2,"launch":[0.055763815040700104,-1.38],"bodies":[{"x":0.015,"y":-0.633,"m":0.292,"r":0.078}],"targets":[[0.251,-0.249],[-0.099,-0.377],[0.423,1.046]],"sol":[-0.4875,0.84437]},{"name":"Schedar","par":2,"launch":[0.042,-1.38],"bodies":[{"x":-0.02,"y":-0.171,"m":0.294,"r":0.078}],"targets":[[0.249,0.382],[0.762,0.921],[-0.05,0.522]],"sol":[0.41496,0.13483]},{"name":"Caph","par":1,"launch":[-0.421,-1.38],"bodies":[{"x":0.024,"y":0.2,"m":0.241,"rs":0.036,"r":0.094,"bh":true}],"targets":[[0.707,1.221]],"sol":[0.6524,0.72457]},{"name":"Ruchbah","par":1,"launch":[-0.003,-1.38],"bodies":[{"m":0.131,"r":0.064,"star":true,"orbit":{"cx":0.272,"cy":-0.051,"R":0.319,"period":-4.3077,"phase":5.377,"ox":0.19674420408424864,"oy":-0.25110300308689165,"c":0.9999970451453278,"s":-0.0024309875798164586}},{"m":0.194,"r":0.07,"star":true,"orbit":{"cx":0.272,"cy":-0.051,"R":0.215,"period":-4.3077,"phase":8.519,"ox":-0.13267082080892073,"oy":0.16918467219546587,"c":0.9999970451453278,"s":-0.0024309875798164586}}],"targets":[[-0.125,0.482],[-0.646,1.406]],"sol":[0.10715,0.6765]},{"name":"Sheratan","par":1,"launch":[0.405,-1.38],"bodies":[{"x":-0.1,"y":1.031,"m":0.15,"r":0.066},{"x":-0.064,"y":0.307,"m":0.161,"r":0.067}],"targets":[[-0.818,1.166],[-0.148,0.664]],"sol":[-0.09325,0.88724]},{"name":"Alcyone","par":2,"launch":[0.269,-1.38],"bodies":[{"x":0.038,"y":0.185,"m":0.105,"r":0.061},{"x":-0.076,"y":-0.268,"m":0.165,"r":0.067},{"x":-0.486,"y":-0.309,"m":0.125,"r":0.063},{"x":0.497,"y":0.694,"m":0.153,"r":0.066}],"targets":[[-0.181,0.364],[0.716,0.527],[-0.625,0.581],[-0.823,-0.253]],"sol":[0.06487,0.30518]},{"name":"Electra","par":1,"launch":[0.308,-1.38],"bodies":[{"x":0.314,"y":0.833,"m":0.263,"rs":0.04,"r":0.103,"bh":true}],"targets":[[-0.055,1.142],[0.643,1.473]],"sol":[-0.22803,0.51216]},{"name":"Maia","par":1,"launch":[-0.104,-1.38],"bodies":[{"x":-0.256,"y":0.071,"m":0.184,"r":0.069},{"x":0.209,"y":0.353,"m":0.2,"r":0.071}],"targets":[[0.696,0.814],[0.049,0.745],[-0.34,0.458]],"sol":[-0.34601,0.77714]},{"name":"Merope","par":2,"launch":[-0.181,-1.38],"bodies":[{"x":-0.591,"y":0.029,"m":0.109,"r":0.061},{"x":-0.246,"y":-0.312,"m":0.124,"r":0.063},{"x":0.091,"y":0.962,"m":0.105,"r":0.061},{"x":-0.458,"y":0.821,"m":0.074,"r":0.057}],"targets":[[-0.247,1.106],[-0.63,-0.173],[0.462,0.392],[0.016,0.322]],"sol":[0.15184,0.11032]},{"name":"Taygeta","par":1,"launch":[-0.429,-1.38],"bodies":[{"x":0.614,"y":-0.507,"m":0.327,"r":0.081}],"targets":[[0.223,0.459],[0.782,-0.135]],"sol":[0.85285,0.37971]},{"name":"Atlas","par":1,"launch":[-0.173,-1.38],"bodies":[{"x":-0.443,"y":0.591,"m":0.228,"rs":0.034,"r":0.089,"bh":true}],"targets":[[-0.61,0.945],[-0.026,1.223]],"sol":[-0.33456,0.87156]},{"name":"Pleione","par":2,"launch":[0.17939965620171278,-1.38],"bodies":[{"x":-0.403,"y":0.107,"m":0.253,"r":0.075}],"targets":[[-0.267,0.756],[-0.685,0.606],[-0.812,0.158]],"sol":[0.312,0]},{"name":"Menkalinan","par":1,"launch":[0.23,-1.38],"bodies":[{"x":-0.221,"y":0.735,"m":0.14,"r":0.065},{"x":0.236,"y":1.117,"m":0.166,"r":0.068}],"targets":[[-0.552,0.989],[0.67,1.513],[0.248,1.495]],"sol":[-0.28081,0.38651]},{"name":"Mebsuta","par":2,"launch":[0.387,-1.38],"bodies":[{"x":-0.247,"y":-0.642,"m":0.234,"r":0.074},{"m":0.075,"r":0.044,"orbit":{"cx":-0.247,"cy":-0.642,"R":0.464,"period":7.14,"phase":1.37,"ox":0.09254467054287381,"oy":0.454677340488957,"c":0.9999989244496674,"s":0.0014666627111466098}}],"targets":[[-0.47,-0.085],[-0.783,1.281],[0.244,0.504]],"sol":[0.60124,0.03151]},{"name":"Wasat","par":2,"launch":[0.127,-1.38],"bodies":[{"x":0.621,"y":0.002,"m":0.197,"r":0.07}],"targets":[[0.735,0.707],[-0.804,1.399],[0.532,0.278]],"sol":[0.40348,0.32674]},{"name":"Gomeisa","par":2,"launch":[-0.269,-1.38],"bodies":[{"x":-0.059,"y":-0.737,"m":0.136,"r":0.065},{"x":-0.193,"y":0.492,"m":0.126,"r":0.063},{"x":0.554,"y":-0.291,"m":0.134,"r":0.064}],"targets":[[-0.633,-0.207],[-0.508,0.479],[-0.403,0.962],[0.764,1.32]],"sol":[0.684,0.03585]}]}];
+const WORLDS = /*LEVELS*/[{"id":"w1","name":"First light","theme":{"acc":"#9ad7ff","neb":"#d65fae"},"levels":[{"name":"Bend it","launch":[0.3,-1.25],"bodies":[{"x":0,"y":0.15,"m":0.28,"r":0.075}],"targets":[[-0.3,1.15]],"par":1,"sol":[0.36592,0.23763]},{"name":"One lap","launch":[0.58,0.1],"bodies":[{"x":0,"y":0.1,"m":0.3,"r":0.08}],"targets":[[0,0.68],[-0.58,0.1],[0,-0.48]],"par":1,"sol":[0.03802,0.72538]},{"name":"Perihelion","par":1,"launch":[0.36540016990620644,-1.38],"bodies":[{"x":-0.034,"y":-0.232,"m":0.218,"r":0.072}],"targets":[[-0.281,0.156]],"sol":[0.35344,0]},{"name":"Drift","par":1,"launch":[0.298,-1.38],"bodies":[{"x":0.574,"y":0.72,"m":0.195,"r":0.07}],"targets":[[0.745,1.148]],"sol":[-0.04886,0.93228]},{"name":"Halo","par":1,"launch":[-0.19776360578835012,-1.38],"bodies":[{"x":-0.316,"y":0.491,"m":0.331,"r":0.081}],"targets":[[-0.36,1.055]],"sol":[0.27019,0.01416],"piles":[{"x":-0.193,"y":1.188,"vx":0.67346,"vy":-0.11885}]},{"name":"Sunward","par":1,"launch":[0.17121125806588683,-1.38],"bodies":[{"x":-0.308,"y":0.398,"m":0.301,"r":0.079}],"targets":[[-0.711,1.003]],"sol":[0.312,0],"piles":[{"x":-0.657,"y":0.814,"vx":-0.57038,"vy":-0.47852}]},{"name":"Gentle arc","par":1,"launch":[-0.173,-1.38],"bodies":[{"x":0.234,"y":-0.729,"m":0.358,"r":0.083}],"targets":[[0.78,-0.635],[0.417,-0.514]],"sol":[0.05103,0.97366],"piles":[{"x":0.559,"y":-0.143,"vx":-0.6392,"vy":0.35451}]},{"name":"Long fall","par":1,"launch":[0.172,-1.38],"bodies":[{"x":-0.42,"y":-0.254,"m":0.239,"r":0.074}],"targets":[[0.655,1.159]],"sol":[0.39657,0.89071],"piles":[{"x":-0.014,"y":-0.216,"vx":0.07134,"vy":-0.76225}]},{"name":"Aphelion","par":1,"launch":[0.15971828789915893,-1.38],"bodies":[{"x":0.202,"y":-0.399,"m":0.252,"r":0.075}],"targets":[[-0.131,0.031],[0.516,-0.122]],"sol":[0.39488,0],"piles":[{"x":0.747,"y":0.194,"vx":-0.41185,"vy":0.37851}]},{"name":"Ember","par":1,"launch":[0.067,-1.38],"bodies":[{"x":-0.025,"y":-0.558,"m":0.359,"r":0.083}],"targets":[[-0.363,-0.332],[0.336,0.079]],"sol":[-0.63218,0.56922],"piles":[{"x":0.55,"y":0.208,"vx":0.48963,"vy":-0.36754}]},{"name":"Slow burn","par":1,"launch":[0.415,-1.38],"bodies":[{"x":0.375,"y":0.676,"m":0.31,"r":0.08}],"targets":[[0.586,1.173],[-0.179,0.944]],"sol":[-0.25241,0.18339],"piles":[{"x":-0.299,"y":0.688,"vx":-0.01207,"vy":-0.67803}]},{"name":"Undertow","par":1,"launch":[0.312,-1.38],"bodies":[{"x":0.251,"y":0.318,"m":0.262,"r":0.076}],"targets":[[-0.011,0.798],[-0.711,0.339],[0.603,0.528]],"sol":[0.2365,0.26266],"piles":[{"x":-0.4,"y":0.377,"vx":-0.05714,"vy":-0.63052}]}]},{"id":"w2","name":"Two suns","theme":{"acc":"#ffb48a","neb":"#ff5f9a"},"levels":[{"name":"Duet","par":1,"launch":[-0.417,-1.38],"bodies":[{"x":-0.024,"y":-0.317,"m":0.215,"r":0.072},{"x":-0.474,"y":-0.36,"m":0.167,"r":0.068}],"targets":[[-0.023,0.009],[-0.812,-0.011],[0.496,-0.042]],"sol":[0.35298,-0.25646]},{"name":"Crossfire","par":1,"launch":[0.243,-1.38],"bodies":[{"x":-0.656,"y":-0.375,"m":0.212,"r":0.072},{"x":-0.219,"y":-0.739,"m":0.188,"r":0.07}],"targets":[[-0.79,0.055],[-0.008,-0.198],[0.276,0.322]],"sol":[0.4847,0.18606]},{"name":"Lagrange","par":1,"launch":[-0.361,-1.38],"bodies":[{"x":0.555,"y":0.213,"m":0.236,"r":0.074},{"x":-0.306,"y":-0.538,"m":0.142,"r":0.065}],"targets":[[-0.315,-0.117],[-0.654,0.151],[0.305,0.494]],"sol":[0.28081,0.38651]},{"name":"Seesaw","par":1,"launch":[0.301,-1.38],"bodies":[{"x":0.673,"y":0.853,"m":0.23,"r":0.073},{"x":-0.185,"y":0.374,"m":0.173,"r":0.068}],"targets":[[-0.74,0.935],[-0.178,0.823]],"sol":[0,0.18769]},{"name":"Saddle","par":1,"launch":[0.17,-1.38],"bodies":[{"x":-0.166,"y":0.35,"m":0.24,"r":0.074},{"x":0.156,"y":-0.152,"m":0.151,"r":0.066}],"targets":[[-0.663,0.52],[0.534,0.296],[-0.459,0.248]],"sol":[-0.06726,0.17522]},{"name":"Tidal","par":1,"launch":[0.143,-1.38],"bodies":[{"x":0.316,"y":-0.124,"m":0.145,"r":0.066},{"x":-0.557,"y":-0.503,"m":0.165,"r":0.068}],"targets":[[-0.396,-0.123],[-0.848,-0.542],[0.641,0.557]],"sol":[0.13948,-0.12559]},{"name":"Mirror","par":1,"launch":[-0.411,-1.38],"bodies":[{"x":-0.361,"y":0.188,"m":0.204,"r":0.071},{"x":0.182,"y":-0.105,"m":0.185,"r":0.069}],"targets":[[0.754,0.179],[-0.648,0.395],[-0.014,0.397]],"sol":[0.39271,0.04128]},{"name":"Pivot","par":1,"launch":[-0.255,-1.38],"bodies":[{"x":0.051,"y":0.217,"m":0.171,"r":0.068},{"x":-0.688,"y":-0.173,"m":0.155,"r":0.066}],"targets":[[0.331,0.72],[0.293,0.365],[0.619,-0.506]],"sol":[0.29673,-0.09641]},{"name":"Eclipse","par":1,"launch":[-0.39,-1.38],"bodies":[{"x":-0.119,"y":-0.008,"m":0.209,"r":0.072},{"x":-0.474,"y":-0.21,"m":0.131,"r":0.064}],"targets":[[0.121,0.94],[-0.776,0.42],[0.364,0.285]],"sol":[0,0.43631],"piles":[{"x":0.72,"y":0.444,"vx":0.22211,"vy":-0.41228}]},{"name":"Twin spiral","par":1,"launch":[0.057,-1.38],"bodies":[{"x":0.169,"y":0.458,"m":0.144,"r":0.065},{"x":0.527,"y":0.007,"m":0.135,"r":0.064}],"targets":[[-0.463,0.735],[0.813,0.082],[0.581,0.313]],"sol":[-0.22062,0.22062]},{"name":"Figure eight","par":1,"launch":[0.366,-1.38],"bodies":[{"x":-0.357,"y":0.888,"m":0.194,"r":0.07},{"x":-0.301,"y":0.039,"m":0.136,"r":0.065}],"targets":[[-0.244,0.452],[0.496,1.251],[0.221,-0.136]],"sol":[0.08521,0.16723]},{"name":"Gemini","par":1,"launch":[-0.263,-1.38],"bodies":[{"x":-0.136,"y":0.163,"m":0.187,"r":0.07},{"x":0.661,"y":0.444,"m":0.231,"r":0.073}],"targets":[[-0.387,0.547],[-0.305,1.195],[0.244,0.469]],"sol":[0.14586,0.11812]}]},{"id":"w5","name":"Waltz","theme":{"acc":"#ffc4dc","neb":"#7a8cff"},"levels":[{"name":"Barycenter","par":1,"launch":[0.228,-1.38],"bodies":[{"m":0.212,"r":0.072,"star":true,"orbit":{"cx":0.127,"cy":-0.072,"R":0.225,"period":4.2016,"phase":4.769,"ox":0.01273067697521344,"oy":-0.2246395554299215,"c":0.9999968940274968,"s":0.0024923754450862532}},{"m":0.149,"r":0.066,"star":true,"orbit":{"cx":0.127,"cy":-0.072,"R":0.32,"period":4.2016,"phase":7.91,"ox":-0.01791650319405721,"oy":0.31949804211183724,"c":0.9999968940274968,"s":0.0024923754450862532}}],"targets":[[0.784,0.214],[0.491,0.497],[-0.162,0.536]],"sol":[0.40067,0.2602]},{"name":"Minuet","par":1,"launch":[-0.291,-1.38],"bodies":[{"m":0.145,"r":0.065,"star":true,"orbit":{"cx":0.075,"cy":0.379,"R":0.257,"period":3.2019,"phase":3.424,"ox":-0.24681955418402568,"oy":-0.07161778879858564,"c":0.9999946517546177,"s":0.003270544627583964}},{"m":0.196,"r":0.07,"star":true,"orbit":{"cx":0.075,"cy":0.379,"R":0.189,"period":3.2019,"phase":6.566,"ox":0.18149174368322277,"oy":0.05274226933706369,"c":0.9999946517546177,"s":0.003270544627583964}}],"targets":[[-0.414,0.766],[0.559,0.691],[0.083,0.986]],"sol":[0.42572,0.42572]},{"name":"Do-si-do","par":1,"launch":[-0.145,-1.38],"bodies":[{"m":0.218,"r":0.072,"star":true,"orbit":{"cx":-0.241,"cy":0.777,"R":0.224,"period":-5.2629,"phase":5.914,"ox":0.2089072477330573,"oy":-0.0808316883690983,"c":0.9999980204026635,"s":-0.0019897715331598145}},{"m":0.123,"r":0.063,"star":true,"orbit":{"cx":-0.241,"cy":0.777,"R":0.397,"period":-5.2629,"phase":9.055,"ox":-0.37016582332774967,"oy":0.14347913869301437,"c":0.9999980204026635,"s":-0.0019897715331598145}}],"targets":[[0.493,1.094],[-0.845,1.044]],"sol":[-0.27922,0.27922]},{"name":"Pas de deux","par":1,"launch":[-0.227,-1.38],"bodies":[{"m":0.173,"r":0.068,"star":true,"orbit":{"cx":0.275,"cy":-0.049,"R":0.226,"period":2.9497,"phase":5.149,"ox":0.0955688096819196,"oy":-0.2047989321651386,"c":0.9999936981060894,"s":0.003550175785400945}},{"m":0.19,"r":0.07,"star":true,"orbit":{"cx":0.275,"cy":-0.049,"R":0.205,"period":2.9497,"phase":8.29,"ox":-0.08657841020801248,"oy":0.1858202865293591,"c":0.9999936981060894,"s":0.003550175785400945}}],"targets":[[-0.347,0.894],[0.814,0.692]],"sol":[0.47187,-0.07474],"piles":[{"x":0.079,"y":0.675,"vx":0.6715,"vy":0.18179}]},{"name":"Roche","par":1,"launch":[-0.385,-1.38],"bodies":[{"m":0.201,"r":0.071,"star":true,"orbit":{"cx":0.265,"cy":0.818,"R":0.263,"period":3.9671,"phase":5.272,"ox":0.13961528372872306,"oy":-0.22288241866362668,"c":0.9999965159795775,"s":0.0026397023897652286}},{"m":0.192,"r":0.07,"star":true,"orbit":{"cx":0.265,"cy":0.818,"R":0.276,"period":3.9671,"phase":8.414,"ox":-0.14661168535711813,"oy":0.23383971800518707,"c":0.9999965159795775,"s":0.0026397023897652286}}],"targets":[[-0.115,1.03],[-0.277,1.338]],"sol":[0.10795,0.50784]},{"name":"Promenade","par":1,"launch":[-0.126,-1.38],"bodies":[{"m":0.125,"r":0.063,"star":true,"orbit":{"cx":0.015,"cy":0.739,"R":0.315,"period":4.9904,"phase":4.218,"ox":-0.1494655736132482,"oy":-0.27728152175084203,"c":0.9999977983090053,"s":0.0020984225365929497}},{"m":0.159,"r":0.067,"star":true,"orbit":{"cx":0.015,"cy":0.739,"R":0.249,"period":4.9904,"phase":7.359,"ox":0.11827885692610098,"oy":0.21911438109867395,"c":0.9999977983090053,"s":0.0020984225365929497}}],"targets":[[0.608,1.105],[-0.607,1.037],[-0.365,1.351]],"sol":[0.33782,0.33782],"piles":[{"x":0.737,"y":1.372,"vx":0.35853,"vy":-0.40894}]},{"name":"Tango","par":1,"launch":[0.119,-1.38],"bodies":[{"m":0.132,"r":0.064,"star":true,"orbit":{"cx":0.042,"cy":0.472,"R":0.23,"period":4.6774,"phase":3.955,"ox":-0.15801610371372346,"oy":-0.16712543483005152,"c":0.9999974937866661,"s":0.0022388435377837324}},{"m":0.108,"r":0.061,"star":true,"orbit":{"cx":0.042,"cy":0.472,"R":0.28,"period":4.6774,"phase":7.096,"ox":0.19248797636925263,"oy":0.2033430081248678,"c":0.9999974937866661,"s":0.0022388435377837324}}],"targets":[[0.667,0.926],[-0.817,1.114]],"sol":[0.26908,0.02828],"piles":[{"x":0.63,"y":1.252,"vx":0.39581,"vy":-0.29838}]},{"name":"Contra","par":1,"launch":[0.064,-1.38],"bodies":[{"m":0.22,"r":0.072,"star":true,"orbit":{"cx":0.038,"cy":0.12,"R":0.193,"period":-3.35,"phase":1.113,"ox":0.08530067778181698,"oy":0.17312652705452922,"c":0.9999951141821419,"s":-0.003125957748429483}},{"m":0.152,"r":0.066,"star":true,"orbit":{"cx":0.038,"cy":0.12,"R":0.279,"period":-3.35,"phase":4.254,"ox":-0.12345860855970148,"oy":-0.25019786564337915,"c":0.9999951141821419,"s":-0.003125957748429483}}],"targets":[[-0.558,0.602],[0.448,0.521],[-0.35,0.319]],"sol":[0.31492,-0.16046],"piles":[{"x":-0.476,"y":0.931,"vx":0.52574,"vy":0.33321}]},{"name":"Allemande","par":1,"launch":[-0.286,-1.38],"bodies":[{"m":0.181,"r":0.069,"star":true,"orbit":{"cx":0.137,"cy":0.333,"R":0.169,"period":3.2276,"phase":4.674,"ox":-0.006486144290985003,"oy":-0.16887548647520315,"c":0.9999947365870373,"s":0.0032445027696066157}},{"m":0.118,"r":0.062,"star":true,"orbit":{"cx":0.137,"cy":0.333,"R":0.259,"period":3.2276,"phase":7.815,"ox":0.010093686406003338,"oy":0.25880324088916906,"c":0.9999947365870373,"s":0.0032445027696066157}}],"targets":[[0.826,0.6],[-0.769,0.885],[0.182,0.927]],"sol":[0.31029,-0.03261],"piles":[{"x":-0.204,"y":1.12,"vx":-0.54176,"vy":-0.23474}]},{"name":"Gavotte","par":1,"launch":[-0.139,-1.38],"bodies":[{"m":0.15,"r":0.066,"star":true,"orbit":{"cx":-0.102,"cy":0.489,"R":0.345,"period":5.4451,"phase":0.245,"ox":0.3346973771155592,"oy":0.08368193205205736,"c":0.9999981506658633,"s":0.0019231913200072085}},{"m":0.182,"r":0.069,"star":true,"orbit":{"cx":-0.102,"cy":0.489,"R":0.284,"period":5.4451,"phase":3.386,"ox":-0.27555977743638843,"oy":-0.06872269682723488,"c":0.9999981506658633,"s":0.0019231913200072085}}],"targets":[[-0.772,0.828],[0.581,0.854],[-0.165,1.226]],"sol":[0.34139,0.09148]},{"name":"Reel","par":1,"launch":[0.341,-1.38],"bodies":[{"m":0.16,"r":0.067,"star":true,"orbit":{"cx":0.263,"cy":-0.052,"R":0.216,"period":3.2552,"phase":2.36,"ox":-0.15331519217421802,"oy":0.15215272540635807,"c":0.9999948254628168,"s":0.0032169935639645873}},{"m":0.155,"r":0.066,"star":true,"orbit":{"cx":0.263,"cy":-0.052,"R":0.223,"period":3.2552,"phase":5.501,"ox":0.1581906161166574,"oy":-0.15717738060112954,"c":0.9999948254628168,"s":0.0032169935639645873}}],"targets":[[0.56,1.007],[-0.375,0.192],[-0.254,-0.144]],"sol":[0.38391,0.66495],"piles":[{"x":0.176,"y":0.708,"vx":0.63754,"vy":0.07298}]},{"name":"Last dance","par":1,"launch":[0.068,-1.38],"bodies":[{"m":0.162,"r":0.067,"star":true,"orbit":{"cx":0.105,"cy":0.327,"R":0.226,"period":3.3122,"phase":3.25,"ox":-0.22467330679420347,"oy":-0.024452100403804494,"c":0.9999950020285283,"s":0.003161632167667576}},{"m":0.164,"r":0.067,"star":true,"orbit":{"cx":0.105,"cy":0.327,"R":0.223,"period":3.3122,"phase":6.391,"ox":0.2217051780903355,"oy":0.02399612485241363,"c":0.9999950020285283,"s":0.003161632167667576}}],"targets":[[0.761,0.583],[0.386,0.883],[0.562,-0.148]],"sol":[0.31157,-0.01633],"piles":[{"x":0.789,"y":-0.281,"vx":-0.39652,"vy":-0.44609},{"x":0.236,"y":1.255,"vx":0.58399,"vy":-0.08244}]}]},{"id":"w3","name":"Moons","theme":{"acc":"#b6a8ff","neb":"#5df2ff"},"levels":[{"name":"Moonrise","par":1,"launch":[0.065,-1.38],"bodies":[{"x":0.101,"y":-0.046,"m":0.28,"r":0.077},{"m":0.087,"r":0.045,"orbit":{"cx":0.101,"cy":-0.046,"R":0.495,"period":5.23,"phase":2.01,"ox":-0.21048333178858533,"oy":0.44801982884597447,"c":0.9999979954185025,"s":0.0020022884349245873}}],"targets":[[0.29,0.803]],"sol":[-0.25235,0.94178]},{"name":"Tug","par":1,"launch":[-0.272,-1.38],"bodies":[{"x":-0.202,"y":-0.263,"m":0.235,"r":0.074},{"m":0.078,"r":0.044,"orbit":{"cx":-0.202,"cy":-0.263,"R":0.719,"period":7.25,"phase":1.01,"ox":0.38240785866816157,"oy":0.6088720962803529,"c":0.9999989568394573,"s":0.0014444099131928972}}],"targets":[[0.658,0.452]],"sol":[-0.20271,0.95369]},{"name":"Tidewater","par":1,"launch":[-0.372,-1.38],"bodies":[{"x":-0.245,"y":-0.207,"m":0.299,"r":0.079},{"m":0.073,"r":0.044,"orbit":{"cx":-0.245,"cy":-0.207,"R":0.399,"period":5.52,"phase":6.26,"ox":0.3988927618894575,"oy":-0.0092501087669594,"c":0.9999982005120013,"s":0.0018970958751027428}}],"targets":[[-0.436,0.64],[0.06,0.403]],"sol":[0.47018,0.30534]},{"name":"Perigee","par":1,"launch":[-0.352,-1.38],"bodies":[{"x":-0.475,"y":-0.499,"m":0.25,"r":0.075},{"m":0.074,"r":0.044,"orbit":{"cx":-0.475,"cy":-0.499,"R":0.503,"period":5.36,"phase":2.12,"ox":-0.2625701121028178,"oy":0.4290290622210967,"c":0.9999980914764521,"s":0.001953725531709175}}],"targets":[[-0.486,-0.218],[-0.795,0.228]],"sol":[-0.33614,0.10922]},{"name":"Rendezvous","par":1,"launch":[0.085,-1.38],"bodies":[{"x":-0.439,"y":0.028,"m":0.266,"r":0.076},{"m":0.052,"r":0.041,"orbit":{"cx":-0.439,"cy":0.028,"R":0.51,"period":6.4,"phase":0.49,"ox":0.44998975789116197,"oy":0.2400192029672906,"c":0.9999986613495281,"s":0.001636245443624048}}],"targets":[[0.002,0.58],[-0.672,0.756]],"sol":[0.25646,0.35298]},{"name":"Swing-by","par":2,"launch":[-0.304,-1.38],"bodies":[{"x":0.59,"y":-0.613,"m":0.211,"r":0.072},{"m":0.074,"r":0.044,"orbit":{"cx":0.59,"cy":-0.613,"R":0.48,"period":-5.74,"phase":5.38,"ox":0.29717360744620736,"oy":-0.37694541652261465,"c":0.9999983358083638,"s":-0.0018243849656516807}}],"targets":[[0.656,0.305],[0.126,1.202],[-0.293,1.161]],"sol":[0.76361,0.08026]},{"name":"Capture","par":1,"launch":[-0.236,-1.38],"bodies":[{"x":0.483,"y":-0.443,"m":0.283,"r":0.078},{"m":0.056,"r":0.042,"orbit":{"cx":0.483,"cy":-0.443,"R":0.716,"period":-8.18,"phase":0.58,"ox":0.5989072573392739,"oy":0.3923851387429815,"c":0.9999991805535585,"s":-0.0012801922556917031}}],"targets":[[0.72,-0.144],[0.476,0.087],[-0.505,-0.631]],"sol":[-0.27922,0.27922]},{"name":"Shepherd","par":1,"launch":[-0.229,-1.38],"bodies":[{"x":-0.698,"y":-0.664,"m":0.218,"r":0.072},{"m":0.07,"r":0.043,"orbit":{"cx":-0.698,"cy":-0.664,"R":0.506,"period":7.97,"phase":0.06,"ox":0.5050894732072133,"oy":0.030341787278598965,"c":0.9999991368017822,"s":0.0013139237765163873}}],"targets":[[-0.341,1.456]],"sol":[0.4875,0.84437]},{"name":"Moonlit","par":1,"launch":[0.205,-1.38],"bodies":[{"x":-0.397,"y":0.435,"m":0.319,"r":0.08},{"m":0.061,"r":0.042,"orbit":{"cx":-0.397,"cy":0.435,"R":0.428,"period":5.63,"phase":4.09,"ox":-0.24951451565150687,"oy":-0.3477448870640572,"c":0.9999982701425139,"s":0.0018600301018869515}}],"targets":[[-0.542,0.64],[-0.198,0.638],[-0.745,1.018]],"sol":[0.09148,0.34139]},{"name":"Syzygy","par":1,"launch":[0.262,-1.38],"bodies":[{"x":0.597,"y":0.416,"m":0.271,"r":0.077},{"m":0.062,"r":0.042,"orbit":{"cx":0.597,"cy":0.416,"R":0.542,"period":-8.43,"phase":2.88,"ox":-0.5235607873197023,"oy":0.14017168751632209,"c":0.9999992284358592,"s":-0.0012422269061327298}}],"targets":[[0.308,0.517],[0.074,0.943],[0.773,0.786]],"sol":[-0.312,0]},{"name":"Lunation","par":1,"launch":[0.167,-1.38],"bodies":[{"x":-0.478,"y":0.675,"m":0.295,"r":0.078},{"m":0.055,"r":0.042,"orbit":{"cx":-0.478,"cy":0.675,"R":0.664,"period":6.65,"phase":1.19,"ox":0.24678215518099392,"oy":0.6164369942534467,"c":0.9999987601079942,"s":0.0015747325088610593}}],"targets":[[-0.762,0.972],[0.055,1.23],[0.71,0.004]],"sol":[-0.29128,0.11181]},{"name":"Apsis","par":1,"launch":[0.091,-1.38],"bodies":[{"x":-0.277,"y":-0.548,"m":0.316,"r":0.08},{"m":0.065,"r":0.043,"orbit":{"cx":-0.277,"cy":-0.548,"R":0.565,"period":5.67,"phase":4.26,"ox":-0.2469702243384707,"oy":-0.5081640564721254,"c":0.9999982944635749,"s":0.0018469082113792019}},{"m":0.054,"r":0.042,"orbit":{"cx":-0.277,"cy":-0.548,"R":0.418,"period":8.59,"phase":2.29,"ox":-0.27537245600580246,"oy":0.31447418093276336,"c":0.9999992569109549,"s":0.001219088814679366}}],"targets":[[-0.658,0.141],[-0.624,1.02]],"sol":[-0.86173,0.2309]}]},{"id":"w4","name":"Crowds","theme":{"acc":"#8fe3a8","neb":"#ffd166"},"levels":[{"name":"Cluster","par":2,"launch":[0.333,-1.38],"bodies":[{"x":0.052,"y":0.355,"m":0.114,"r":0.062},{"x":-0.106,"y":-0.517,"m":0.161,"r":0.067},{"x":0.354,"y":-0.141,"m":0.118,"r":0.062}],"targets":[[-0.312,0.857],[0.066,0.068],[-0.724,0.11],[-0.62,-0.627]],"sol":[0.51848,0.02717]},{"name":"Pinball","par":1,"launch":[-0.123,-1.38],"bodies":[{"x":-0.492,"y":-0.144,"m":0.122,"r":0.063},{"x":0.079,"y":-0.121,"m":0.14,"r":0.065},{"x":0.324,"y":0.56,"m":0.147,"r":0.066}],"targets":[[0.352,0.043],[-0.763,0.294],[-0.39,0.352]],"sol":[0.26167,0.16993]},{"name":"Thicket","par":1,"launch":[0.182,-1.38],"bodies":[{"x":0.435,"y":-0.076,"m":0.15,"r":0.066},{"x":-0.636,"y":0.232,"m":0.155,"r":0.067},{"x":-0.448,"y":-0.672,"m":0.143,"r":0.065},{"x":-0.12,"y":0.938,"m":0.101,"r":0.06}],"targets":[[0.112,1.169],[-0.641,-0.63],[0.138,-0.515]],"sol":[0.0877,0.55372]},{"name":"Constellation","par":1,"launch":[0.053,-1.38],"bodies":[{"x":-0.522,"y":0.625,"m":0.099,"r":0.06},{"x":0.29,"y":-0.077,"m":0.141,"r":0.065},{"x":0.475,"y":-0.461,"m":0.083,"r":0.058}],"targets":[[0.785,-0.091],[0.293,0.663],[-0.794,-0.471]],"sol":[0.0593,0.22132]},{"name":"Bramble","par":1,"launch":[-0.24,-1.38],"bodies":[{"x":-0.514,"y":0.675,"m":0.092,"r":0.059},{"x":0.655,"y":0.861,"m":0.146,"r":0.066},{"x":0.451,"y":-0.456,"m":0.137,"r":0.065}],"targets":[[-0.758,0.993],[-0.641,0.491],[0.817,-0.273]],"sol":[-0.15741,0.10222]},{"name":"Swarm","par":1,"launch":[0.071,-1.38],"bodies":[{"x":-0.155,"y":0.417,"m":0.148,"r":0.066},{"x":0.48,"y":-0.296,"m":0.122,"r":0.063},{"x":-0.467,"y":-0.386,"m":0.133,"r":0.064}],"targets":[[-0.424,-0.065],[0.642,0.279],[-0.77,0.241]],"sol":[-0.09641,0.29673]},{"name":"Lantern","par":1,"launch":[0.026,-1.38],"bodies":[{"x":-0.001,"y":0.096,"m":0.164,"r":0.067},{"x":-0.589,"y":0.071,"m":0.145,"r":0.065},{"x":-0.54,"y":-0.335,"m":0.122,"r":0.063}],"targets":[[0.422,0.693],[0.571,-0.161],[-0.631,-0.655],[0.583,-0.527]],"sol":[0.40733,0.15636]},{"name":"Archipelago","par":1,"launch":[-0.376,-1.38],"bodies":[{"x":-0.626,"y":0.56,"m":0.13,"r":0.064},{"x":-0.51,"y":-0.452,"m":0.113,"r":0.062},{"x":0.06,"y":0.163,"m":0.093,"r":0.059},{"x":-0.136,"y":-0.736,"m":0.085,"r":0.058}],"targets":[[0.353,-0.708],[-0.064,-0.409],[-0.434,0.777],[-0.585,0.129]],"sol":[0.5726,-0.18605]},{"name":"Maze of suns","par":1,"launch":[-0.147,-1.38],"bodies":[{"x":-0.355,"y":0.405,"m":0.164,"r":0.067},{"x":-0.495,"y":1.056,"m":0.152,"r":0.066},{"x":0.287,"y":-0.693,"m":0.09,"r":0.059},{"x":0.027,"y":0.262,"m":0.1,"r":0.06}],"targets":[[0.508,0.588],[-0.239,0.842],[-0.718,0.518]],"sol":[-0.42678,0.09071]},{"name":"Orrery","par":1,"launch":[0.029,-1.38],"bodies":[{"x":-0.578,"y":-0.209,"m":0.09,"r":0.059},{"x":0.69,"y":0.053,"m":0.105,"r":0.061},{"x":0.311,"y":0.999,"m":0.156,"r":0.067},{"x":0.652,"y":-0.588,"m":0.109,"r":0.061}],"targets":[[0.582,1.303],[-0.827,0.246],[0.388,0.066],[0.567,-0.349]],"sol":[0.13483,0.41496]},{"name":"Starfield","par":1,"launch":[-0.134,-1.38],"bodies":[{"x":0.64,"y":-0.744,"m":0.113,"r":0.062},{"x":-0.026,"y":-0.091,"m":0.15,"r":0.066},{"x":-0.407,"y":-0.606,"m":0.092,"r":0.059}],"targets":[[0.734,0.388],[-0.251,-0.225],[-0.413,0.269]],"sol":[0.17324,-0.53319]},{"name":"Labyrinth","par":1,"launch":[-0.305,-1.38],"bodies":[{"x":0.345,"y":-0.058,"m":0.106,"r":0.061},{"x":0.085,"y":0.621,"m":0.135,"r":0.064},{"x":0.441,"y":1.052,"m":0.092,"r":0.059},{"x":-0.452,"y":-0.683,"m":0.117,"r":0.062}],"targets":[[-0.239,1.224],[0.359,1.285],[0.739,-0.267],[-0.328,-0.223]],"sol":[-0.28081,-0.38651]}]},{"id":"w6","name":"Event horizon","theme":{"acc":"#ffcf9a","neb":"#8a5cff"},"levels":[{"name":"Shadow","par":1,"launch":[-0.41,-1.38],"bodies":[{"x":-0.272,"y":-0.338,"m":0.322,"rs":0.048,"r":0.126,"bh":true}],"targets":[[0.256,0.247],[0.155,-0.133]],"sol":[0.30688,-0.2485]},{"name":"Photon ring","par":1,"launch":[-0.307,-1.38],"bodies":[{"x":0.281,"y":-0.431,"m":0.3,"rs":0.045,"r":0.117,"bh":true}],"targets":[[0.317,-0.103],[0.111,0.247],[0.763,-0.548]],"sol":[-0.14151,0.36865]},{"name":"Einstein ring","par":1,"launch":[0.139,-1.38],"bodies":[{"x":-0.108,"y":-0.123,"m":0.336,"rs":0.05,"r":0.131,"bh":true}],"targets":[[-0.19,0.186],[-0.469,0.525]],"sol":[0.26167,0.16993],"piles":[{"x":-0.183,"y":0.473,"vx":0.80942,"vy":0.10186}]},{"name":"Precession","par":1,"launch":[0.275,-1.38],"bodies":[{"x":-0.246,"y":-0.354,"m":0.225,"rs":0.034,"r":0.088,"bh":true}],"targets":[[-0.029,0.292],[-0.734,-0.027],[0.028,-0.035]],"sol":[-0.14736,-0.22691],"piles":[{"x":0.329,"y":-0.039,"vx":0.29685,"vy":-0.54187}]},{"name":"Zoom-whirl","par":1,"launch":[-0.04,-1.38],"bodies":[{"x":-0.487,"y":0.144,"m":0.297,"rs":0.045,"r":0.116,"bh":true}],"targets":[[-0.211,0.513],[0.678,1.273]],"sol":[0.19132,0.19132]},{"name":"Lensing","par":1,"launch":[0.036,-1.38],"bodies":[{"x":-0.277,"y":-0.047,"m":0.229,"rs":0.034,"r":0.089,"bh":true}],"targets":[[-0.529,0.427],[-0.179,0.645],[-0.376,-0.375]],"sol":[0.15331,0.17027],"piles":[{"x":-0.664,"y":-0.705,"vx":0.49412,"vy":-0.29061}]},{"name":"Perihelion shift","par":1,"launch":[-0.152,-1.38],"bodies":[{"x":0.18,"y":-0.044,"m":0.323,"rs":0.048,"r":0.126,"bh":true}],"targets":[[-0.261,0.583],[0.463,0.313],[0.027,1.16]],"sol":[-0.26167,0.16993],"piles":[{"x":0.096,"y":0.793,"vx":0.65387,"vy":0.06562}]},{"name":"Redshift","par":1,"launch":[-0.062,-1.38],"bodies":[{"x":0.432,"y":-0.137,"m":0.317,"rs":0.048,"r":0.124,"bh":true}],"targets":[[0.655,1.247],[0.232,0.514],[0.629,0.158]],"sol":[-0.20877,0.23186],"piles":[{"x":-0.109,"y":0.167,"vx":-0.37948,"vy":-0.67532}]},{"name":"Last stable orbit","par":1,"launch":[-0.358,-1.38],"bodies":[{"x":0.186,"y":-0.294,"m":0.327,"rs":0.049,"r":0.128,"bh":true},{"x":0.167,"y":0.185,"m":0.107,"r":0.061}],"targets":[[-0.351,0.258],[-0.085,0.067],[-0.102,0.797]],"sol":[-0.29642,0.1925]},{"name":"Escape velocity","par":1,"launch":[-0.203,-1.38],"bodies":[{"x":0.086,"y":0.009,"m":0.257,"rs":0.039,"r":0.1,"bh":true}],"targets":[[0.465,1.219],[0.722,0.115],[0.233,0.28]],"sol":[-0.2263,-0.03584],"piles":[{"x":0.169,"y":0.667,"vx":-0.65619,"vy":0.08277},{"x":0.628,"y":0.779,"vx":0.44567,"vy":-0.3137}]},{"name":"Event horizon","par":1,"launch":[0.384,-1.38],"bodies":[{"x":0.254,"y":0.319,"m":0.273,"rs":0.041,"r":0.107,"bh":true}],"targets":[[-0.543,0.907],[0.735,0.893],[-0.064,0.934]],"sol":[0.31492,0.16046],"piles":[{"x":-0.329,"y":0.858,"vx":-0.41974,"vy":-0.454},{"x":0.679,"y":0.559,"vx":-0.40147,"vy":0.71094}]},{"name":"Singularity","par":1,"launch":[-0.315,-1.38],"bodies":[{"x":-0.421,"y":-0.489,"m":0.311,"rs":0.047,"r":0.121,"bh":true}],"targets":[[-0.374,-0.149],[0.433,0.977]],"sol":[0.35048,0.53968],"piles":[{"x":-0.452,"y":0.065,"vx":0.81667,"vy":0.0457}]}]},{"id":"d","name":"Today","daily":true,"theme":{"acc":"#ffe3a3","neb":"#5d7bff"},"levels":[{"name":"Vega","par":1,"launch":[0.255,-1.38],"bodies":[{"x":0.178,"y":0.742,"m":0.308,"rs":0.046,"r":0.12,"bh":true},{"x":-0.428,"y":0.535,"m":0.097,"r":0.06}],"targets":[[-0.121,1.387]],"sol":[0.25235,0.94178]},{"name":"Deneb","par":2,"launch":[0.439,-1.38],"bodies":[{"x":0.16,"y":0.959,"m":0.14,"r":0.065},{"x":-0.209,"y":0.082,"m":0.137,"r":0.065},{"x":0.422,"y":-0.019,"m":0.163,"r":0.067}],"targets":[[0.41,1.132],[-0.713,0.488],[0.796,1.03],[-0.136,0.523]],"sol":[0.43094,0.06825]},{"name":"Altair","par":1,"launch":[-0.22,-1.38],"bodies":[{"x":0.343,"y":0.333,"m":0.181,"r":0.069},{"x":0.062,"y":1.051,"m":0.138,"r":0.065}],"targets":[[-0.504,1.438],[0.772,0.971],[-0.121,1.388]],"sol":[0.35184,0.17927]},{"name":"Rigel","par":2,"launch":[-0.17,-1.38],"bodies":[{"x":-0.171,"y":0.902,"m":0.152,"r":0.066},{"x":-0.605,"y":0.767,"m":0.142,"r":0.065}],"targets":[[-0.204,-0.062],[-0.81,0.985],[0.266,1.45]],"sol":[0.17806,0.14419]},{"name":"Sirius","par":2,"launch":[-0.24171165854204446,-1.38],"bodies":[{"x":-0.379,"y":-0.715,"m":0.291,"r":0.078}],"targets":[[-0.132,-0.43],[-0.737,-0.518],[0.174,-0.32]],"sol":[0.56062,0],"piles":[{"x":0.021,"y":-0.183,"vx":-0.52849,"vy":0.39736}]},{"name":"Arcturus","par":1,"launch":[-0.145,-1.38],"bodies":[{"x":0.271,"y":0.912,"m":0.295,"rs":0.044,"r":0.115,"bh":true},{"x":-0.487,"y":0.671,"m":0.085,"r":0.058}],"targets":[[0.089,1.449]],"sol":[-0.30129,0.92728]},{"name":"Capella","par":2,"launch":[0.242,-1.38],"bodies":[{"x":0.659,"y":1.13,"m":0.089,"r":0.059},{"x":0.601,"y":-0.124,"m":0.091,"r":0.059},{"x":0.25,"y":0.68,"m":0.132,"r":0.064}],"targets":[[0.654,0.38],[0.441,0.903],[-0.568,-0.579],[0.175,0.321]],"sol":[-0.09148,0.34139]},{"name":"Procyon","par":1,"launch":[-0.024,-1.38],"bodies":[{"x":-0.11,"y":0.372,"m":0.316,"rs":0.047,"r":0.123,"bh":true}],"targets":[[-0.535,0.741],[-0.217,0.925],[0.685,1.418]],"sol":[-0.37304,0.57444],"piles":[{"x":-0.536,"y":0.991,"vx":0.56985,"vy":0.39217}]},{"name":"Aldebaran","par":2,"launch":[0.321,-1.38],"bodies":[{"x":0.676,"y":-0.193,"m":0.182,"r":0.069},{"x":0.459,"y":-0.582,"m":0.13,"r":0.064}],"targets":[[-0.225,-0.597],[-0.397,1.33],[0.16,0.071]],"sol":[0.47775,0]},{"name":"Antares","par":2,"launch":[0.05,-1.38],"bodies":[{"x":-0.436,"y":0.989,"m":0.137,"r":0.065},{"x":-0.119,"y":0.544,"m":0.151,"r":0.066}],"targets":[[-0.248,0.911],[0.107,0.881],[-0.021,-0.59]],"sol":[0.17146,0.07634]},{"name":"Spica","par":1,"launch":[0.138,-1.38],"bodies":[{"x":-0.175,"y":0.936,"m":0.285,"rs":0.043,"r":0.111,"bh":true}],"targets":[[-0.67,0.985],[0.208,1.532]],"sol":[-0.28277,0.43543],"piles":[{"x":-0.817,"y":1.203,"vx":-0.26206,"vy":-0.63011}]},{"name":"Pollux","par":2,"launch":[0.321,-1.38],"bodies":[{"x":0.464,"y":-0.064,"m":0.157,"r":0.067},{"x":-0.435,"y":0.125,"m":0.14,"r":0.065},{"x":-0.638,"y":-0.535,"m":0.116,"r":0.062}],"targets":[[0.418,0.651],[0.172,1.434],[-0.714,-0.128],[0.521,-0.586]],"sol":[0.56062,0]},{"name":"Castor","par":1,"launch":[0.185,-1.38],"bodies":[{"x":0.167,"y":-0.052,"m":0.32,"rs":0.048,"r":0.125,"bh":true}],"targets":[[0.45,0.502],[-0.235,0.337]],"sol":[-0.42003,0.30517]},{"name":"Regulus","par":1,"launch":[-0.179,-1.38],"bodies":[{"x":0.405,"y":0.259,"m":0.312,"r":0.08}],"targets":[[0.086,0.906],[0.405,0.705]],"sol":[0.53102,0.8177]},{"name":"Fomalhaut","par":1,"launch":[0.411,-1.38],"bodies":[{"x":-0.142,"y":0.161,"m":0.277,"rs":0.042,"r":0.108,"bh":true}],"targets":[[-0.52,0.474],[-0.068,0.502]],"sol":[-0.05103,0.97366],"piles":[{"x":-0.663,"y":0.85,"vx":0.47477,"vy":0.359}]},{"name":"Achernar","par":2,"launch":[-0.118,-1.38],"bodies":[{"m":0.12,"r":0.063,"star":true,"orbit":{"cx":0.243,"cy":0.488,"R":0.303,"period":-4.1044,"phase":3.288,"ox":-0.2997583772607225,"oy":-0.044203113714062714,"c":0.9999967451749723,"s":-0.002551399510398804}},{"m":0.181,"r":0.069,"star":true,"orbit":{"cx":0.243,"cy":0.488,"R":0.202,"period":-4.1044,"phase":6.429,"ox":0.19985634783327008,"oy":0.029350302055463937,"c":0.9999967451749723,"s":-0.002551399510398804}}],"targets":[[-0.442,1.381],[-0.078,0.196],[-0.27,1.028]],"sol":[0.25732,0.08361]},{"name":"Canopus","par":1,"launch":[-0.247,-1.38],"bodies":[{"x":-0.212,"y":0.905,"m":0.332,"rs":0.05,"r":0.129,"bh":true}],"targets":[[-0.107,1.215],[0.22,1.205],[-0.731,1.15]],"sol":[0.22691,0.14736],"piles":[{"x":-0.724,"y":1.432,"vx":0.51733,"vy":0.50261}]},{"name":"Mira","par":2,"launch":[0.192,-1.38],"bodies":[{"x":-0.184,"y":0.548,"m":0.167,"r":0.068},{"x":0.441,"y":0.432,"m":0.138,"r":0.065}],"targets":[[-0.647,0.753],[-0.094,0.242],[0.837,0.659]],"sol":[0.29128,0.11181]},{"name":"Polaris","par":2,"launch":[0.047,-1.38],"bodies":[{"x":-0.197,"y":0.426,"m":0.259,"rs":0.039,"r":0.101,"bh":true}],"targets":[[-0.438,0.983],[0.416,0.901],[0.778,1.325]],"sol":[0.27056,0],"piles":[{"x":-0.725,"y":1.044,"vx":-0.4508,"vy":-0.38515}]},{"name":"Alnitak","par":1,"launch":[0.343,-1.38],"bodies":[{"x":0.455,"y":1.007,"m":0.174,"r":0.068},{"x":0.229,"y":0.512,"m":0.209,"r":0.072}],"targets":[[0.726,0.984],[-0.08,1.023]],"sol":[0.25959,0.44963]},{"name":"Alnilam","par":1,"launch":[-0.177,-1.38],"bodies":[{"x":-0.299,"y":0.124,"m":0.271,"rs":0.041,"r":0.106,"bh":true}],"targets":[[0.409,1.329],[-0.292,1.205]],"sol":[-0.42003,0.30517]},{"name":"Mintaka","par":1,"launch":[0.116,-1.38],"bodies":[{"x":0.167,"y":-0.525,"m":0.167,"r":0.068},{"x":-0.034,"y":-0.108,"m":0.204,"r":0.071}],"targets":[[0.025,0.424],[0.408,-0.38],[-0.495,-0.171]],"sol":[-0.21391,0.08211]},{"name":"Bellatrix","par":2,"launch":[-0.22118060162756592,-1.38],"bodies":[{"x":-0.535,"y":-0.23,"m":0.34,"r":0.082}],"targets":[[-0.3,0.218],[-0.651,0.178],[0.693,0.688]],"sol":[0.39488,0]},{"name":"Saiph","par":2,"launch":[0.29109408615622673,-1.38],"bodies":[{"x":-0.546,"y":0.387,"m":0.331,"r":0.081}],"targets":[[-0.645,1.183],[0.552,0.179],[-0.807,0.711]],"sol":[0.22132,0.0593]},{"name":"Algol","par":2,"launch":[0.18,-1.38],"bodies":[{"x":0.326,"y":0.285,"m":0.112,"r":0.062},{"x":-0.173,"y":-0.169,"m":0.074,"r":0.057},{"x":-0.621,"y":0.462,"m":0.098,"r":0.06}],"targets":[[0.453,0.879],[-0.333,0.235],[-0.837,1.016],[0.705,0.642]],"sol":[0.3515,0.03694]},{"name":"Mizar","par":2,"launch":[0.124,-1.38],"bodies":[{"x":-0.337,"y":0.674,"m":0.128,"r":0.064},{"x":0.578,"y":0.865,"m":0.083,"r":0.058},{"x":0.267,"y":-0.267,"m":0.159,"r":0.067},{"x":0.318,"y":-0.694,"m":0.092,"r":0.059}],"targets":[[-0.745,-0.346],[0.396,-0.111],[-0.083,-0.415]],"sol":[0.51919,0]},{"name":"Alcor","par":2,"launch":[-0.20679911677725613,-1.38],"bodies":[{"x":-0.157,"y":-0.6,"m":0.253,"r":0.075}],"targets":[[-0.231,0.058],[-0.186,0.564],[-0.598,-0.155]],"sol":[-0.59695,0.66298]},{"name":"Dubhe","par":1,"launch":[-0.25,-1.38],"bodies":[{"x":-0.244,"y":-0.541,"m":0.236,"r":0.074}],"targets":[[-0.19,0.176]],"sol":[-0.4875,0.84437],"piles":[{"x":-0.011,"y":-0.118,"vx":0.61231,"vy":-0.33728}]},{"name":"Merak","par":1,"launch":[-0.275,-1.38],"bodies":[{"x":0.353,"y":0.222,"m":0.249,"rs":0.037,"r":0.097,"bh":true}],"targets":[[0.649,0.274],[0.425,0.674]],"sol":[0.57309,0.78879],"piles":[{"x":0.741,"y":0.738,"vx":0.52654,"vy":-0.39593}]},{"name":"Alioth","par":1,"launch":[0.238,-1.38],"bodies":[{"m":0.215,"r":0.072,"star":true,"orbit":{"cx":0,"cy":0.542,"R":0.209,"period":-3.6671,"phase":2.539,"ox":-0.17218860434760933,"oy":0.1184570999679734,"c":0.9999959226176472,"s":-0.0028556519536453127}},{"m":0.154,"r":0.066,"star":true,"orbit":{"cx":0,"cy":0.542,"R":0.292,"period":-3.6671,"phase":5.681,"ox":0.24063712055223266,"oy":-0.16540186278373722,"c":0.9999959226176472,"s":-0.0028556519536453127}}],"targets":[[-0.662,0.725],[0.241,1.113],[0.518,0.902]],"sol":[-0.40348,0.32674]},{"name":"Thuban","par":2,"launch":[0.353,-1.38],"bodies":[{"x":0.05,"y":0.314,"m":0.283,"r":0.078}],"targets":[[0.417,0.727],[-0.437,0.394],[-0.02,0.586]],"sol":[0.22913,0]},{"name":"Sadr","par":1,"launch":[-0.401,-1.38],"bodies":[{"x":-0.001,"y":-0.066,"m":0.217,"r":0.072},{"x":0.517,"y":0.362,"m":0.221,"r":0.073}],"targets":[[-0.361,0.449],[0.685,-0.047],[0.572,0.911]],"sol":[-0.17027,0.15331]},{"name":"Albireo","par":1,"launch":[-0.399,-1.38],"bodies":[{"x":0.228,"y":0.736,"m":0.172,"r":0.068},{"x":-0.214,"y":0.719,"m":0.203,"r":0.071}],"targets":[[0.42,0.878],[-0.523,0.932],[-0.819,-0.494]],"sol":[-0.19635,0.24247]},{"name":"Hadar","par":2,"launch":[-0.048,-1.38],"bodies":[{"x":0.516,"y":0.984,"m":0.336,"r":0.081}],"targets":[[0.558,1.533],[0.718,1.235],[0.408,0.346]],"sol":[0.30066,0.37128]},{"name":"Mimosa","par":1,"launch":[0.109,-1.38],"bodies":[{"x":-0.54,"y":0.412,"m":0.33,"rs":0.05,"r":0.129,"bh":true}],"targets":[[-0.799,0.631],[-0.274,0.717]],"sol":[-0.38583,0.3474]},{"name":"Acrux","par":2,"launch":[-0.152,-1.38],"bodies":[{"x":-0.176,"y":1.003,"m":0.209,"r":0.072},{"x":0.135,"y":0.754,"m":0.165,"r":0.067}],"targets":[[0.51,0.983],[-0.438,1.065],[-0.66,1.509]],"sol":[0.22913,0]},{"name":"Shaula","par":1,"launch":[-0.13719660630449654,-1.38],"bodies":[{"x":-0.318,"y":-0.357,"m":0.265,"r":0.076}],"targets":[[-0.051,0.025],[-0.577,0.075]],"sol":[0.39488,0],"piles":[{"x":-0.154,"y":0.346,"vx":-0.59004,"vy":0.13765}]},{"name":"Nunki","par":1,"launch":[0.348,-1.38],"bodies":[{"x":0.427,"y":-0.051,"m":0.309,"rs":0.046,"r":0.121,"bh":true}],"targets":[[0.833,0.201],[-0.053,0.202],[0.34,0.287]],"sol":[0.36074,0.16061]},{"name":"Alphard","par":1,"launch":[0.001,-1.38],"bodies":[{"x":0.132,"y":0.12,"m":0.204,"r":0.071},{"x":-0.474,"y":-0.254,"m":0.169,"r":0.068}],"targets":[[0.758,0.438],[-0.612,0.27]],"sol":[-0.4847,0.18606]},{"name":"Hamal","par":2,"launch":[-0.325,-1.38],"bodies":[{"x":-0.632,"y":-0.036,"m":0.339,"r":0.082}],"targets":[[-0.829,0.348],[-0.266,0.569],[-0.4,0.154]],"sol":[0.2485,0.30688]},{"name":"Mirfak","par":1,"launch":[0.234,-1.38],"bodies":[{"x":0.525,"y":-0.307,"m":0.248,"r":0.075}],"targets":[[0.672,0.391]],"sol":[0.61359,0.75772],"piles":[{"x":0.798,"y":0.135,"vx":-0.58783,"vy":0.36307}]},{"name":"Elnath","par":1,"launch":[-0.428,-1.38],"bodies":[{"x":0.011,"y":-0.51,"m":0.124,"r":0.063},{"x":0.356,"y":-0.737,"m":0.152,"r":0.066}],"targets":[[-0.48,0.185],[0.22,0.151]],"sol":[0.5015,-0.13438]},{"name":"Alhena","par":2,"launch":[0.246,-1.38],"bodies":[{"x":-0.228,"y":-0.57,"m":0.297,"r":0.079},{"m":0.077,"r":0.044,"orbit":{"cx":-0.228,"cy":-0.57,"R":0.505,"period":5.57,"phase":0.45,"ox":0.4547257866881018,"oy":0.21965759472617127,"c":0.9999982326737746,"s":0.001880066309305733}},{"m":0.051,"r":0.041,"orbit":{"cx":-0.228,"cy":-0.57,"R":0.678,"period":6.89,"phase":0.96,"ox":0.38884655055712564,"oy":0.5554118833080769,"c":0.9999988449821051,"s":0.001519879750390803}}],"targets":[[-0.557,-0.47],[0.088,1.439],[0.218,0.719]],"sol":[0.7105,0.15102]},{"name":"Wezen","par":1,"launch":[0.306,-1.38],"bodies":[{"x":0.337,"y":-0.092,"m":0.244,"rs":0.037,"r":0.095,"bh":true},{"x":0.625,"y":-0.493,"m":0.075,"r":0.057}],"targets":[[0.654,-0.03],[0.5,0.33],[0.343,0.658]],"sol":[0.07348,0.34571]},{"name":"Adhara","par":1,"launch":[-0.03,-1.38],"bodies":[{"x":0.156,"y":0.686,"m":0.252,"rs":0.038,"r":0.098,"bh":true}],"targets":[[-0.037,1.102],[0.457,0.998]],"sol":[0.25959,0.44963],"piles":[{"x":-0.076,"y":1.457,"vx":0.56226,"vy":0.16919}]},{"name":"Naos","par":2,"launch":[0.09688904879149046,-1.38],"bodies":[{"x":-0.401,"y":0.158,"m":0.325,"r":0.081}],"targets":[[-0.29,0.665],[-0.563,0.497],[-0.754,0.794]],"sol":[0.312,0],"piles":[{"x":-0.046,"y":0.718,"vx":0.59131,"vy":-0.37485}]},{"name":"Avior","par":2,"launch":[-0.216,-1.38],"bodies":[{"x":-0.26,"y":-0.193,"m":0.183,"r":0.069}],"targets":[[-0.471,0.22],[-0.653,0.62]],"sol":[0.3515,0.03694]},{"name":"Atria","par":1,"launch":[-0.185,-1.38],"bodies":[{"x":-0.201,"y":0.543,"m":0.333,"rs":0.05,"r":0.13,"bh":true}],"targets":[[-0.816,-0.002],[-0.118,1.014],[0.48,0.86]],"sol":[-0.28081,0.38651]},{"name":"Enif","par":1,"launch":[0.412,-1.38],"bodies":[{"x":0.26,"y":0.885,"m":0.239,"rs":0.036,"r":0.093,"bh":true}],"targets":[[0.519,1.103]],"sol":[0.15252,0.963],"piles":[{"x":0.654,"y":1.369,"vx":-0.5093,"vy":0.4146}]},{"name":"Scheat","par":2,"launch":[-0.292,-1.38],"bodies":[{"x":-0.614,"y":-0.269,"m":0.253,"r":0.075}],"targets":[[-0.515,0.112],[0.356,-0.507],[0.168,0.805]],"sol":[0.35344,0]},{"name":"Markab","par":2,"launch":[-0.391,-1.38],"bodies":[{"x":-0.471,"y":1.006,"m":0.296,"rs":0.044,"r":0.116,"bh":true}],"targets":[[0.137,1.462],[-0.281,1.314],[-0.462,-0.582]],"sol":[0.18769,0]},{"name":"Alpheratz","par":1,"launch":[0.104,-1.38],"bodies":[{"x":0.636,"y":0.396,"m":0.185,"r":0.069},{"x":-0.317,"y":0.531,"m":0.163,"r":0.067}],"targets":[[-0.409,0.909],[0.141,0.777],[-0.753,0.986]],"sol":[0.40502,0.79489]},{"name":"Mirach","par":2,"launch":[0.385,-1.38],"bodies":[{"x":-0.438,"y":0.477,"m":0.238,"rs":0.036,"r":0.093,"bh":true}],"targets":[[-0.664,0.968],[0.519,0.901],[-0.448,1.26]],"sol":[0.22132,0.0593],"piles":[{"x":-0.307,"y":1.082,"vx":0.64344,"vy":-0.13932}]},{"name":"Almach","par":1,"launch":[-0.107,-1.38],"bodies":[{"x":0.279,"y":0.701,"m":0.266,"rs":0.04,"r":0.104,"bh":true}],"targets":[[0.243,1.354]],"sol":[-0.10192,0.96966],"piles":[{"x":0.439,"y":1.134,"vx":0.7796,"vy":-0.28807}]},{"name":"Ankaa","par":2,"launch":[-0.394,-1.38],"bodies":[{"x":-0.076,"y":-0.415,"m":0.152,"r":0.066},{"x":0.062,"y":0.113,"m":0.118,"r":0.063},{"x":0.218,"y":0.86,"m":0.109,"r":0.061}],"targets":[[0.272,-0.274],[0.519,1.336],[-0.235,0.581],[-0.691,0.838]],"sol":[0.43571,0.02283]},{"name":"Diphda","par":1,"launch":[-0.297,-1.38],"bodies":[{"m":0.134,"r":0.064,"star":true,"orbit":{"cx":0.051,"cy":0.277,"R":0.232,"period":3.3657,"phase":3.373,"ox":-0.22581594430663876,"oy":-0.05320863930698684,"c":0.9999951596575972,"s":0.0031113761226425874}},{"m":0.153,"r":0.066,"star":true,"orbit":{"cx":0.051,"cy":0.277,"R":0.203,"period":3.3657,"phase":6.515,"ox":0.19756996982107086,"oy":0.04663804267870974,"c":0.9999951596575972,"s":0.0031113761226425874}}],"targets":[[0.604,0.903],[-0.405,0.639]],"sol":[-0.23571,0.4626],"piles":[{"x":-0.807,"y":0.761,"vx":-0.2652,"vy":-0.47012}]},{"name":"Kochab","par":2,"launch":[-0.35,-1.38],"bodies":[{"x":0.214,"y":-0.103,"m":0.12,"r":0.063},{"x":-0.343,"y":0.337,"m":0.114,"r":0.062},{"x":-0.187,"y":0.922,"m":0.131,"r":0.064}],"targets":[[0.062,0.644],[0.588,-0.486],[-0.017,0.238],[0.157,1.254]],"sol":[0.31157,0.01633]},{"name":"Pherkad","par":1,"launch":[-0.236,-1.38],"bodies":[{"m":0.126,"r":0.063,"star":true,"orbit":{"cx":-0.029,"cy":-0.147,"R":0.271,"period":-4.2194,"phase":0.311,"ox":0.25799959752114265,"oy":0.08292893149515669,"c":0.9999969201779764,"s":-0.002481861108536008}},{"m":0.149,"r":0.066,"star":true,"orbit":{"cx":-0.029,"cy":-0.147,"R":0.228,"period":-4.2194,"phase":3.452,"ox":-0.217103703605022,"oy":-0.06964181129883651,"c":0.9999969201779764,"s":-0.002481861108536008}}],"targets":[[-0.479,0.306],[-0.037,1.28]],"sol":[-0.33456,0.87156]},{"name":"Denebola","par":2,"launch":[-0.36,-1.38],"bodies":[{"x":-0.126,"y":-0.414,"m":0.186,"r":0.069}],"targets":[[0.551,-0.001],[0.21,0.871],[-0.079,0.333]],"sol":[0.52339,0.20091]},{"name":"Algieba","par":2,"launch":[-0.262,-1.38],"bodies":[{"x":0.683,"y":0.185,"m":0.156,"r":0.067},{"x":-0.279,"y":-0.388,"m":0.165,"r":0.068},{"x":-0.013,"y":0.964,"m":0.108,"r":0.061}],"targets":[[-0.102,1.462],[-0.598,-0.017],[-0.169,-0.098],[0.633,0.524]],"sol":[0.27019,0.01416]},{"name":"Alkaid","par":2,"launch":[0.259,-1.38],"bodies":[{"x":-0.08,"y":-0.568,"m":0.146,"r":0.066},{"x":-0.172,"y":0.437,"m":0.156,"r":0.067},{"x":0.447,"y":-0.011,"m":0.129,"r":0.064}],"targets":[[0.588,0.353],[-0.366,-0.319],[-0.163,0.789],[0.169,0.17]],"sol":[0.43571,0.02283]},{"name":"Izar","par":1,"launch":[0.236,-1.38],"bodies":[{"x":-0.353,"y":-0.042,"m":0.317,"rs":0.048,"r":0.124,"bh":true}],"targets":[[-0.446,0.644],[0.033,0.461],[0.585,-0.099]],"sol":[0.29195,0.32424]},{"name":"Alphecca","par":2,"launch":[-0.151,-1.38],"bodies":[{"x":0.525,"y":-0.224,"m":0.289,"r":0.078}],"targets":[[0.814,1.222],[-0.387,-0.461],[0.479,0.186]],"sol":[-0.27333,0.53644]},{"name":"Sabik","par":1,"launch":[0.338,-1.38],"bodies":[{"x":0.057,"y":0.561,"m":0.188,"r":0.07}],"targets":[[0.356,0.851],[0.124,1.11]],"sol":[0.10192,0.96966]},{"name":"Eltanin","par":1,"launch":[-0.353,-1.38],"bodies":[{"x":0.347,"y":-0.089,"m":0.278,"rs":0.042,"r":0.108,"bh":true}],"targets":[[-0.579,-0.67],[0.573,0.119],[0.164,0.307]],"sol":[-0.18339,0.25241],"piles":[{"x":0.656,"y":0.532,"vx":-0.60332,"vy":0.3002}]},{"name":"Errai","par":2,"launch":[0.055763815040700104,-1.38],"bodies":[{"x":0.015,"y":-0.633,"m":0.292,"r":0.078}],"targets":[[0.251,-0.249],[-0.099,-0.377],[0.423,1.046]],"sol":[-0.4875,0.84437],"piles":[{"x":0.401,"y":-0.07,"vx":0.53943,"vy":-0.36984}]},{"name":"Schedar","par":2,"launch":[0.042,-1.38],"bodies":[{"x":-0.02,"y":-0.171,"m":0.294,"r":0.078}],"targets":[[0.249,0.382],[0.762,0.921],[-0.05,0.522]],"sol":[0.41496,0.13483]},{"name":"Caph","par":1,"launch":[-0.421,-1.38],"bodies":[{"x":0.024,"y":0.2,"m":0.241,"rs":0.036,"r":0.094,"bh":true}],"targets":[[0.707,1.221]],"sol":[0.6524,0.72457]},{"name":"Ruchbah","par":1,"launch":[-0.003,-1.38],"bodies":[{"m":0.131,"r":0.064,"star":true,"orbit":{"cx":0.272,"cy":-0.051,"R":0.319,"period":-4.3077,"phase":5.377,"ox":0.19674420408424864,"oy":-0.25110300308689165,"c":0.9999970451453278,"s":-0.0024309875798164586}},{"m":0.194,"r":0.07,"star":true,"orbit":{"cx":0.272,"cy":-0.051,"R":0.215,"period":-4.3077,"phase":8.519,"ox":-0.13267082080892073,"oy":0.16918467219546587,"c":0.9999970451453278,"s":-0.0024309875798164586}}],"targets":[[-0.125,0.482],[-0.646,1.406]],"sol":[0.10715,0.6765]},{"name":"Sheratan","par":1,"launch":[0.405,-1.38],"bodies":[{"x":-0.1,"y":1.031,"m":0.15,"r":0.066},{"x":-0.064,"y":0.307,"m":0.161,"r":0.067}],"targets":[[-0.818,1.166],[-0.148,0.664]],"sol":[-0.09325,0.88724]},{"name":"Alcyone","par":2,"launch":[0.269,-1.38],"bodies":[{"x":0.038,"y":0.185,"m":0.105,"r":0.061},{"x":-0.076,"y":-0.268,"m":0.165,"r":0.067},{"x":-0.486,"y":-0.309,"m":0.125,"r":0.063},{"x":0.497,"y":0.694,"m":0.153,"r":0.066}],"targets":[[-0.181,0.364],[0.716,0.527],[-0.625,0.581],[-0.823,-0.253]],"sol":[0.06487,0.30518]},{"name":"Electra","par":1,"launch":[0.308,-1.38],"bodies":[{"x":0.314,"y":0.833,"m":0.263,"rs":0.04,"r":0.103,"bh":true}],"targets":[[-0.055,1.142],[0.643,1.473]],"sol":[-0.22803,0.51216]},{"name":"Maia","par":1,"launch":[-0.104,-1.38],"bodies":[{"x":-0.256,"y":0.071,"m":0.184,"r":0.069},{"x":0.209,"y":0.353,"m":0.2,"r":0.071}],"targets":[[0.696,0.814],[0.049,0.745],[-0.34,0.458]],"sol":[-0.34601,0.77714]},{"name":"Merope","par":2,"launch":[-0.181,-1.38],"bodies":[{"x":-0.591,"y":0.029,"m":0.109,"r":0.061},{"x":-0.246,"y":-0.312,"m":0.124,"r":0.063},{"x":0.091,"y":0.962,"m":0.105,"r":0.061},{"x":-0.458,"y":0.821,"m":0.074,"r":0.057}],"targets":[[-0.247,1.106],[-0.63,-0.173],[0.462,0.392],[0.016,0.322]],"sol":[0.15184,0.11032]},{"name":"Taygeta","par":1,"launch":[-0.429,-1.38],"bodies":[{"x":0.614,"y":-0.507,"m":0.327,"r":0.081}],"targets":[[0.223,0.459],[0.782,-0.135]],"sol":[0.85285,0.37971]},{"name":"Atlas","par":1,"launch":[-0.173,-1.38],"bodies":[{"x":-0.443,"y":0.591,"m":0.228,"rs":0.034,"r":0.089,"bh":true}],"targets":[[-0.61,0.945],[-0.026,1.223]],"sol":[-0.33456,0.87156],"piles":[{"x":-0.508,"y":1.121,"vx":0.69269,"vy":0.08495}]},{"name":"Pleione","par":2,"launch":[0.17939965620171278,-1.38],"bodies":[{"x":-0.403,"y":0.107,"m":0.253,"r":0.075}],"targets":[[-0.267,0.756],[-0.685,0.606],[-0.812,0.158]],"sol":[0.312,0],"piles":[{"x":0.055,"y":0.52,"vx":0.42893,"vy":-0.47567}]},{"name":"Menkalinan","par":1,"launch":[0.23,-1.38],"bodies":[{"x":-0.221,"y":0.735,"m":0.14,"r":0.065},{"x":0.236,"y":1.117,"m":0.166,"r":0.068}],"targets":[[-0.552,0.989],[0.67,1.513],[0.248,1.495]],"sol":[-0.28081,0.38651]},{"name":"Mebsuta","par":2,"launch":[0.387,-1.38],"bodies":[{"x":-0.247,"y":-0.642,"m":0.234,"r":0.074},{"m":0.075,"r":0.044,"orbit":{"cx":-0.247,"cy":-0.642,"R":0.464,"period":7.14,"phase":1.37,"ox":0.09254467054287381,"oy":0.454677340488957,"c":0.9999989244496674,"s":0.0014666627111466098}}],"targets":[[-0.47,-0.085],[-0.783,1.281],[0.244,0.504]],"sol":[0.60124,0.03151]},{"name":"Wasat","par":2,"launch":[0.127,-1.38],"bodies":[{"x":0.621,"y":0.002,"m":0.197,"r":0.07}],"targets":[[0.735,0.707],[-0.804,1.399],[0.532,0.278]],"sol":[0.40348,0.32674]},{"name":"Gomeisa","par":2,"launch":[-0.269,-1.38],"bodies":[{"x":-0.059,"y":-0.737,"m":0.136,"r":0.065},{"x":-0.193,"y":0.492,"m":0.126,"r":0.063},{"x":0.554,"y":-0.291,"m":0.134,"r":0.064}],"targets":[[-0.633,-0.207],[-0.508,0.479],[-0.403,0.962],[0.764,1.32]],"sol":[0.684,0.03585]}]}];
 
 /* ======================= sound ======================= */
 const Sound = {
@@ -193,18 +219,15 @@ let CLIP = false;
 const buzz = ms => { if (CLIP) return; try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 
 /* ======================= physics ======================= */
+// Shared by the game and the level checker, so a level proven solvable offline is solvable in play.
 // Newtonian gravity with a little softening, integrated by leapfrog (kick,
 // drift, kick) so orbits keep their energy. Black holes pull with the
 // Paczynski-Wiita force m / (r - rs)^2, a one-line stand-in for general
 // relativity that reproduces its precessing, zoom-whirl orbits. Every level runs in fixed steps
 // from its start, and moons advance by an exact rotation each step, so a
-// throw replays bit for bit on any device.
-const EPS2 = 0.0004, DT = 1 / 600, PULL = 0.75, SPEED = 1.3, TR = 0.075, STALE = 4.5, FF = 14;
-function bodyPos(b, t) {
-  if (!b.orbit) return [b.x, b.y];
-  const o = b.orbit, a = o.phase + t / o.period * Math.PI * 2;
-  return [o.cx + o.R * Math.cos(a), o.cy + o.R * Math.sin(a)];
-}
+// throw replays bit for bit on any device. Only + - * / and sqrt appear in a step:
+// those are the operations every device rounds the same way.
+const EPS2 = 0.0004, DT = 1 / 600, TR = 0.075, STALE = 4.5;
 function startPos(L) { return L.bodies.map(b => b.orbit ? [b.orbit.cx + b.orbit.ox, b.orbit.cy + b.orbit.oy] : [b.x, b.y]); }
 function advance(L, P, Q) {
   for (let i = 0; i < L.bodies.length; i++) {
@@ -229,9 +252,131 @@ function accel(B, P, x, y, out) {
 const isMoon = b => b.orbit && !b.star;
 function energy(B, P, x, y, vx, vy) {
   let pot = 0;
-  // sqrt, not hypot: only sqrt is guaranteed to round the same on every device, and this decides a comet's fate
   for (let k = 0; k < B.length; k++) { const dx = P[k][0] - x, dy = P[k][1] - y, r = Math.sqrt(dx * dx + dy * dy); pot -= B[k].m / (B[k].rs ? Math.max(r - B[k].rs, 1e-3) : r); }
   return 0.5 * (vx * vx + vy * vy) + pot;
+}
+
+/* ---- rubble: piles of rock held together by their own gravity ---- */
+// Each rock is a small sphere. Rocks pull on one another, and touching spheres push apart with a stiff
+// spring that loses a little energy each bounce (the spring-dashpot contact used to model sand and
+// rubble piles). Rocks are far too light to bend a comet's path by gravity, but a comet that strikes
+// them trades momentum through the same contact, so m1 v1 + m2 v2 is kept in every collision: a heavy
+// comet ploughs through, a light one glances off.
+const RR = 0.03, RG = 0.0015, KC = 20000, CC = 30, CR = 0.025, BOOST = 0.32;
+const KINDS = { n: 4, s: 4, b: 4, h: 16 };
+const S3 = Math.sqrt(3);
+function makeRocks(L) {
+  const out = [];
+  (L.piles || []).forEach((p, pi) => {
+    // hexagonal packing: one rock and six touching it
+    const off = [[0, 0], [2 * RR, 0], [-2 * RR, 0], [RR, S3 * RR], [-RR, S3 * RR], [RR, -S3 * RR], [-RR, -S3 * RR]];
+    off.forEach(([ox, oy], k) => out.push({ x: p.x + ox, y: p.y + oy, vx: p.vx, vy: p.vy, fx: 0, fy: 0, m: 1, r: RR, rock: true,
+      alive: true, fate: null, by: null, pile: pi, id: pi * 7 + k, a: [0, 0, -1], k: 0, age: 0 }));
+  });
+  return out;
+}
+function makeWorld(L) { return { L, P: startPos(L), Q: startPos(L), tick: 0, comets: [], rocks: makeRocks(L), got: L.targets.map(() => false), won: false }; }
+function newComet(W, vx, vy, kind) {
+  const [x, y] = W.L.launch;
+  kind = KINDS[kind] ? kind : 'n';
+  return { x, y, vx, vy, kind, m: KINDS[kind], r: CR, power: kind === 's' || kind === 'b', age: 0, alive: true, fate: null, a: [0, 0, -1], fx: 0, fy: 0, k: 0,
+    cells: new Set(), fresh: 0, novel: 0, ffBase: 0, ff: false, bumped: false };
+}
+// a tap in flight: a split conserves momentum (the halves fly apart, their center of mass keeps going);
+// a burn adds speed along the path, and is worth most where the comet is already fastest (the Oberth effect,
+// since the energy gained is v dv + dv^2 / 2)
+function activate(W, c) {
+  if (!c || !c.alive || !c.power) return null;
+  c.power = false;
+  const v = Math.sqrt(c.vx * c.vx + c.vy * c.vy); if (v < 1e-6) return null;
+  const ux = c.vx / v, uy = c.vy / v;
+  if (c.kind === 'b') { c.vx += ux * BOOST; c.vy += uy * BOOST; c.burnV = v; return null; }
+  const d = Math.min(0.32, Math.max(0.12, 0.22 * v)), nx = -uy * d, ny = ux * d;
+  const twin = { ...c, vx: c.vx - nx, vy: c.vy - ny, m: c.m / 2, a: [0, 0, -1], cells: new Set(c.cells), twin: true };
+  c.vx += nx; c.vy += ny; c.m /= 2;
+  W.comets.push(twin);
+  return twin;
+}
+function contacts(C, R) {
+  for (const o of C) { o.fx = 0; o.fy = 0; }
+  for (const o of R) { o.fx = 0; o.fy = 0; }
+  if (!R.length) return;
+  const push = (p, q, rad) => {
+    const dx = q.x - p.x, dy = q.y - p.y, r2 = dx * dx + dy * dy;
+    if (r2 >= rad * rad || r2 < 1e-12) return false;
+    const d = Math.sqrt(r2), nx = dx / d, ny = dy / d, vn = (q.vx - p.vx) * nx + (q.vy - p.vy) * ny, F = KC * (rad - d) - CC * vn;
+    if (F > 0) { p.fx -= F * nx; p.fy -= F * ny; q.fx += F * nx; q.fy += F * ny; }
+    return true;
+  };
+  for (let i = 0; i < R.length; i++) {
+    const p = R[i];
+    for (let j = i + 1; j < R.length; j++) {
+      const q = R[j], dx = q.x - p.x, dy = q.y - p.y, e = dx * dx + dy * dy + 0.0004, g = RG / (e * Math.sqrt(e));
+      p.fx += dx * g; p.fy += dy * g; q.fx -= dx * g; q.fy -= dy * g;
+      // a rock set moving by a comet passes the credit on to any rock it strikes
+      if (push(p, q, 2 * RR)) { if (p.by && !q.by) q.by = p.by; else if (q.by && !p.by) p.by = q.by; }
+    }
+  }
+  for (const c of C) for (const r of R) if (push(c, r, CR + RR)) { r.by = c; c.bumped = true; }
+}
+// one fixed step of everything. H receives events: hit(source, i), track(comet) every 6 steps, dead(mover)
+function step(W, H) {
+  const L = W.L, B = L.bodies, T = L.targets, P = W.P, Q = W.Q;
+  advance(L, P, Q);
+  const C = W.comets.filter(c => c.alive), R = W.rocks.filter(r => r.alive), M = C.concat(R);
+  for (const o of M) {
+    accel(B, P, o.x, o.y, o.a);
+    o.vx += (o.a[0] + o.fx / o.m) * DT * 0.5; o.vy += (o.a[1] + o.fy / o.m) * DT * 0.5;
+    o.x += o.vx * DT; o.y += o.vy * DT; o.age += DT;
+  }
+  for (const o of M) accel(B, Q, o.x, o.y, o.a);
+  contacts(C, R);
+  for (const o of M) {
+    o.vx += (o.a[0] + o.fx / o.m) * DT * 0.5; o.vy += (o.a[1] + o.fy / o.m) * DT * 0.5;
+    if (o.a[2] >= 0) { o.alive = false; o.fate = 'crash'; }
+  }
+  for (const o of M) {
+    // targets are tested every third step; rocks only count once a comet has set them moving, and while it flies
+    if (++o.k % 3 === 0 && !W.won && (!o.rock || (o.by && o.by.alive))) for (let i = 0; i < T.length; i++) if (!W.got[i]) {
+      const dx = T[i][0] - o.x, dy = T[i][1] - o.y;
+      if (dx * dx + dy * dy < TR * TR) {
+        W.got[i] = true;
+        const c = o.rock ? o.by : o; c.fresh = c.age;
+        if (W.got.every(Boolean)) W.won = true;
+        if (H.hit) H.hit(o, i);
+      }
+    }
+    if (o.k % 6 === 0) {
+      if (o.rock) { if (Math.abs(o.x) > 1.6 || Math.abs(o.y) > 2.3) { o.alive = false; o.fate = 'lost'; } }
+      else { track(W, o); if (H.track) H.track(o); }
+    }
+    if (!o.alive && H.dead) H.dead(o);
+  }
+  W.P = Q; W.Q = P; W.tick++;
+}
+function track(W, c) {
+  const B = W.L.bodies;
+  // anywhere new lately? A visit also marks neighbors so a slowly drifting orbit counts as old ground
+  if (Math.abs(c.x) < 1.1 && Math.abs(c.y) < 1.8) {
+    const i = Math.floor(c.x / 0.07), j = Math.floor(c.y / 0.07), key = i * 4096 + j;
+    if (!c.cells.has(key)) {
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) c.cells.add((i + a) * 4096 + j + b);
+      c.novel++; if (!c.ff || c.novel - c.ffBase >= 4) c.fresh = c.age;
+    }
+  }
+  // stale for a while: time speeds up (decided here, per step, so it is the same on every device)
+  const ff = c.age - c.fresh > STALE; if (ff && !c.ff) c.ffBase = c.novel; c.ff = ff;
+  // leaving with enough energy to never come back
+  if ((Math.abs(c.x) > 1.35 || Math.abs(c.y) > 2.0) && energy(B, W.P, c.x, c.y, c.vx, c.vy) > 0 && c.x * c.vx + c.y * c.vy > 0) { c.alive = false; c.fate = 'lost'; }
+  if (c.age - c.fresh > STALE + 26 || c.age > 240) { c.alive = false; c.fate = 'loop'; }
+}
+
+const PULL = 0.75, SPEED = 1.3, FF = 14;
+// only the aim preview uses this smooth form; flights use the exact stepping in phys.js
+function bodyPos(b, t) {
+  if (!b.orbit) return [b.x, b.y];
+  const o = b.orbit, a = o.phase + t / o.period * Math.PI * 2;
+  return [o.cx + o.R * Math.cos(a), o.cy + o.R * Math.sin(a)];
 }
 
 /* ======================= star color from temperature ======================= */
@@ -255,7 +400,8 @@ if (store.sound === false) Sound.on = false;
 const S = {
   idx: 0, tick: 0, acc: 0, speed: 1, ffK: 1, ff: false, comets: [], ghosts: [], dust: [], sparks: [], waves: [], labels: [],
   got: [], order: [], shots: 0, score: 0, tricks: [], won: false, wonAt: 0, gold: null, aim: null, flash: 0, hitStop: 0, throws: [], replay: null,
-  coached: !!store.coached, time: 0, P: [], Q: [], title: null,
+  coached: !!store.coached, time: 0, P: [], Q: [], title: null, W: null, shards: [], band: null, kind: 'n', left: 3, outAt: 0,
+  three: !!store.three, hard: !!store.hard,
 };
 const level = () => ALL[S.idx];
 const world = () => WORLDS[level().wi];
@@ -278,7 +424,7 @@ function streak() {
 }
 // a short fingerprint of a layout, so an old link never replays onto a level that has since changed
 function fp(L) {
-  const str = JSON.stringify([L.launch, L.bodies.map(b => [b.x, b.y, b.m, b.orbit && b.orbit.R, b.orbit && b.orbit.period]), L.targets]);
+  const str = JSON.stringify([L.launch, L.bodies.map(b => [b.x, b.y, b.m, b.orbit && b.orbit.R, b.orbit && b.orbit.period]), L.targets].concat(L.piles ? [L.piles] : []));
   let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0).toString(36).slice(0, 4);
 }
@@ -431,16 +577,19 @@ const TH = ['#ff7aa8', '#ffd166', '#6ef0c8', '#8fb0ff', '#c79bff'];
 function load(i, replay) {
   S.idx = clamp(i, 0, ALL.length - 1);
   const L = level();
-  Object.assign(S, { tick: 0, acc: 0, ffK: 1, ff: false, comets: [], ghosts: [], dust: [], sparks: [], waves: [], labels: [],
-    got: L.targets.map(() => false), order: [], shots: 0, score: 0, tricks: [], won: false, gold: null, aim: null, throws: [], replay: replay || null, flash: 0, hitStop: 0,
-    P: startPos(L), Q: startPos(L) });
+  const W = makeWorld(L);
+  Object.assign(S, { W, tick: 0, acc: 0, ffK: 1, ff: false, comets: W.comets, ghosts: [], dust: [], sparks: [], waves: [], labels: [],
+    got: W.got, order: [], shots: 0, score: 0, tricks: [], won: false, gold: null, aim: null, throws: [], replay: replay || null, flash: 0, hitStop: 0,
+    P: W.P, Q: W.Q, shards: [], band: null, left: 3, outAt: 0, wantPower: false, rewind: null, hardRun: S.hard && !replay });
+  if (!L.cracks) L.cracks = L.targets.map((t, i) => fracture(Math.floor((t[0] + 2) * 1e4) * 31 + Math.floor((t[1] + 3) * 1e4) + i));
+  if (S.kind === 'h' && !(L.piles && L.piles.length)) S.kind = 'n';
   if (!CLIP) {
     document.documentElement.style.setProperty('--accent', world().theme.acc);
     $('#lvname').textContent = `${L.li + 1}. ${L.name}`;
     $('#winbar').hidden = true; $('#toast').hidden = true; $('#hintBtn').hidden = true; $('#speedBtn').hidden = false;
     $('#replayTag').hidden = !replay; $('#replayTag').textContent = replay && replay.hint ? 'Hint' : 'Replay';
     if (!world().daily) store.last = S.idx;
-    save(); hudPips();
+    save(); hudPips(); syncControls();
   }
   titleCard();
 }
@@ -501,43 +650,70 @@ function stepTitle(dt) {
 }
 
 /* ---- throwing ---- */
-function fire(vx, vy) {
+function fire(vx, vy, kind = 'n') {
   Sound.wake();
   // quantized so a replay link reproduces the throw exactly
   vx = Math.round(vx * 1e5) / 1e5; vy = Math.round(vy * 1e5) / 1e5;
   releaseTitle();
   for (const c of S.comets) if (c.alive) { c.alive = false; retire(c); }
-  const L = level(), [x, y] = L.launch;
-  S.comets.push({ x, y, vx, vy, age: 0, alive: true, a: [0, 0, -1], trail: [[x, y]], k: 0,
-    cells: new Set(), fresh: 0, novel: 0, ffBase: 0, winds: L.bodies.map(() => 0), angs: L.bodies.map(() => null), close: false, moon: false, hits: 0,
+  const L = level(), [x, y] = L.launch, c = newComet(S.W, vx, vy, kind);
+  Object.assign(c, { trail: [[x, y]], winds: L.bodies.map(() => 0), angs: L.bodies.map(() => null), close: false, moon: false, hits: 0,
     moving: L.bodies.some(b => b.orbit), E0: energy(L.bodies, S.P, x, y, vx, vy) });
-  if (!S.replay) S.throws.push([S.tick, vx, vy]);
+  S.comets.push(c);
+  if (!S.replay) S.throws.push(kind === 'n' ? [S.tick, vx, vy] : [S.tick, vx, vy, kind, -1]);
   S.shots++; S.ff = false; S.ffK = 1;
+  if (S.three && !S.replay) S.left--;
   S.waves.push({ x, y, age: 0, r0: 0.02, col: '239,232,218' });
   Sound.whoosh(Math.min(1, Math.hypot(vx, vy) / (PULL * SPEED))); buzz(8);
   if (!S.coached && !CLIP) { S.coached = store.coached = true; save(); }
   hudPips();
 }
+// a tap while a comet with a power is flying: split it in two, or fire its burn
+function power() {
+  const W = S.W, c = W.comets.find(q => q.alive && q.power); if (!c) return;
+  const v0 = Math.hypot(c.vx, c.vy), twin = activate(W, c);
+  if (!S.replay) { const rec = S.throws[S.throws.length - 1]; if (rec && rec.length === 5 && rec[4] < 0) rec[4] = W.tick; }
+  if (twin) {
+    twin.trail = c.trail.slice(); twin.winds = c.winds.slice(); twin.angs = c.angs.slice();
+    burst(c.x, c.y, '#bfe8ff', 18); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.02, col: '191,232,255' });
+    Sound.tone(880, 0.35, 'triangle', 0.04); Sound.tone(1318.5, 0.35, 'triangle', 0.03, 0.03); buzz(10);
+  } else {
+    // exhaust leaves backward at high speed: the comet's gain in momentum is the plume's loss
+    const ux = c.vx / Math.hypot(c.vx, c.vy), uy = c.vy / Math.hypot(c.vx, c.vy);
+    for (let k = 0; k < 26; k++) { const j = (Math.random() - 0.5) * 0.5, v = 0.6 + Math.random() * 0.9; S.sparks.push({ x: c.x, y: c.y, vx: -(ux + uy * j) * v, vy: -(uy - ux * j) * v, life: 0.35 + Math.random() * 0.4, age: 0, col: '#ffb46a' }); }
+    Sound.whoosh(0.9); buzz(12);
+    if (v0 > 1.0) award(c, 'Oberth burn', 300);
+  }
+}
+const HOOKS = {
+  hit: (o, i) => o.rock ? onHit(o.by, i, o) : onHit(o, i),
+  track: c => tricks(c),
+  dead: o => { if (!o.rock) retire(o); else if (o.fate === 'crash') burst(o.x, o.y, '#d9b48c', 10); },
+};
 function retire(c) {
-  if (c.fate === 'crash') { Sound.thud(); burst(c.x, c.y, '#ffb47a', 30); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); buzz(20); }
+  if (c.fate === 'crash') { Sound.thud(); burst(c.x, c.y, '#ffb47a', 30, 1.4); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); buzz(20); }
   if (c.trail !== S.gold) { S.ghosts.push(c.trail); if (S.ghosts.length > 3) S.ghosts.shift(); }
 }
-function burst(x, y, col, n) {
-  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 0.2 + Math.random() * 0.7; S.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.6, age: 0, col }); }
+function burst(x, y, col, n, life = 0.6) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 0.2 + Math.random() * 0.7; S.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: life + Math.random() * life, age: 0, col }); }
 }
-function award(c, name, pts) {
+function award(c, name, pts, at) {
   // each trick pays once per level, and labels earned together queue up and stack instead of overprinting
   const kind = name.split(' ×')[0];
   if (S.tricks.some(q => q[0].split(' ×')[0] === kind)) return;
   S.tricks.push([name, pts]); S.score += pts;
   const k = S.labels.filter(l => l.age < 0.4).length;
-  S.labels.push({ x: c.x, y: c.y, text: `${name} +${pts}`, age: -0.4 * k, slot: k, chimed: false });
+  const p = at || c;
+  S.labels.push({ x: p.x, y: p.y, vx: 0, vy: 0, text: `${name} +${pts}`, age: -0.4 * k, slot: k, chimed: false });
 }
 function stars() { const L = level(); return S.shots <= L.par ? 3 : S.shots <= L.par + 2 ? 2 : 1; }
 function win(c) {
   S.won = true; S.wonAt = S.time; S.gold = c.trail; Sound.fanfare(); buzz([12, 40, 12]);
   const L = level(), parBonus = Math.max(0, L.par - S.shots + 1) * 300;
   S.score += parBonus; if (parBonus) S.tricks.push([S.shots < L.par ? 'Under par' : 'On par', parBonus]);
+  if (S.three && !S.replay && S.left > 0) { const b = S.left * 1000; S.score += b; S.tricks.push([S.left > 1 ? `Spare comets ×${S.left}` : 'Spare comet', b]); }
+  // no aiming guide at all: half again the score
+  if (S.hardRun) { const b = Math.round(S.score * 0.5); S.score += b; S.tricks.unshift(['Blind', b]); }
   L.targets.forEach(([x, y], i) => { burst(x, y, TH[i % TH.length], 40); S.waves.push({ x, y, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') }); });
   if (!S.replay && !CLIP) {
     const prev = store.best[L.gid], rec = { shots: S.shots, score: S.score, stars: stars() };
@@ -546,20 +722,15 @@ function win(c) {
     if (S.idx === todayIdx()) { store.days = store.days || {}; store.days[dayNo()] = Math.max(store.days[dayNo()] || 0, rec.stars); }
     save();
   }
-  $('#hintBtn').hidden = true; $('#skipBtn').hidden = true;
+  $('#hintBtn').hidden = true; $('#skipBtn').hidden = true; syncControls();
 }
 
 /* ======================= simulation ======================= */
-function track(c, B) {
-  // anywhere new lately? A visit also marks neighbors so a slowly drifting orbit counts as old ground
-  if (Math.abs(c.x) < 1.1 && Math.abs(c.y) < 1.8) {
-    const i = Math.floor(c.x / 0.07), j = Math.floor(c.y / 0.07), key = i * 4096 + j;
-    if (!c.cells.has(key)) {
-      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) c.cells.add((i + a) * 4096 + j + b);
-      c.novel++; if (!S.ff || c.novel - c.ffBase >= 4) c.fresh = c.age;
-    }
-  }
-  // tricks: winding around the nearest star, close shaves, energy stolen from something moving
+// every sixth step, after the physics has had its say: the trail, and the bookkeeping for tricks
+function tricks(c) {
+  const B = level().bodies;
+  c.trail.push([c.x, c.y]); if (c.trail.length > 3200) c.trail.shift();
+  // winding around the stars, close shaves, energy stolen from something moving
   // winding number about every star: the total turning angle seen from it, over 2 pi
   let far = true;
   for (let k = 0; k < B.length; k++) {
@@ -575,17 +746,16 @@ function track(c, B) {
   // E = v^2/2 + phi(x, t) only changes when the wells move (dE/dt = d phi/dt), so any gain is a true gravity assist.
   // Measured away from the moving bodies, where their own pull is not mid-swing.
   if (c.moving && far && energy(B, S.P, c.x, c.y, c.vx, c.vy) - c.E0 > 0.1) c.moon = true;
-  // leaving with enough energy to never come back
-  if (Math.abs(c.x) > 1.35 || Math.abs(c.y) > 2.0) {
-    if (energy(B, S.P, c.x, c.y, c.vx, c.vy) > 0 && c.x * c.vx + c.y * c.vy > 0) { c.alive = false; c.fate = 'lost'; }
-  }
-  if (c.age - c.fresh > STALE + 26 || c.age > 240) { c.alive = false; c.fate = 'loop'; }
 }
-function onHit(c, i) {
+function onHit(c, i, rock) {
   c.hits++; S.order.push(i);
+  // knocked rock that found a target, or a comet that went through rubble first
+  if (rock) award(c, 'Chain reaction', 400, rock);
+  else if (c.bumped) award(c, c.kind === 'h' ? 'Wrecking ball' : 'Demolition', 250);
   const L = level(), [tx, ty] = L.targets[i];
-  burst(tx, ty, TH[i % TH.length], 36); S.waves.push({ x: tx, y: ty, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') });
-  S.hitStop = 0.45; S.flash = 1; S.score += 500; c.fresh = c.age;
+  shatter(i, rock || c);
+  burst(tx, ty, '#e6f6ff', 22); S.waves.push({ x: tx, y: ty, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') });
+  S.hitStop = 0.45; S.flash = 1; S.score += 500;
   Sound.chime(S.order.length - 1); buzz(14);
   const B = L.bodies, TAU = Math.PI * 2;
   let wk = 0; c.winds.forEach((w, k) => { if (Math.abs(w) > Math.abs(c.winds[wk])) wk = k; });
@@ -607,38 +777,33 @@ function simulate(dt) {
   S.flash *= Math.exp(-dt * 3);
   const stop = S.hitStop > 0 ? 0.2 : 1; S.hitStop -= dt;
   S.acc += dt * S.speed * S.ffK * stop * (S.won ? 0.3 : 1);
-  const L = level(), B = L.bodies, T = L.targets;
+  const L = level(), B = L.bodies, W = S.W;
   let n = 0;
   while (S.acc >= DT && n < 9000) {
     S.acc -= DT; n++;
-    // a replayed throw launches on exactly the step the original did
-    if (S.replay) { const r = S.replay.throws.find(q => q[0] === S.tick && !q.done); if (r) { r.done = true; fire(r[1], r[2]); } }
-    advance(L, S.P, S.Q);
-    for (const c of S.comets) {
-      if (!c.alive) continue;
-      const a = c.a;
-      accel(B, S.P, c.x, c.y, a); c.vx += a[0] * DT * 0.5; c.vy += a[1] * DT * 0.5;
-      c.x += c.vx * DT; c.y += c.vy * DT; c.age += DT;
-      accel(B, S.Q, c.x, c.y, a); c.vx += a[0] * DT * 0.5; c.vy += a[1] * DT * 0.5;
-      if (a[2] >= 0) { c.alive = false; c.fate = 'crash'; }
-      if (++c.k % 3 === 0 && !S.won) for (let i = 0; i < T.length; i++) if (!S.got[i]) { const dx = T[i][0] - c.x, dy = T[i][1] - c.y; if (dx * dx + dy * dy < TR * TR) { S.got[i] = true; onHit(c, i); } }
-      if (c.k % 6 === 0) { c.trail.push([c.x, c.y]); if (c.trail.length > 3200) c.trail.shift(); track(c, B); }
-      if (!c.alive) retire(c);
-    }
-    [S.P, S.Q] = [S.Q, S.P];
-    S.tick++;
+    // a replayed throw launches (and uses its power) on exactly the step the original did
+    if (S.replay) {
+      const r = S.replay.throws.find(q => q[0] === W.tick && !q.done); if (r) { r.done = true; fire(r[1], r[2], r[3] || 'n'); S.cur = r; }
+      for (const q of S.replay.throws) if (q.done && q[4] === W.tick && !q.used) { q.used = true; power(); }
+    } else if (S.wantPower) { S.wantPower = false; power(); }
+    step(W, HOOKS);
+    S.P = W.P; S.Q = W.Q; S.tick = W.tick;
   }
-  S.comets = S.comets.filter(c => c.alive);
+  S.comets = W.comets = W.comets.filter(c => c.alive);
   tails(dt, B);
-  for (const p of S.sparks) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; }
+  // sparks are test particles too: crash debris swings round the star before it fades
+  { const a = [0, 0, -1]; for (const p of S.sparks) { accel(B, S.P, p.x, p.y, a); p.vx = (p.vx + a[0] * dt) * 0.985; p.vy = (p.vy + a[1] * dt) * 0.985; p.x += p.vx * dt; p.y += p.vy * dt; p.age += dt; if (a[2] >= 0) p.age = p.life; } }
   for (const w of S.waves) w.age += dt;
-  for (const l of S.labels) { l.age += dt; if (l.age >= 0 && !l.chimed) { l.chimed = true; Sound.trick(); } }
+  // trick labels are written in starlight too: once shown they drift, gently, down the gravity well
+  { const a = [0, 0, -1]; for (const l of S.labels) { l.age += dt; if (l.age >= 0 && !l.chimed) { l.chimed = true; Sound.trick(); }
+    if (l.age > 0) { accel(B, S.P, l.x, l.y, a); l.vx += a[0] * dt * 0.06; l.vy += a[1] * dt * 0.06; l.x += l.vx * dt; l.y += l.vy * dt; } } }
   S.dust = S.dust.filter(p => p.age < p.life); S.sparks = S.sparks.filter(p => p.age < p.life);
   S.waves = S.waves.filter(w => w.age < 1); S.labels = S.labels.filter(l => l.age < 1.8);
-  stepTitle(dt);
-  const live = !S.won && S.comets[0];
-  const was = S.ff; S.ff = !!live && live.age - live.fresh > STALE;
-  if (S.ff && !was) live.ffBase = live.novel;
+  stepTitle(dt); stepShards(dt); stepBand(dt);
+  // three comets per attempt: once the last one is gone without a win, the attempt starts over
+  if (S.three && !S.replay && !S.won && S.left <= 0 && !S.comets.length && !S.outAt) S.outAt = S.time;
+  // time speeds up once every comet still flying has gone stale (decided per step inside the physics)
+  S.ff = !S.won && S.comets.length > 0 && S.comets.every(c => c.ff);
   if (!CLIP) { const show = S.ffK > 1.6; if ($('#ff').hidden === show) $('#ff').hidden = !show; }
 }
 
@@ -674,6 +839,82 @@ function tails(dt, B) {
     p.x += p.vx * dt; p.y += p.vy * dt; p.age += dt;
   }
 }
+
+/* ---- ice moons: each target is a small frozen moon, pre-cracked along a Voronoi pattern ---- */
+// Seeds are scattered in the disc; each shard is the set of points nearer its seed than any other,
+// found by clipping the disc with the perpendicular bisector to every other seed (Sutherland-Hodgman).
+// The faint lines you see on a moon are exactly where it will break.
+function seeded(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function clipHalf(poly, px, py, nx, ny) {
+  // keep the side where (q - p) . n <= 0
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], da = (a[0] - px) * nx + (a[1] - py) * ny, db = (b[0] - px) * nx + (b[1] - py) * ny;
+    if (da <= 0) out.push(a);
+    if ((da < 0) !== (db < 0) && da !== db) { const t = da / (da - db); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+  }
+  return out;
+}
+function fracture(seed) {
+  const rnd = seeded(seed), n = 7 + Math.floor(rnd() * 3), pts = [];
+  for (let i = 0; i < n; i++) { const r = 0.92 * Math.sqrt(rnd()), a = rnd() * Math.PI * 2; pts.push([r * Math.cos(a), r * Math.sin(a)]); }
+  const disc = []; for (let k = 0; k < 28; k++) disc.push([Math.cos(k * Math.PI / 14), Math.sin(k * Math.PI / 14)]);
+  return pts.map((p, i) => {
+    let poly = disc;
+    pts.forEach((q, j) => { if (j !== i && poly.length) poly = clipHalf(poly, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, q[0] - p[0], q[1] - p[1]); });
+    const cx = poly.reduce((s, v) => s + v[0], 0) / poly.length, cy = poly.reduce((s, v) => s + v[1], 0) / poly.length;
+    return { poly, cx, cy };
+  }).filter(c => c.poly.length > 2);
+}
+// where the light comes from at (x, y): every star weighted by luminosity / r^2 (black holes by their disks)
+function lightDir(x, y) {
+  const B = level().bodies; let lx = 0, ly = 0;
+  for (let k = 0; k < B.length; k++) {
+    const b = B[k], dx = S.P[k][0] - x, dy = S.P[k][1] - y, d2 = dx * dx + dy * dy + 0.01, w = (b.bh ? 0.6 : lum(b)) / d2;
+    lx += dx / Math.sqrt(d2) * w; ly += dy / Math.sqrt(d2) * w;
+  }
+  const l = Math.hypot(lx, ly) || 1; return [lx / l, -ly / l];
+}
+const ROCKS = [];
+function rockShape(id) {
+  if (ROCKS[id]) return ROCKS[id];
+  const rnd = seeded(id * 7919 + 17), n = 7 + Math.floor(rnd() * 3), pts = [];
+  for (let k = 0; k < n; k++) { const a = (k + rnd() * 0.6) / n * Math.PI * 2, r = 0.68 + rnd() * 0.5; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  return (ROCKS[id] = { pts, spin: (rnd() < 0.5 ? -1 : 1) * (0.25 + rnd() * 0.5), a0: rnd() * 6.28 });
+}
+function shatter(i, src) {
+  const L = level(), [tx, ty] = L.targets[i], cells = L.cracks[i], Rw = TR * 0.92, rot = S.time * 0.25 + i, cr = Math.cos(rot), sr = Math.sin(rot);
+  for (const c of cells) {
+    const ox = c.cx * cr - c.cy * sr, oy = -(c.cx * sr + c.cy * cr), d = Math.hypot(ox, oy) || 1, kick = 0.25 + Math.random() * 0.35;
+    S.shards.push({ x: tx + ox * Rw, y: ty + oy * Rw, vx: src.vx * 0.3 + ox / d * kick, vy: src.vy * 0.3 + oy / d * kick,
+      pts: c.poly.map(v => [(v[0] - c.cx) * Rw, (v[1] - c.cy) * Rw]), ang: rot, w: (Math.random() - 0.5) * 9, age: 0, life: 2.4 + Math.random(), hue: TH[i % TH.length] });
+  }
+}
+function stepShards(dt) {
+  const B = level().bodies, a = [0, 0, -1];
+  for (const p of S.shards) {
+    // the pieces fall into the level's real gravity, and melt into any star they reach
+    accel(B, S.P, p.x, p.y, a); p.vx += a[0] * dt; p.vy += a[1] * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.ang += p.w * dt; p.age += dt;
+    if (a[2] >= 0) { p.age = p.life; S.sparks.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.4, age: 0, col: '#dff4ff' }); }
+  }
+  S.shards = S.shards.filter(p => p.age < p.life);
+}
+
+/* ---- the slingshot: two prongs and an elastic band that obeys Hooke's law ---- */
+// While you pull, the band stretches and thins (its volume is kept, so width ~ 1 / sqrt(length)).
+// Let go and the pouch springs back as a damped oscillator, x'' = -k x - c x', ringing a few times at 6 Hz.
+const BAND_K = Math.pow(2 * Math.PI * 6, 2), BAND_C = 2 * 0.11 * Math.sqrt(BAND_K);
+function stepBand(dt) {
+  const b = S.band; if (!b) return;
+  for (let k = 0; k < 4; k++) { const h = dt / 4; b.vx += (-BAND_K * b.x - BAND_C * b.vx) * h; b.vy += (-BAND_K * b.y - BAND_C * b.vy) * h; b.x += b.vx * h; b.y += b.vy * h; }
+  if (Math.abs(b.x) + Math.abs(b.y) < 0.2 && Math.abs(b.vx) + Math.abs(b.vy) < 2) S.band = null;
+}
+function pullOffset(A) {
+  // the finger's drag, scaled down to the slingshot: full power stretches the band 70 px
+  const maxDrag = PULL * G.s / 0.55, dx = A.cx - A.sx, dy = A.cy - A.sy, l = Math.hypot(dx, dy), f = 70 / maxDrag * Math.min(1, maxDrag / Math.max(l, 1e-6));
+  return [dx * f, dy * f];
+}
+const KIND_COL = { n: '#ffffff', s: '#bfe8ff', b: '#ffbf7a', h: '#ffd98a' };
 
 /* ======================= drawing ======================= */
 function spCol(v, a) {
@@ -726,27 +967,48 @@ function draw() {
   g.setLineDash([2, 7]); g.strokeStyle = 'rgba(239,232,218,.13)';
   for (const b of L.bodies) if (b.orbit) { const [ox, oy] = toScr(b.orbit.cx, b.orbit.cy); g.beginPath(); g.arc(ox, oy, b.orbit.R * G.s, 0, 7); g.stroke(); }
   g.setLineDash([]);
-  // targets: glowing crystal orbs, each its own color
+  // targets: small ice moons, lit from the side the starlight comes from, cracked where they will break
   L.targets.forEach(([x, y], i) => {
-    const [sx, sy0] = toScr(x, y), r = TR * G.s, hue = TH[i % TH.length], sy = sy0 + (S.got[i] ? 0 : Math.sin(t * 1.4 + i) * 1.5);
-    const glow = g.createRadialGradient(sx, sy, 0, sx, sy, r * 2.6);
-    glow.addColorStop(0, rgba(hue, S.got[i] ? 0.14 : 0.28)); glow.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, r * 2.6, 0, 7); g.fill();
+    const [sx, sy] = toScr(x, y), R = TR * G.s * 0.92, hue = TH[i % TH.length];
     if (S.got[i]) {
-      g.fillStyle = rgba(hue, 0.4); g.beginPath(); g.arc(sx, sy, r * 0.42, 0, 7); g.fill();
-      g.strokeStyle = rgba(hue, 0.5); g.lineWidth = 1; g.beginPath(); g.arc(sx, sy, r, 0, 7); g.stroke();
+      // where a moon was: a faint ring in its color
+      g.strokeStyle = rgba(hue, 0.35); g.lineWidth = 1; g.setLineDash([2, 4]); g.beginPath(); g.arc(sx, sy, R * 1.25, 0, 7); g.stroke(); g.setLineDash([]);
       return;
     }
-    const core = g.createRadialGradient(sx - r * 0.25, sy - r * 0.25, 0, sx, sy, r * 0.75);
-    core.addColorStop(0, 'rgba(255,255,255,.95)'); core.addColorStop(0.35, rgba(hue, 0.85)); core.addColorStop(1, rgba(hue, 0));
-    g.fillStyle = core; g.beginPath(); g.arc(sx, sy, r * 0.75, 0, 7); g.fill();
-    g.strokeStyle = hue; g.lineWidth = 1.4; g.setLineDash([5, 6]); g.lineDashOffset = -t * 14;
-    g.beginPath(); g.arc(sx, sy, r * (1 + 0.06 * Math.sin(t * 3 + i)), 0, 7); g.stroke(); g.setLineDash([]);
-    for (let k = 0; k < 3; k++) { const a = t * (1.4 + k * 0.3) + i * 2 + k * 2.1; g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.arc(sx + Math.cos(a) * r * 1.2, sy + Math.sin(a) * r * 1.2, 1.4, 0, 7); g.fill(); }
+    const glow = g.createRadialGradient(sx, sy, R * 0.8, sx, sy, R * 2.6);
+    glow.addColorStop(0, rgba(hue, 0.22)); glow.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, R * 2.6, 0, 7); g.fill();
+    const [ux, uy] = lightDir(x, y), body = g.createRadialGradient(sx + ux * R * 0.45, sy + uy * R * 0.45, R * 0.05, sx, sy, R * 1.02);
+    body.addColorStop(0, '#f7fcff'); body.addColorStop(0.42, '#cfe8f6'); body.addColorStop(0.8, '#5d7f9c'); body.addColorStop(1, '#1d2b3d');
+    g.fillStyle = body; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
+    // a wash of the moon's own color, then its fracture lines, turning slowly with it
+    g.fillStyle = rgba(hue, 0.22); g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
+    const rot = t * 0.25 + i, cr = Math.cos(rot), sr = Math.sin(rot);
+    g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 0.8;
+    for (const c of L.cracks[i]) { g.beginPath(); c.poly.forEach((v, k) => { const px = sx + (v[0] * cr - v[1] * sr) * R, py = sy + (v[0] * sr + v[1] * cr) * R; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.stroke(); }
+    g.strokeStyle = rgba(hue, 0.75); g.lineWidth = 1.2; g.beginPath(); g.arc(sx, sy, R * 1.28, rot * 0.6, rot * 0.6 + Math.PI * 1.6); g.stroke();
   });
+  // ice shards, falling
+  for (const p of S.shards) {
+    const [sx, sy] = toScr(p.x, p.y), a = clamp((p.life - p.age) / 0.6, 0, 1), cr = Math.cos(p.ang), sr = Math.sin(p.ang);
+    // a flat facet catches the light as it turns: brightness follows the cosine of its angle to the light
+    const lit = 0.55 + 0.45 * Math.cos(p.ang * 1.7);
+    g.globalAlpha = a; g.fillStyle = `rgb(${120 + 115 * lit | 0},${160 + 88 * lit | 0},${190 + 65 * lit | 0})`; g.strokeStyle = rgba(p.hue, 0.8); g.lineWidth = 0.8;
+    g.beginPath(); p.pts.forEach((v, k) => { const px = sx + (v[0] * cr - v[1] * sr) * G.s, py = sy + (v[0] * sr + v[1] * cr) * G.s; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.fill(); g.stroke();
+  }
+  g.globalAlpha = 1;
+  // rubble: lit from the starlight side, tumbling faster once something has hit them
+  for (const r of S.W.rocks) {
+    if (!r.alive) continue;
+    const sh = rockShape(r.id), [sx, sy] = toScr(r.x, r.y), R = RR * G.s, ang = sh.a0 + t * sh.spin * (r.by ? 5 : 1), [ux, uy] = lightDir(r.x, r.y);
+    const gr = g.createRadialGradient(sx + ux * R * 0.5, sy + uy * R * 0.5, R * 0.1, sx, sy, R * 1.2);
+    gr.addColorStop(0, '#e4d4bd'); gr.addColorStop(0.55, '#7b6c5d'); gr.addColorStop(1, '#2a241f');
+    g.fillStyle = gr; g.strokeStyle = 'rgba(20,16,12,.7)'; g.lineWidth = 0.8;
+    g.beginPath(); sh.pts.forEach((v, k) => { const px = sx + (v[0] * Math.cos(ang) - v[1] * Math.sin(ang)) * R, py = sy + (v[0] * Math.sin(ang) + v[1] * Math.cos(ang)) * R; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.fill(); g.stroke();
+  }
   g.globalCompositeOperation = 'lighter';
   // the title, written in starlight
-  const T = S.title;
+  const T = S.title, BHI = L.bodies.map((b, k) => b.bh ? k : -1).filter(k => k >= 0);
   if (T) {
     const age = t - T.t0, rel = T.released ? t - T.rt : 0;
     const fade = T.released ? clamp(1 - rel / 4.2, 0, 1) : 1;
@@ -755,26 +1017,40 @@ function draw() {
       let px = p.x, py = p.y;
       if (!T.released) { const e = 1 - Math.pow(1 - clamp(age / 0.7, 0, 1), 3); px = p.hx + p.ox * (1 - e); py = p.hy + p.oy * (1 - e); }
       const [sx, sy] = toScr(px, py), tw = 0.65 + 0.35 * Math.sin(t * 5 + p.tw);
-      const a = (T.released ? fade : clamp(age / 0.4, 0, 1)) * tw;
-      g.fillStyle = `rgba(${235 + 20 * p.sc | 0},${(225 + 30 * T.tint[1] * p.sc) | 0},${(215 + 40 * T.tint[2] * p.sc) | 0},${a})`;
-      g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8);
+      const a = (T.released ? fade : clamp(age / 0.4, 0, 1)) * tw, col = `rgba(${235 + 20 * p.sc | 0},${(225 + 30 * T.tint[1] * p.sc) | 0},${(215 + 40 * T.tint[2] * p.sc) | 0},${a})`;
+      // near a black hole each grain is pulled apart along the line to it: the tidal stretch grows as 2 m / r^3
+      let st = 0, ux = 0, uy = 0;
+      if (T.released && BHI.length) for (const k of BHI) { const dx = S.P[k][0] - px, dy = S.P[k][1] - py, r2 = dx * dx + dy * dy, r = Math.sqrt(r2), q = 2 * L.bodies[k].m / (r2 * r) * 0.004; if (q > st) { st = q; ux = dx / r; uy = -dy / r; } }
+      if (st > 0.08) { const len = Math.min(16, st * 6); g.strokeStyle = col; g.lineWidth = 1.4; g.beginPath(); g.moveTo(sx - ux * len, sy - uy * len); g.lineTo(sx + ux * len, sy + uy * len); g.stroke(); }
+      else { g.fillStyle = col; g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8); }
     }
     const ta = T.released ? clamp(1 - rel / 0.6, 0, 1) : clamp(age / 0.5, 0, 1);
     if (ta > 0) {
       g.globalCompositeOperation = 'source-over'; g.textAlign = 'center';
-      g.font = '500 11px Jost, system-ui, sans-serif'; g.fillStyle = rgba(acc, 0.9 * ta);
+      g.font = '500 10px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = rgba(acc, 0.9 * ta);
       g.fillText(T.eyebrow.toUpperCase().split('').join(' '), cssW / 2, cssH * 0.4 - 52);
       g.font = '400 13px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = `rgba(155,152,170,${ta})`;
       g.fillText(T.par, cssW / 2, cssH * 0.4 + 56);
       g.textAlign = 'start'; g.globalCompositeOperation = 'lighter';
     }
   }
+  if (S.rewind) {
+    const p = clamp((t - S.rewind.t0) / 0.5, 0, 1), e = p * p * (3 - 2 * p);
+    for (const tr of S.rewind.tr) {
+      const n = Math.max(2, Math.round(tr.length * (1 - e))), h = tr[n - 1], [sx, sy] = toScr(h[0], h[1]);
+      ribbon(tr.slice(0, n), false, 1);
+      const gr = g.createRadialGradient(sx, sy, 0, sx, sy, 18); gr.addColorStop(0, '#fff'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.beginPath(); g.arc(sx, sy, 18, 0, 7); g.fill();
+    }
+  }
   if (S.gold) ribbon(S.gold, true, 1);
-  for (const c of S.comets) {
+  for (const c of S.rewind ? [] : S.comets) {
     if (c.trail !== S.gold) ribbon(c.trail, false, 1);
-    const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy), R = 16 + 10 * clamp(sp, 0, 1), grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
-    grd.addColorStop(0, '#ffffff'); grd.addColorStop(0.18, spCol(sp, 0.65)); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy), R = (16 + 10 * clamp(sp, 0, 1)) * Math.sqrt(c.m / 4) ** 0.5, grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
+    grd.addColorStop(0, c.power || c.kind === 'h' ? KIND_COL[c.kind] : '#ffffff'); grd.addColorStop(0.18, spCol(sp, 0.65)); grd.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grd; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
+    // a comet still holding its power pulses gently, so you know a tap will use it
+    if (c.power) { g.strokeStyle = rgba(KIND_COL[c.kind], 0.45 + 0.3 * Math.sin(t * 8)); g.lineWidth = 1; g.beginPath(); g.arc(sx, sy, 7 + 2 * Math.sin(t * 8), 0, 7); g.stroke(); }
+    if (c.kind === 'h') { g.fillStyle = '#5a3a10'; g.globalAlpha = 0.5; g.beginPath(); g.arc(sx, sy, 3.2, 0, 7); g.fill(); g.globalAlpha = 1; }
   }
   g.fillStyle = 'rgb(255,214,150)';
   for (const p of S.dust) if (!p.ion) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = (1 - p.age / p.life) * 0.5; g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8); }
@@ -828,9 +1104,32 @@ function draw() {
   g.fillStyle = pg; g.beginPath(); g.arc(lx, ly, 6.5, 0, 7); g.fill();
   g.strokeStyle = acc; g.lineWidth = 1.3; g.beginPath(); g.ellipse(lx, ly, 14, 5.5, -0.35, 0, 7); g.stroke();
   const ma = t * 1.3; g.fillStyle = 'rgba(239,232,218,.8)'; g.beginPath(); g.arc(lx + Math.cos(ma) * 20, ly + Math.sin(ma) * 8, 1.8, 0, 7); g.fill();
-  if (!S.aim && !S.comets.length && !S.won && !S.replay && !CLIP) {
-    g.strokeStyle = 'rgba(239,232,218,.3)'; g.lineWidth = 1; g.setLineDash([2, 5]);
-    g.beginPath(); g.arc(lx, ly, 26 + 4 * Math.sin(t * 2.5), 0, 7); g.stroke(); g.setLineDash([]);
+  // the slingshot: prongs either side of the launcher and a band between them
+  const p1 = [lx - 19, ly - 3], p2 = [lx + 19, ly - 3];
+  let off = S.aim && !S.aim.cancel ? pullOffset(S.aim) : S.band ? [S.band.x, S.band.y] : [0, 0];
+  const pouch = [lx + off[0], ly - 3 + off[1]], stretch = Math.hypot(off[0], off[1]);
+  for (const q of [p1, p2]) {
+    const len = Math.hypot(pouch[0] - q[0], pouch[1] - q[1]), w = 2.8 * Math.sqrt(19 / Math.max(len, 19));
+    g.strokeStyle = rgba(acc, 0.25); g.lineWidth = w * 3.2; g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(pouch[0], pouch[1]); g.stroke();
+    g.strokeStyle = rgba(acc, 0.55 + 0.4 * clamp(stretch / 70, 0, 1)); g.lineWidth = w; g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(pouch[0], pouch[1]); g.stroke();
+    g.fillStyle = '#fff8ea'; g.beginPath(); g.arc(q[0], q[1], 2.2, 0, 7); g.fill();
+  }
+  const ready = !S.won && !S.replay && !CLIP && (!S.three || S.left > 0);
+  if (ready && (S.aim || !S.comets.length)) {
+    // the next comet, sitting in the pouch
+    const kc = KIND_COL[S.kind], gp = g.createRadialGradient(pouch[0], pouch[1], 0, pouch[0], pouch[1], 11);
+    gp.addColorStop(0, kc); gp.addColorStop(0.35, rgba(kc, 0.5)); gp.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gp; g.beginPath(); g.arc(pouch[0], pouch[1], 11, 0, 7); g.fill();
+  }
+  // comets still to come wait on circular orbits about the launcher; Kepler's third law sets their pace (T ~ r^1.5)
+  if (S.three && !S.won && !S.replay) for (let k = 0; k < S.left - (ready && !S.comets.length ? 1 : 0); k++) {
+    const r = 30 + k * 9, w = 1.6 * Math.pow(30 / r, 1.5), a = t * w + k * 2.1;
+    g.fillStyle = 'rgba(239,232,218,.75)'; g.beginPath(); g.arc(lx + Math.cos(a) * r, ly + Math.sin(a) * r * 0.42, 2.2, 0, 7); g.fill();
+  }
+  if (S.outAt) {
+    const a = clamp((t - S.outAt) / 0.6, 0, 1);
+    g.textAlign = 'center'; g.font = '400 italic 24px "Cormorant Garamond", serif'; g.fillStyle = `rgba(239,232,218,${0.8 * a})`;
+    g.fillText('out of comets', cssW / 2, cssH * 0.46); g.textAlign = 'start';
   }
   // first time only: a ghost finger showing the gesture
   if (!S.coached && !S.aim && !S.comets.length && !CLIP && (!S.title || S.title.released)) {
@@ -850,13 +1149,13 @@ function draw() {
       if (A.moved) { const q = 8; g.beginPath(); g.moveTo(A.sx - q, A.sy - q); g.lineTo(A.sx + q, A.sy + q); g.moveTo(A.sx + q, A.sy - q); g.lineTo(A.sx - q, A.sy + q); g.stroke(); }
     } else {
     g.fillStyle = acc;
-    A.path.forEach((p, i) => { if (i % 4) return; const [sx, sy] = toScr(p[0], p[1]); g.globalAlpha = 1 - i / A.path.length; g.beginPath(); g.arc(sx, sy, 2, 0, 7); g.fill(); });
+    if (!S.hardRun) A.path.forEach((p, i) => { if (i % 4) return; const [sx, sy] = toScr(p[0], p[1]); g.globalAlpha = 1 - i / A.path.length; g.beginPath(); g.arc(sx, sy, 2, 0, 7); g.fill(); });
     g.globalAlpha = 1;
     const hot = Math.round(154 + 101 * pw);
     g.strokeStyle = `rgb(${hot},${Math.round(215 - 36 * pw)},${Math.round(255 - 148 * pw)})`; g.lineWidth = 3;
     g.beginPath(); g.arc(lx, ly, 22, -Math.PI / 2, -Math.PI / 2 + pw * Math.PI * 2); g.stroke();
-    g.strokeStyle = 'rgba(239,232,218,.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(A.sx, A.sy); g.lineTo(A.cx, A.cy); g.stroke();
-    g.fillStyle = 'rgba(239,232,218,.5)'; g.beginPath(); g.arc(A.cx, A.cy, 16, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(239,232,218,.2)'; g.lineWidth = 1; g.beginPath(); g.moveTo(A.sx, A.sy); g.lineTo(A.cx, A.cy); g.stroke();
+    g.strokeStyle = 'rgba(239,232,218,.45)'; g.beginPath(); g.arc(A.cx, A.cy, 14, 0, 7); g.stroke();
     }
   }
   // trick labels drift up slowly and fade
@@ -864,9 +1163,9 @@ function draw() {
   for (const l of S.labels) {
     if (l.age < 0) continue;
     const [sx, sy] = toScr(l.x, l.y), a = l.age < 0.2 ? l.age / 0.2 : 1 - Math.max(0, l.age - 1.1) / 0.7;
-    g.fillStyle = `rgba(255,211,110,${a})`; g.fillText(l.text, sx, sy - 26 - l.slot * 22 - l.age * 22);
+    g.fillStyle = `rgba(255,211,110,${a})`; g.fillText(l.text, sx, sy - 26 - l.slot * 22 - Math.min(l.age, 0.5) * 22);
   }
-  if (CLIP) { g.font = '500 13px Jost, system-ui, sans-serif'; g.fillStyle = 'rgba(239,232,218,.6)'; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
+  if (CLIP) { g.font = '400 12px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = 'rgba(239,232,218,.6)'; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
   g.textAlign = 'start';
 }
 
@@ -878,8 +1177,11 @@ cvs.addEventListener('pointerdown', e => {
   Sound.wake();
   if (S.won) { if (S.time - S.wonAt > 1.2 && !S.replay) next(); return; }
   // a second finger while aiming cancels the throw
-  if (pointer !== null) { S.aim = null; pointer = null; buzz(6); return; }
+  if (pointer !== null) { if (S.aim) S.band = { x: pullOffset(S.aim)[0], y: pullOffset(S.aim)[1], vx: 0, vy: 0 }; S.aim = null; pointer = null; buzz(6); return; }
   if (S.replay) return;
+  // a tap while a comet with a power is in flight uses the power
+  if (S.comets.some(c => c.alive && c.power)) { S.wantPower = true; buzz(8); return; }
+  if (S.three && S.left <= 0) return;
   releaseTitle();
   cvs.setPointerCapture(e.pointerId);
   pointer = e.pointerId;
@@ -899,12 +1201,13 @@ cvs.addEventListener('pointermove', e => {
 const release = e => {
   if (e.pointerId !== pointer) return;
   pointer = null; const A = S.aim; S.aim = null;
-  if (A && e.type === 'pointerup' && !A.cancel && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1]);
+  if (A && !A.cancel) { const o = pullOffset(A); S.band = { x: o[0], y: o[1], vx: 0, vy: 0 }; }
+  if (A && e.type === 'pointerup' && !A.cancel && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1], S.kind);
 };
 cvs.addEventListener('pointerup', release); cvs.addEventListener('pointercancel', release);
 document.addEventListener('gesturestart', e => e.preventDefault());
 window.addEventListener('keydown', e => {
-  if (e.key === 'r' || e.key === 'R') load(S.idx);
+  if (e.key === 'r' || e.key === 'R') restart();
   if (e.key === 'n' || e.key === 'N') next();
 });
 
@@ -915,8 +1218,29 @@ const next = () => {
   else if (world().daily) load(Math.min(store.last || 0, DAILY0 - 1));
   else load(S.idx + 1 >= ALL.length || isDaily(S.idx + 1) ? 0 : S.idx + 1);
 };
+// the picker, the hard-mode eye and the menu's comet count
+function syncControls() {
+  if (CLIP) return;
+  const L = level(), rubble = !!(L.piles && L.piles.length), show = !S.won && !S.replay;
+  $('#picker').hidden = !show;
+  document.querySelectorAll('#picker .kind').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.k === S.kind)); b.hidden = b.dataset.k === 'h' && !rubble; });
+  $('#hardBtn').setAttribute('aria-pressed', String(S.hard)); $('#hardBtn').hidden = !show;
+}
+document.querySelectorAll('#picker .kind').forEach(b => b.onclick = () => { S.kind = b.dataset.k; Sound.wake(); Sound.tone(660, 0.18, 'sine', 0.03); syncControls(); });
+$('#hardBtn').onclick = () => {
+  S.hard = store.hard = !S.hard; save();
+  // the guide can only be given up before the first throw, so a change mid-attempt starts the level over
+  if (S.shots && !S.won) load(S.idx); else { S.hardRun = S.hard && !S.replay; syncControls(); }
+};
 $('#speedBtn').onclick = () => { S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length]; $('#speedBtn').textContent = S.speed + '×'; };
-$('#restartBtn').onclick = () => load(S.idx);
+// restart rewinds: leapfrog is time-reversible, so running a flight backward is just its own trail in reverse
+function restart() {
+  const tr = S.comets.filter(c => c.trail && c.trail.length > 8).map(c => c.trail.slice());
+  if (!tr.length || REDUCED || S.won) { load(S.idx); return; }
+  S.rewind = { tr, t0: S.time }; S.aim = null;
+  Sound.tone(523.25, 0.3, 'sine', 0.03); Sound.tone(392, 0.3, 'sine', 0.03, 0.12);
+}
+$('#restartBtn').onclick = restart;
 $('#skipBtn').onclick = () => { store.skipped = [...new Set([...(store.skipped || []), level().gid])]; save(); next(); };
 $('#hintBtn').onclick = () => { const L = level(); if (L.sol) load(S.idx, { throws: [[0, L.sol[0], L.sol[1]]], hint: true }); };
 $('#menuBtn').onclick = () => { buildMenu(); $('#menu').hidden = false; };
@@ -956,6 +1280,8 @@ function buildMenu() {
     });
     sec.append(h, grid); box.append(sec);
   });
+  const cr = $('#cometRow'); cr.replaceChildren();
+  [[false, 'Unlimited'], [true, 'Three']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === S.three)); b.onclick = () => { if (S.three === id) return; S.three = store.three = id; save(); buildMenu(); load(S.idx); }; cr.append(b); });
   const r = $('#soundRow'); r.replaceChildren();
   [[true, 'On'], [false, 'Off']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === Sound.on)); b.onclick = () => { Sound.on = store.sound = id; save(); if (id) Sound.wake(); buildMenu(); }; r.append(b); });
 }
@@ -964,7 +1290,15 @@ function buildMenu() {
 // A replay is the level plus the throws: on which step each was made and how hard.
 const b36 = n => (n < 0 ? '-' : '') + Math.abs(n).toString(36);
 // Links name the level by id and fingerprint rather than position, so adding levels never breaks them.
-function replayCode() { const L = level(); return `${L.gid}~${fp(L)}.` + S.throws.map(([t, vx, vy]) => [t, Math.round(vx * 1e5), Math.round(vy * 1e5)].map(b36).join('.')).join('_'); }
+const KCODE = ['n', 's', 'b', 'h'];
+function replayCode() {
+  const L = level();
+  return `${L.gid}~${fp(L)}.` + S.throws.map(([t, vx, vy, kind, act]) => {
+    const a = [t, Math.round(vx * 1e5), Math.round(vy * 1e5)];
+    if (kind && kind !== 'n') a.push(KCODE.indexOf(kind), act == null ? -1 : act);
+    return a.map(b36).join('.');
+  }).join('_');
+}
 function parseReplay(code) {
   const cut = code.indexOf('.'), head = code.slice(0, cut);
   let idx;
@@ -973,7 +1307,8 @@ function parseReplay(code) {
     if (idx < 0) return null;
     if (fp(ALL[idx]) !== f) return { idx, throws: [] };
   } else { idx = parseInt(head, 10); if (!(idx >= 0 && idx < ALL.length)) return null; }
-  const throws = code.slice(cut + 1).split('_').map(s => s.split('.').map(v => parseInt(v, 36))).filter(a => a.length === 3 && a.every(Number.isFinite)).map(([t, x, y]) => [t, x / 1e5, y / 1e5]);
+  const throws = code.slice(cut + 1).split('_').map(s => s.split('.').map(v => parseInt(v, 36))).filter(a => (a.length === 3 || a.length === 5) && a.every(Number.isFinite))
+    .map(([t, x, y, k, act]) => k == null ? [t, x / 1e5, y / 1e5] : [t, x / 1e5, y / 1e5, KCODE[k] || 'n', act]);
   return { idx, throws };
 }
 $('#shareBtn').onclick = async () => {
@@ -1051,7 +1386,7 @@ function stillShot() {
   renderGL(); draw();
   const out = document.createElement('canvas'); out.width = W; out.height = H; const oc = out.getContext('2d');
   oc.drawImage(cvs, 0, 0); oc.drawImage(fx, 0, 0);
-  oc.font = `500 ${13 * DPR}px Jost, system-ui, sans-serif`; oc.textAlign = 'center'; oc.fillStyle = 'rgba(239,232,218,.6)';
+  oc.font = `400 ${12 * DPR}px "IBM Plex Mono", ui-monospace, monospace`; oc.textAlign = 'center'; oc.fillStyle = 'rgba(239,232,218,.6)';
   oc.fillText('areabake.com/phone', W / 2, H - 26 * DPR);
   out.toBlob(blob => {
     if (!blob) { toast('Could not make a picture.', 3000); return; }
@@ -1077,6 +1412,7 @@ function loop(now) {
   const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000)); last = now;
   if (document.hidden || CLIP) { Sound.hum(0); return; }
   S.time += dt;
+  if (S.rewind) { renderGL(); draw(); if (S.time - S.rewind.t0 > 0.5) { S.rewind = null; load(S.idx); } return; }
   simulate(dt); renderGL(); draw();
   const hc = !S.won && S.comets[0];
   Sound.hum(hc && S.ffK < 2 ? Math.hypot(hc.vx, hc.vy) : 0);
@@ -1085,6 +1421,7 @@ function loop(now) {
     $('#nextBtn').setAttribute('aria-label', S.replay ? 'Play this level' : 'Next level');
   }
   if (S.replay && !S.won && !S.comets.length && S.replay.throws.every(q => q.done)) load(S.idx);
+  if (S.outAt && S.time - S.outAt > 1.9) load(S.idx);
 }
 window.addEventListener('resize', resize);
 resize();

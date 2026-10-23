@@ -54,46 +54,13 @@ const Sound = {
 let CLIP = false;
 const buzz = ms => { if (CLIP) return; try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 
-/* ======================= physics ======================= */
-// Newtonian gravity with a little softening, integrated by leapfrog (kick,
-// drift, kick) so orbits keep their energy. Black holes pull with the
-// Paczynski-Wiita force m / (r - rs)^2, a one-line stand-in for general
-// relativity that reproduces its precessing, zoom-whirl orbits. Every level runs in fixed steps
-// from its start, and moons advance by an exact rotation each step, so a
-// throw replays bit for bit on any device.
-const EPS2 = 0.0004, DT = 1 / 600, PULL = 0.75, SPEED = 1.3, TR = 0.075, STALE = 4.5, FF = 14;
+/*PHYS*/
+const PULL = 0.75, SPEED = 1.3, FF = 14;
+// only the aim preview uses this smooth form; flights use the exact stepping in phys.js
 function bodyPos(b, t) {
   if (!b.orbit) return [b.x, b.y];
   const o = b.orbit, a = o.phase + t / o.period * Math.PI * 2;
   return [o.cx + o.R * Math.cos(a), o.cy + o.R * Math.sin(a)];
-}
-function startPos(L) { return L.bodies.map(b => b.orbit ? [b.orbit.cx + b.orbit.ox, b.orbit.cy + b.orbit.oy] : [b.x, b.y]); }
-function advance(L, P, Q) {
-  for (let i = 0; i < L.bodies.length; i++) {
-    const b = L.bodies[i];
-    if (!b.orbit) { Q[i][0] = P[i][0]; Q[i][1] = P[i][1]; continue; }
-    const o = b.orbit, dx = P[i][0] - o.cx, dy = P[i][1] - o.cy;
-    Q[i][0] = o.cx + dx * o.c - dy * o.s; Q[i][1] = o.cy + dx * o.s + dy * o.c;
-  }
-}
-function accel(B, P, x, y, out) {
-  let ax = 0, ay = 0, hit = -1;
-  for (let i = 0; i < B.length; i++) {
-    const b = B[i], dx = P[i][0] - x, dy = P[i][1] - y, r2 = dx * dx + dy * dy;
-    if (r2 < b.r * b.r) hit = i;
-    let inv;
-    if (b.rs) { const r = Math.sqrt(r2), q = Math.max(r - b.rs, 1e-3); inv = b.m / (r * q * q); }
-    else { const e = r2 + EPS2; inv = b.m / (e * Math.sqrt(e)); }
-    ax += dx * inv; ay += dy * inv;
-  }
-  out[0] = ax; out[1] = ay; out[2] = hit; return out;
-}
-const isMoon = b => b.orbit && !b.star;
-function energy(B, P, x, y, vx, vy) {
-  let pot = 0;
-  // sqrt, not hypot: only sqrt is guaranteed to round the same on every device, and this decides a comet's fate
-  for (let k = 0; k < B.length; k++) { const dx = P[k][0] - x, dy = P[k][1] - y, r = Math.sqrt(dx * dx + dy * dy); pot -= B[k].m / (B[k].rs ? Math.max(r - B[k].rs, 1e-3) : r); }
-  return 0.5 * (vx * vx + vy * vy) + pot;
 }
 
 /* ======================= star color from temperature ======================= */
@@ -117,7 +84,8 @@ if (store.sound === false) Sound.on = false;
 const S = {
   idx: 0, tick: 0, acc: 0, speed: 1, ffK: 1, ff: false, comets: [], ghosts: [], dust: [], sparks: [], waves: [], labels: [],
   got: [], order: [], shots: 0, score: 0, tricks: [], won: false, wonAt: 0, gold: null, aim: null, flash: 0, hitStop: 0, throws: [], replay: null,
-  coached: !!store.coached, time: 0, P: [], Q: [], title: null,
+  coached: !!store.coached, time: 0, P: [], Q: [], title: null, W: null, shards: [], band: null, kind: 'n', left: 3, outAt: 0,
+  three: !!store.three, hard: !!store.hard,
 };
 const level = () => ALL[S.idx];
 const world = () => WORLDS[level().wi];
@@ -140,7 +108,7 @@ function streak() {
 }
 // a short fingerprint of a layout, so an old link never replays onto a level that has since changed
 function fp(L) {
-  const str = JSON.stringify([L.launch, L.bodies.map(b => [b.x, b.y, b.m, b.orbit && b.orbit.R, b.orbit && b.orbit.period]), L.targets]);
+  const str = JSON.stringify([L.launch, L.bodies.map(b => [b.x, b.y, b.m, b.orbit && b.orbit.R, b.orbit && b.orbit.period]), L.targets].concat(L.piles ? [L.piles] : []));
   let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0).toString(36).slice(0, 4);
 }
@@ -293,16 +261,19 @@ const TH = ['#ff7aa8', '#ffd166', '#6ef0c8', '#8fb0ff', '#c79bff'];
 function load(i, replay) {
   S.idx = clamp(i, 0, ALL.length - 1);
   const L = level();
-  Object.assign(S, { tick: 0, acc: 0, ffK: 1, ff: false, comets: [], ghosts: [], dust: [], sparks: [], waves: [], labels: [],
-    got: L.targets.map(() => false), order: [], shots: 0, score: 0, tricks: [], won: false, gold: null, aim: null, throws: [], replay: replay || null, flash: 0, hitStop: 0,
-    P: startPos(L), Q: startPos(L) });
+  const W = makeWorld(L);
+  Object.assign(S, { W, tick: 0, acc: 0, ffK: 1, ff: false, comets: W.comets, ghosts: [], dust: [], sparks: [], waves: [], labels: [],
+    got: W.got, order: [], shots: 0, score: 0, tricks: [], won: false, gold: null, aim: null, throws: [], replay: replay || null, flash: 0, hitStop: 0,
+    P: W.P, Q: W.Q, shards: [], band: null, left: 3, outAt: 0, wantPower: false, rewind: null, hardRun: S.hard && !replay });
+  if (!L.cracks) L.cracks = L.targets.map((t, i) => fracture(Math.floor((t[0] + 2) * 1e4) * 31 + Math.floor((t[1] + 3) * 1e4) + i));
+  if (S.kind === 'h' && !(L.piles && L.piles.length)) S.kind = 'n';
   if (!CLIP) {
     document.documentElement.style.setProperty('--accent', world().theme.acc);
     $('#lvname').textContent = `${L.li + 1}. ${L.name}`;
     $('#winbar').hidden = true; $('#toast').hidden = true; $('#hintBtn').hidden = true; $('#speedBtn').hidden = false;
     $('#replayTag').hidden = !replay; $('#replayTag').textContent = replay && replay.hint ? 'Hint' : 'Replay';
     if (!world().daily) store.last = S.idx;
-    save(); hudPips();
+    save(); hudPips(); syncControls();
   }
   titleCard();
 }
@@ -363,43 +334,70 @@ function stepTitle(dt) {
 }
 
 /* ---- throwing ---- */
-function fire(vx, vy) {
+function fire(vx, vy, kind = 'n') {
   Sound.wake();
   // quantized so a replay link reproduces the throw exactly
   vx = Math.round(vx * 1e5) / 1e5; vy = Math.round(vy * 1e5) / 1e5;
   releaseTitle();
   for (const c of S.comets) if (c.alive) { c.alive = false; retire(c); }
-  const L = level(), [x, y] = L.launch;
-  S.comets.push({ x, y, vx, vy, age: 0, alive: true, a: [0, 0, -1], trail: [[x, y]], k: 0,
-    cells: new Set(), fresh: 0, novel: 0, ffBase: 0, winds: L.bodies.map(() => 0), angs: L.bodies.map(() => null), close: false, moon: false, hits: 0,
+  const L = level(), [x, y] = L.launch, c = newComet(S.W, vx, vy, kind);
+  Object.assign(c, { trail: [[x, y]], winds: L.bodies.map(() => 0), angs: L.bodies.map(() => null), close: false, moon: false, hits: 0,
     moving: L.bodies.some(b => b.orbit), E0: energy(L.bodies, S.P, x, y, vx, vy) });
-  if (!S.replay) S.throws.push([S.tick, vx, vy]);
+  S.comets.push(c);
+  if (!S.replay) S.throws.push(kind === 'n' ? [S.tick, vx, vy] : [S.tick, vx, vy, kind, -1]);
   S.shots++; S.ff = false; S.ffK = 1;
+  if (S.three && !S.replay) S.left--;
   S.waves.push({ x, y, age: 0, r0: 0.02, col: '239,232,218' });
   Sound.whoosh(Math.min(1, Math.hypot(vx, vy) / (PULL * SPEED))); buzz(8);
   if (!S.coached && !CLIP) { S.coached = store.coached = true; save(); }
   hudPips();
 }
+// a tap while a comet with a power is flying: split it in two, or fire its burn
+function power() {
+  const W = S.W, c = W.comets.find(q => q.alive && q.power); if (!c) return;
+  const v0 = Math.hypot(c.vx, c.vy), twin = activate(W, c);
+  if (!S.replay) { const rec = S.throws[S.throws.length - 1]; if (rec && rec.length === 5 && rec[4] < 0) rec[4] = W.tick; }
+  if (twin) {
+    twin.trail = c.trail.slice(); twin.winds = c.winds.slice(); twin.angs = c.angs.slice();
+    burst(c.x, c.y, '#bfe8ff', 18); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.02, col: '191,232,255' });
+    Sound.tone(880, 0.35, 'triangle', 0.04); Sound.tone(1318.5, 0.35, 'triangle', 0.03, 0.03); buzz(10);
+  } else {
+    // exhaust leaves backward at high speed: the comet's gain in momentum is the plume's loss
+    const ux = c.vx / Math.hypot(c.vx, c.vy), uy = c.vy / Math.hypot(c.vx, c.vy);
+    for (let k = 0; k < 26; k++) { const j = (Math.random() - 0.5) * 0.5, v = 0.6 + Math.random() * 0.9; S.sparks.push({ x: c.x, y: c.y, vx: -(ux + uy * j) * v, vy: -(uy - ux * j) * v, life: 0.35 + Math.random() * 0.4, age: 0, col: '#ffb46a' }); }
+    Sound.whoosh(0.9); buzz(12);
+    if (v0 > 1.0) award(c, 'Oberth burn', 300);
+  }
+}
+const HOOKS = {
+  hit: (o, i) => o.rock ? onHit(o.by, i, o) : onHit(o, i),
+  track: c => tricks(c),
+  dead: o => { if (!o.rock) retire(o); else if (o.fate === 'crash') burst(o.x, o.y, '#d9b48c', 10); },
+};
 function retire(c) {
-  if (c.fate === 'crash') { Sound.thud(); burst(c.x, c.y, '#ffb47a', 30); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); buzz(20); }
+  if (c.fate === 'crash') { Sound.thud(); burst(c.x, c.y, '#ffb47a', 30, 1.4); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); buzz(20); }
   if (c.trail !== S.gold) { S.ghosts.push(c.trail); if (S.ghosts.length > 3) S.ghosts.shift(); }
 }
-function burst(x, y, col, n) {
-  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 0.2 + Math.random() * 0.7; S.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + Math.random() * 0.6, age: 0, col }); }
+function burst(x, y, col, n, life = 0.6) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 0.2 + Math.random() * 0.7; S.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: life + Math.random() * life, age: 0, col }); }
 }
-function award(c, name, pts) {
+function award(c, name, pts, at) {
   // each trick pays once per level, and labels earned together queue up and stack instead of overprinting
   const kind = name.split(' ×')[0];
   if (S.tricks.some(q => q[0].split(' ×')[0] === kind)) return;
   S.tricks.push([name, pts]); S.score += pts;
   const k = S.labels.filter(l => l.age < 0.4).length;
-  S.labels.push({ x: c.x, y: c.y, text: `${name} +${pts}`, age: -0.4 * k, slot: k, chimed: false });
+  const p = at || c;
+  S.labels.push({ x: p.x, y: p.y, vx: 0, vy: 0, text: `${name} +${pts}`, age: -0.4 * k, slot: k, chimed: false });
 }
 function stars() { const L = level(); return S.shots <= L.par ? 3 : S.shots <= L.par + 2 ? 2 : 1; }
 function win(c) {
   S.won = true; S.wonAt = S.time; S.gold = c.trail; Sound.fanfare(); buzz([12, 40, 12]);
   const L = level(), parBonus = Math.max(0, L.par - S.shots + 1) * 300;
   S.score += parBonus; if (parBonus) S.tricks.push([S.shots < L.par ? 'Under par' : 'On par', parBonus]);
+  if (S.three && !S.replay && S.left > 0) { const b = S.left * 1000; S.score += b; S.tricks.push([S.left > 1 ? `Spare comets ×${S.left}` : 'Spare comet', b]); }
+  // no aiming guide at all: half again the score
+  if (S.hardRun) { const b = Math.round(S.score * 0.5); S.score += b; S.tricks.unshift(['Blind', b]); }
   L.targets.forEach(([x, y], i) => { burst(x, y, TH[i % TH.length], 40); S.waves.push({ x, y, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') }); });
   if (!S.replay && !CLIP) {
     const prev = store.best[L.gid], rec = { shots: S.shots, score: S.score, stars: stars() };
@@ -408,20 +406,15 @@ function win(c) {
     if (S.idx === todayIdx()) { store.days = store.days || {}; store.days[dayNo()] = Math.max(store.days[dayNo()] || 0, rec.stars); }
     save();
   }
-  $('#hintBtn').hidden = true; $('#skipBtn').hidden = true;
+  $('#hintBtn').hidden = true; $('#skipBtn').hidden = true; syncControls();
 }
 
 /* ======================= simulation ======================= */
-function track(c, B) {
-  // anywhere new lately? A visit also marks neighbors so a slowly drifting orbit counts as old ground
-  if (Math.abs(c.x) < 1.1 && Math.abs(c.y) < 1.8) {
-    const i = Math.floor(c.x / 0.07), j = Math.floor(c.y / 0.07), key = i * 4096 + j;
-    if (!c.cells.has(key)) {
-      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) c.cells.add((i + a) * 4096 + j + b);
-      c.novel++; if (!S.ff || c.novel - c.ffBase >= 4) c.fresh = c.age;
-    }
-  }
-  // tricks: winding around the nearest star, close shaves, energy stolen from something moving
+// every sixth step, after the physics has had its say: the trail, and the bookkeeping for tricks
+function tricks(c) {
+  const B = level().bodies;
+  c.trail.push([c.x, c.y]); if (c.trail.length > 3200) c.trail.shift();
+  // winding around the stars, close shaves, energy stolen from something moving
   // winding number about every star: the total turning angle seen from it, over 2 pi
   let far = true;
   for (let k = 0; k < B.length; k++) {
@@ -437,17 +430,16 @@ function track(c, B) {
   // E = v^2/2 + phi(x, t) only changes when the wells move (dE/dt = d phi/dt), so any gain is a true gravity assist.
   // Measured away from the moving bodies, where their own pull is not mid-swing.
   if (c.moving && far && energy(B, S.P, c.x, c.y, c.vx, c.vy) - c.E0 > 0.1) c.moon = true;
-  // leaving with enough energy to never come back
-  if (Math.abs(c.x) > 1.35 || Math.abs(c.y) > 2.0) {
-    if (energy(B, S.P, c.x, c.y, c.vx, c.vy) > 0 && c.x * c.vx + c.y * c.vy > 0) { c.alive = false; c.fate = 'lost'; }
-  }
-  if (c.age - c.fresh > STALE + 26 || c.age > 240) { c.alive = false; c.fate = 'loop'; }
 }
-function onHit(c, i) {
+function onHit(c, i, rock) {
   c.hits++; S.order.push(i);
+  // knocked rock that found a target, or a comet that went through rubble first
+  if (rock) award(c, 'Chain reaction', 400, rock);
+  else if (c.bumped) award(c, c.kind === 'h' ? 'Wrecking ball' : 'Demolition', 250);
   const L = level(), [tx, ty] = L.targets[i];
-  burst(tx, ty, TH[i % TH.length], 36); S.waves.push({ x: tx, y: ty, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') });
-  S.hitStop = 0.45; S.flash = 1; S.score += 500; c.fresh = c.age;
+  shatter(i, rock || c);
+  burst(tx, ty, '#e6f6ff', 22); S.waves.push({ x: tx, y: ty, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') });
+  S.hitStop = 0.45; S.flash = 1; S.score += 500;
   Sound.chime(S.order.length - 1); buzz(14);
   const B = L.bodies, TAU = Math.PI * 2;
   let wk = 0; c.winds.forEach((w, k) => { if (Math.abs(w) > Math.abs(c.winds[wk])) wk = k; });
@@ -469,38 +461,33 @@ function simulate(dt) {
   S.flash *= Math.exp(-dt * 3);
   const stop = S.hitStop > 0 ? 0.2 : 1; S.hitStop -= dt;
   S.acc += dt * S.speed * S.ffK * stop * (S.won ? 0.3 : 1);
-  const L = level(), B = L.bodies, T = L.targets;
+  const L = level(), B = L.bodies, W = S.W;
   let n = 0;
   while (S.acc >= DT && n < 9000) {
     S.acc -= DT; n++;
-    // a replayed throw launches on exactly the step the original did
-    if (S.replay) { const r = S.replay.throws.find(q => q[0] === S.tick && !q.done); if (r) { r.done = true; fire(r[1], r[2]); } }
-    advance(L, S.P, S.Q);
-    for (const c of S.comets) {
-      if (!c.alive) continue;
-      const a = c.a;
-      accel(B, S.P, c.x, c.y, a); c.vx += a[0] * DT * 0.5; c.vy += a[1] * DT * 0.5;
-      c.x += c.vx * DT; c.y += c.vy * DT; c.age += DT;
-      accel(B, S.Q, c.x, c.y, a); c.vx += a[0] * DT * 0.5; c.vy += a[1] * DT * 0.5;
-      if (a[2] >= 0) { c.alive = false; c.fate = 'crash'; }
-      if (++c.k % 3 === 0 && !S.won) for (let i = 0; i < T.length; i++) if (!S.got[i]) { const dx = T[i][0] - c.x, dy = T[i][1] - c.y; if (dx * dx + dy * dy < TR * TR) { S.got[i] = true; onHit(c, i); } }
-      if (c.k % 6 === 0) { c.trail.push([c.x, c.y]); if (c.trail.length > 3200) c.trail.shift(); track(c, B); }
-      if (!c.alive) retire(c);
-    }
-    [S.P, S.Q] = [S.Q, S.P];
-    S.tick++;
+    // a replayed throw launches (and uses its power) on exactly the step the original did
+    if (S.replay) {
+      const r = S.replay.throws.find(q => q[0] === W.tick && !q.done); if (r) { r.done = true; fire(r[1], r[2], r[3] || 'n'); S.cur = r; }
+      for (const q of S.replay.throws) if (q.done && q[4] === W.tick && !q.used) { q.used = true; power(); }
+    } else if (S.wantPower) { S.wantPower = false; power(); }
+    step(W, HOOKS);
+    S.P = W.P; S.Q = W.Q; S.tick = W.tick;
   }
-  S.comets = S.comets.filter(c => c.alive);
+  S.comets = W.comets = W.comets.filter(c => c.alive);
   tails(dt, B);
-  for (const p of S.sparks) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96; }
+  // sparks are test particles too: crash debris swings round the star before it fades
+  { const a = [0, 0, -1]; for (const p of S.sparks) { accel(B, S.P, p.x, p.y, a); p.vx = (p.vx + a[0] * dt) * 0.985; p.vy = (p.vy + a[1] * dt) * 0.985; p.x += p.vx * dt; p.y += p.vy * dt; p.age += dt; if (a[2] >= 0) p.age = p.life; } }
   for (const w of S.waves) w.age += dt;
-  for (const l of S.labels) { l.age += dt; if (l.age >= 0 && !l.chimed) { l.chimed = true; Sound.trick(); } }
+  // trick labels are written in starlight too: once shown they drift, gently, down the gravity well
+  { const a = [0, 0, -1]; for (const l of S.labels) { l.age += dt; if (l.age >= 0 && !l.chimed) { l.chimed = true; Sound.trick(); }
+    if (l.age > 0) { accel(B, S.P, l.x, l.y, a); l.vx += a[0] * dt * 0.06; l.vy += a[1] * dt * 0.06; l.x += l.vx * dt; l.y += l.vy * dt; } } }
   S.dust = S.dust.filter(p => p.age < p.life); S.sparks = S.sparks.filter(p => p.age < p.life);
   S.waves = S.waves.filter(w => w.age < 1); S.labels = S.labels.filter(l => l.age < 1.8);
-  stepTitle(dt);
-  const live = !S.won && S.comets[0];
-  const was = S.ff; S.ff = !!live && live.age - live.fresh > STALE;
-  if (S.ff && !was) live.ffBase = live.novel;
+  stepTitle(dt); stepShards(dt); stepBand(dt);
+  // three comets per attempt: once the last one is gone without a win, the attempt starts over
+  if (S.three && !S.replay && !S.won && S.left <= 0 && !S.comets.length && !S.outAt) S.outAt = S.time;
+  // time speeds up once every comet still flying has gone stale (decided per step inside the physics)
+  S.ff = !S.won && S.comets.length > 0 && S.comets.every(c => c.ff);
   if (!CLIP) { const show = S.ffK > 1.6; if ($('#ff').hidden === show) $('#ff').hidden = !show; }
 }
 
@@ -536,6 +523,82 @@ function tails(dt, B) {
     p.x += p.vx * dt; p.y += p.vy * dt; p.age += dt;
   }
 }
+
+/* ---- ice moons: each target is a small frozen moon, pre-cracked along a Voronoi pattern ---- */
+// Seeds are scattered in the disc; each shard is the set of points nearer its seed than any other,
+// found by clipping the disc with the perpendicular bisector to every other seed (Sutherland-Hodgman).
+// The faint lines you see on a moon are exactly where it will break.
+function seeded(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function clipHalf(poly, px, py, nx, ny) {
+  // keep the side where (q - p) . n <= 0
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], da = (a[0] - px) * nx + (a[1] - py) * ny, db = (b[0] - px) * nx + (b[1] - py) * ny;
+    if (da <= 0) out.push(a);
+    if ((da < 0) !== (db < 0) && da !== db) { const t = da / (da - db); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+  }
+  return out;
+}
+function fracture(seed) {
+  const rnd = seeded(seed), n = 7 + Math.floor(rnd() * 3), pts = [];
+  for (let i = 0; i < n; i++) { const r = 0.92 * Math.sqrt(rnd()), a = rnd() * Math.PI * 2; pts.push([r * Math.cos(a), r * Math.sin(a)]); }
+  const disc = []; for (let k = 0; k < 28; k++) disc.push([Math.cos(k * Math.PI / 14), Math.sin(k * Math.PI / 14)]);
+  return pts.map((p, i) => {
+    let poly = disc;
+    pts.forEach((q, j) => { if (j !== i && poly.length) poly = clipHalf(poly, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, q[0] - p[0], q[1] - p[1]); });
+    const cx = poly.reduce((s, v) => s + v[0], 0) / poly.length, cy = poly.reduce((s, v) => s + v[1], 0) / poly.length;
+    return { poly, cx, cy };
+  }).filter(c => c.poly.length > 2);
+}
+// where the light comes from at (x, y): every star weighted by luminosity / r^2 (black holes by their disks)
+function lightDir(x, y) {
+  const B = level().bodies; let lx = 0, ly = 0;
+  for (let k = 0; k < B.length; k++) {
+    const b = B[k], dx = S.P[k][0] - x, dy = S.P[k][1] - y, d2 = dx * dx + dy * dy + 0.01, w = (b.bh ? 0.6 : lum(b)) / d2;
+    lx += dx / Math.sqrt(d2) * w; ly += dy / Math.sqrt(d2) * w;
+  }
+  const l = Math.hypot(lx, ly) || 1; return [lx / l, -ly / l];
+}
+const ROCKS = [];
+function rockShape(id) {
+  if (ROCKS[id]) return ROCKS[id];
+  const rnd = seeded(id * 7919 + 17), n = 7 + Math.floor(rnd() * 3), pts = [];
+  for (let k = 0; k < n; k++) { const a = (k + rnd() * 0.6) / n * Math.PI * 2, r = 0.68 + rnd() * 0.5; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  return (ROCKS[id] = { pts, spin: (rnd() < 0.5 ? -1 : 1) * (0.25 + rnd() * 0.5), a0: rnd() * 6.28 });
+}
+function shatter(i, src) {
+  const L = level(), [tx, ty] = L.targets[i], cells = L.cracks[i], Rw = TR * 0.92, rot = S.time * 0.25 + i, cr = Math.cos(rot), sr = Math.sin(rot);
+  for (const c of cells) {
+    const ox = c.cx * cr - c.cy * sr, oy = -(c.cx * sr + c.cy * cr), d = Math.hypot(ox, oy) || 1, kick = 0.25 + Math.random() * 0.35;
+    S.shards.push({ x: tx + ox * Rw, y: ty + oy * Rw, vx: src.vx * 0.3 + ox / d * kick, vy: src.vy * 0.3 + oy / d * kick,
+      pts: c.poly.map(v => [(v[0] - c.cx) * Rw, (v[1] - c.cy) * Rw]), ang: rot, w: (Math.random() - 0.5) * 9, age: 0, life: 2.4 + Math.random(), hue: TH[i % TH.length] });
+  }
+}
+function stepShards(dt) {
+  const B = level().bodies, a = [0, 0, -1];
+  for (const p of S.shards) {
+    // the pieces fall into the level's real gravity, and melt into any star they reach
+    accel(B, S.P, p.x, p.y, a); p.vx += a[0] * dt; p.vy += a[1] * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.ang += p.w * dt; p.age += dt;
+    if (a[2] >= 0) { p.age = p.life; S.sparks.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.4, age: 0, col: '#dff4ff' }); }
+  }
+  S.shards = S.shards.filter(p => p.age < p.life);
+}
+
+/* ---- the slingshot: two prongs and an elastic band that obeys Hooke's law ---- */
+// While you pull, the band stretches and thins (its volume is kept, so width ~ 1 / sqrt(length)).
+// Let go and the pouch springs back as a damped oscillator, x'' = -k x - c x', ringing a few times at 6 Hz.
+const BAND_K = Math.pow(2 * Math.PI * 6, 2), BAND_C = 2 * 0.11 * Math.sqrt(BAND_K);
+function stepBand(dt) {
+  const b = S.band; if (!b) return;
+  for (let k = 0; k < 4; k++) { const h = dt / 4; b.vx += (-BAND_K * b.x - BAND_C * b.vx) * h; b.vy += (-BAND_K * b.y - BAND_C * b.vy) * h; b.x += b.vx * h; b.y += b.vy * h; }
+  if (Math.abs(b.x) + Math.abs(b.y) < 0.2 && Math.abs(b.vx) + Math.abs(b.vy) < 2) S.band = null;
+}
+function pullOffset(A) {
+  // the finger's drag, scaled down to the slingshot: full power stretches the band 70 px
+  const maxDrag = PULL * G.s / 0.55, dx = A.cx - A.sx, dy = A.cy - A.sy, l = Math.hypot(dx, dy), f = 70 / maxDrag * Math.min(1, maxDrag / Math.max(l, 1e-6));
+  return [dx * f, dy * f];
+}
+const KIND_COL = { n: '#ffffff', s: '#bfe8ff', b: '#ffbf7a', h: '#ffd98a' };
 
 /* ======================= drawing ======================= */
 function spCol(v, a) {
@@ -588,27 +651,48 @@ function draw() {
   g.setLineDash([2, 7]); g.strokeStyle = 'rgba(239,232,218,.13)';
   for (const b of L.bodies) if (b.orbit) { const [ox, oy] = toScr(b.orbit.cx, b.orbit.cy); g.beginPath(); g.arc(ox, oy, b.orbit.R * G.s, 0, 7); g.stroke(); }
   g.setLineDash([]);
-  // targets: glowing crystal orbs, each its own color
+  // targets: small ice moons, lit from the side the starlight comes from, cracked where they will break
   L.targets.forEach(([x, y], i) => {
-    const [sx, sy0] = toScr(x, y), r = TR * G.s, hue = TH[i % TH.length], sy = sy0 + (S.got[i] ? 0 : Math.sin(t * 1.4 + i) * 1.5);
-    const glow = g.createRadialGradient(sx, sy, 0, sx, sy, r * 2.6);
-    glow.addColorStop(0, rgba(hue, S.got[i] ? 0.14 : 0.28)); glow.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, r * 2.6, 0, 7); g.fill();
+    const [sx, sy] = toScr(x, y), R = TR * G.s * 0.92, hue = TH[i % TH.length];
     if (S.got[i]) {
-      g.fillStyle = rgba(hue, 0.4); g.beginPath(); g.arc(sx, sy, r * 0.42, 0, 7); g.fill();
-      g.strokeStyle = rgba(hue, 0.5); g.lineWidth = 1; g.beginPath(); g.arc(sx, sy, r, 0, 7); g.stroke();
+      // where a moon was: a faint ring in its color
+      g.strokeStyle = rgba(hue, 0.35); g.lineWidth = 1; g.setLineDash([2, 4]); g.beginPath(); g.arc(sx, sy, R * 1.25, 0, 7); g.stroke(); g.setLineDash([]);
       return;
     }
-    const core = g.createRadialGradient(sx - r * 0.25, sy - r * 0.25, 0, sx, sy, r * 0.75);
-    core.addColorStop(0, 'rgba(255,255,255,.95)'); core.addColorStop(0.35, rgba(hue, 0.85)); core.addColorStop(1, rgba(hue, 0));
-    g.fillStyle = core; g.beginPath(); g.arc(sx, sy, r * 0.75, 0, 7); g.fill();
-    g.strokeStyle = hue; g.lineWidth = 1.4; g.setLineDash([5, 6]); g.lineDashOffset = -t * 14;
-    g.beginPath(); g.arc(sx, sy, r * (1 + 0.06 * Math.sin(t * 3 + i)), 0, 7); g.stroke(); g.setLineDash([]);
-    for (let k = 0; k < 3; k++) { const a = t * (1.4 + k * 0.3) + i * 2 + k * 2.1; g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.arc(sx + Math.cos(a) * r * 1.2, sy + Math.sin(a) * r * 1.2, 1.4, 0, 7); g.fill(); }
+    const glow = g.createRadialGradient(sx, sy, R * 0.8, sx, sy, R * 2.6);
+    glow.addColorStop(0, rgba(hue, 0.22)); glow.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, R * 2.6, 0, 7); g.fill();
+    const [ux, uy] = lightDir(x, y), body = g.createRadialGradient(sx + ux * R * 0.45, sy + uy * R * 0.45, R * 0.05, sx, sy, R * 1.02);
+    body.addColorStop(0, '#f7fcff'); body.addColorStop(0.42, '#cfe8f6'); body.addColorStop(0.8, '#5d7f9c'); body.addColorStop(1, '#1d2b3d');
+    g.fillStyle = body; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
+    // a wash of the moon's own color, then its fracture lines, turning slowly with it
+    g.fillStyle = rgba(hue, 0.22); g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
+    const rot = t * 0.25 + i, cr = Math.cos(rot), sr = Math.sin(rot);
+    g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 0.8;
+    for (const c of L.cracks[i]) { g.beginPath(); c.poly.forEach((v, k) => { const px = sx + (v[0] * cr - v[1] * sr) * R, py = sy + (v[0] * sr + v[1] * cr) * R; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.stroke(); }
+    g.strokeStyle = rgba(hue, 0.75); g.lineWidth = 1.2; g.beginPath(); g.arc(sx, sy, R * 1.28, rot * 0.6, rot * 0.6 + Math.PI * 1.6); g.stroke();
   });
+  // ice shards, falling
+  for (const p of S.shards) {
+    const [sx, sy] = toScr(p.x, p.y), a = clamp((p.life - p.age) / 0.6, 0, 1), cr = Math.cos(p.ang), sr = Math.sin(p.ang);
+    // a flat facet catches the light as it turns: brightness follows the cosine of its angle to the light
+    const lit = 0.55 + 0.45 * Math.cos(p.ang * 1.7);
+    g.globalAlpha = a; g.fillStyle = `rgb(${120 + 115 * lit | 0},${160 + 88 * lit | 0},${190 + 65 * lit | 0})`; g.strokeStyle = rgba(p.hue, 0.8); g.lineWidth = 0.8;
+    g.beginPath(); p.pts.forEach((v, k) => { const px = sx + (v[0] * cr - v[1] * sr) * G.s, py = sy + (v[0] * sr + v[1] * cr) * G.s; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.fill(); g.stroke();
+  }
+  g.globalAlpha = 1;
+  // rubble: lit from the starlight side, tumbling faster once something has hit them
+  for (const r of S.W.rocks) {
+    if (!r.alive) continue;
+    const sh = rockShape(r.id), [sx, sy] = toScr(r.x, r.y), R = RR * G.s, ang = sh.a0 + t * sh.spin * (r.by ? 5 : 1), [ux, uy] = lightDir(r.x, r.y);
+    const gr = g.createRadialGradient(sx + ux * R * 0.5, sy + uy * R * 0.5, R * 0.1, sx, sy, R * 1.2);
+    gr.addColorStop(0, '#e4d4bd'); gr.addColorStop(0.55, '#7b6c5d'); gr.addColorStop(1, '#2a241f');
+    g.fillStyle = gr; g.strokeStyle = 'rgba(20,16,12,.7)'; g.lineWidth = 0.8;
+    g.beginPath(); sh.pts.forEach((v, k) => { const px = sx + (v[0] * Math.cos(ang) - v[1] * Math.sin(ang)) * R, py = sy + (v[0] * Math.sin(ang) + v[1] * Math.cos(ang)) * R; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.fill(); g.stroke();
+  }
   g.globalCompositeOperation = 'lighter';
   // the title, written in starlight
-  const T = S.title;
+  const T = S.title, BHI = L.bodies.map((b, k) => b.bh ? k : -1).filter(k => k >= 0);
   if (T) {
     const age = t - T.t0, rel = T.released ? t - T.rt : 0;
     const fade = T.released ? clamp(1 - rel / 4.2, 0, 1) : 1;
@@ -617,26 +701,40 @@ function draw() {
       let px = p.x, py = p.y;
       if (!T.released) { const e = 1 - Math.pow(1 - clamp(age / 0.7, 0, 1), 3); px = p.hx + p.ox * (1 - e); py = p.hy + p.oy * (1 - e); }
       const [sx, sy] = toScr(px, py), tw = 0.65 + 0.35 * Math.sin(t * 5 + p.tw);
-      const a = (T.released ? fade : clamp(age / 0.4, 0, 1)) * tw;
-      g.fillStyle = `rgba(${235 + 20 * p.sc | 0},${(225 + 30 * T.tint[1] * p.sc) | 0},${(215 + 40 * T.tint[2] * p.sc) | 0},${a})`;
-      g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8);
+      const a = (T.released ? fade : clamp(age / 0.4, 0, 1)) * tw, col = `rgba(${235 + 20 * p.sc | 0},${(225 + 30 * T.tint[1] * p.sc) | 0},${(215 + 40 * T.tint[2] * p.sc) | 0},${a})`;
+      // near a black hole each grain is pulled apart along the line to it: the tidal stretch grows as 2 m / r^3
+      let st = 0, ux = 0, uy = 0;
+      if (T.released && BHI.length) for (const k of BHI) { const dx = S.P[k][0] - px, dy = S.P[k][1] - py, r2 = dx * dx + dy * dy, r = Math.sqrt(r2), q = 2 * L.bodies[k].m / (r2 * r) * 0.004; if (q > st) { st = q; ux = dx / r; uy = -dy / r; } }
+      if (st > 0.08) { const len = Math.min(16, st * 6); g.strokeStyle = col; g.lineWidth = 1.4; g.beginPath(); g.moveTo(sx - ux * len, sy - uy * len); g.lineTo(sx + ux * len, sy + uy * len); g.stroke(); }
+      else { g.fillStyle = col; g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8); }
     }
     const ta = T.released ? clamp(1 - rel / 0.6, 0, 1) : clamp(age / 0.5, 0, 1);
     if (ta > 0) {
       g.globalCompositeOperation = 'source-over'; g.textAlign = 'center';
-      g.font = '500 11px Jost, system-ui, sans-serif'; g.fillStyle = rgba(acc, 0.9 * ta);
+      g.font = '500 10px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = rgba(acc, 0.9 * ta);
       g.fillText(T.eyebrow.toUpperCase().split('').join(' '), cssW / 2, cssH * 0.4 - 52);
       g.font = '400 13px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = `rgba(155,152,170,${ta})`;
       g.fillText(T.par, cssW / 2, cssH * 0.4 + 56);
       g.textAlign = 'start'; g.globalCompositeOperation = 'lighter';
     }
   }
+  if (S.rewind) {
+    const p = clamp((t - S.rewind.t0) / 0.5, 0, 1), e = p * p * (3 - 2 * p);
+    for (const tr of S.rewind.tr) {
+      const n = Math.max(2, Math.round(tr.length * (1 - e))), h = tr[n - 1], [sx, sy] = toScr(h[0], h[1]);
+      ribbon(tr.slice(0, n), false, 1);
+      const gr = g.createRadialGradient(sx, sy, 0, sx, sy, 18); gr.addColorStop(0, '#fff'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.beginPath(); g.arc(sx, sy, 18, 0, 7); g.fill();
+    }
+  }
   if (S.gold) ribbon(S.gold, true, 1);
-  for (const c of S.comets) {
+  for (const c of S.rewind ? [] : S.comets) {
     if (c.trail !== S.gold) ribbon(c.trail, false, 1);
-    const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy), R = 16 + 10 * clamp(sp, 0, 1), grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
-    grd.addColorStop(0, '#ffffff'); grd.addColorStop(0.18, spCol(sp, 0.65)); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy), R = (16 + 10 * clamp(sp, 0, 1)) * Math.sqrt(c.m / 4) ** 0.5, grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
+    grd.addColorStop(0, c.power || c.kind === 'h' ? KIND_COL[c.kind] : '#ffffff'); grd.addColorStop(0.18, spCol(sp, 0.65)); grd.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grd; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
+    // a comet still holding its power pulses gently, so you know a tap will use it
+    if (c.power) { g.strokeStyle = rgba(KIND_COL[c.kind], 0.45 + 0.3 * Math.sin(t * 8)); g.lineWidth = 1; g.beginPath(); g.arc(sx, sy, 7 + 2 * Math.sin(t * 8), 0, 7); g.stroke(); }
+    if (c.kind === 'h') { g.fillStyle = '#5a3a10'; g.globalAlpha = 0.5; g.beginPath(); g.arc(sx, sy, 3.2, 0, 7); g.fill(); g.globalAlpha = 1; }
   }
   g.fillStyle = 'rgb(255,214,150)';
   for (const p of S.dust) if (!p.ion) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = (1 - p.age / p.life) * 0.5; g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8); }
@@ -690,9 +788,32 @@ function draw() {
   g.fillStyle = pg; g.beginPath(); g.arc(lx, ly, 6.5, 0, 7); g.fill();
   g.strokeStyle = acc; g.lineWidth = 1.3; g.beginPath(); g.ellipse(lx, ly, 14, 5.5, -0.35, 0, 7); g.stroke();
   const ma = t * 1.3; g.fillStyle = 'rgba(239,232,218,.8)'; g.beginPath(); g.arc(lx + Math.cos(ma) * 20, ly + Math.sin(ma) * 8, 1.8, 0, 7); g.fill();
-  if (!S.aim && !S.comets.length && !S.won && !S.replay && !CLIP) {
-    g.strokeStyle = 'rgba(239,232,218,.3)'; g.lineWidth = 1; g.setLineDash([2, 5]);
-    g.beginPath(); g.arc(lx, ly, 26 + 4 * Math.sin(t * 2.5), 0, 7); g.stroke(); g.setLineDash([]);
+  // the slingshot: prongs either side of the launcher and a band between them
+  const p1 = [lx - 19, ly - 3], p2 = [lx + 19, ly - 3];
+  let off = S.aim && !S.aim.cancel ? pullOffset(S.aim) : S.band ? [S.band.x, S.band.y] : [0, 0];
+  const pouch = [lx + off[0], ly - 3 + off[1]], stretch = Math.hypot(off[0], off[1]);
+  for (const q of [p1, p2]) {
+    const len = Math.hypot(pouch[0] - q[0], pouch[1] - q[1]), w = 2.8 * Math.sqrt(19 / Math.max(len, 19));
+    g.strokeStyle = rgba(acc, 0.25); g.lineWidth = w * 3.2; g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(pouch[0], pouch[1]); g.stroke();
+    g.strokeStyle = rgba(acc, 0.55 + 0.4 * clamp(stretch / 70, 0, 1)); g.lineWidth = w; g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(pouch[0], pouch[1]); g.stroke();
+    g.fillStyle = '#fff8ea'; g.beginPath(); g.arc(q[0], q[1], 2.2, 0, 7); g.fill();
+  }
+  const ready = !S.won && !S.replay && !CLIP && (!S.three || S.left > 0);
+  if (ready && (S.aim || !S.comets.length)) {
+    // the next comet, sitting in the pouch
+    const kc = KIND_COL[S.kind], gp = g.createRadialGradient(pouch[0], pouch[1], 0, pouch[0], pouch[1], 11);
+    gp.addColorStop(0, kc); gp.addColorStop(0.35, rgba(kc, 0.5)); gp.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gp; g.beginPath(); g.arc(pouch[0], pouch[1], 11, 0, 7); g.fill();
+  }
+  // comets still to come wait on circular orbits about the launcher; Kepler's third law sets their pace (T ~ r^1.5)
+  if (S.three && !S.won && !S.replay) for (let k = 0; k < S.left - (ready && !S.comets.length ? 1 : 0); k++) {
+    const r = 30 + k * 9, w = 1.6 * Math.pow(30 / r, 1.5), a = t * w + k * 2.1;
+    g.fillStyle = 'rgba(239,232,218,.75)'; g.beginPath(); g.arc(lx + Math.cos(a) * r, ly + Math.sin(a) * r * 0.42, 2.2, 0, 7); g.fill();
+  }
+  if (S.outAt) {
+    const a = clamp((t - S.outAt) / 0.6, 0, 1);
+    g.textAlign = 'center'; g.font = '400 italic 24px "Cormorant Garamond", serif'; g.fillStyle = `rgba(239,232,218,${0.8 * a})`;
+    g.fillText('out of comets', cssW / 2, cssH * 0.46); g.textAlign = 'start';
   }
   // first time only: a ghost finger showing the gesture
   if (!S.coached && !S.aim && !S.comets.length && !CLIP && (!S.title || S.title.released)) {
@@ -712,13 +833,13 @@ function draw() {
       if (A.moved) { const q = 8; g.beginPath(); g.moveTo(A.sx - q, A.sy - q); g.lineTo(A.sx + q, A.sy + q); g.moveTo(A.sx + q, A.sy - q); g.lineTo(A.sx - q, A.sy + q); g.stroke(); }
     } else {
     g.fillStyle = acc;
-    A.path.forEach((p, i) => { if (i % 4) return; const [sx, sy] = toScr(p[0], p[1]); g.globalAlpha = 1 - i / A.path.length; g.beginPath(); g.arc(sx, sy, 2, 0, 7); g.fill(); });
+    if (!S.hardRun) A.path.forEach((p, i) => { if (i % 4) return; const [sx, sy] = toScr(p[0], p[1]); g.globalAlpha = 1 - i / A.path.length; g.beginPath(); g.arc(sx, sy, 2, 0, 7); g.fill(); });
     g.globalAlpha = 1;
     const hot = Math.round(154 + 101 * pw);
     g.strokeStyle = `rgb(${hot},${Math.round(215 - 36 * pw)},${Math.round(255 - 148 * pw)})`; g.lineWidth = 3;
     g.beginPath(); g.arc(lx, ly, 22, -Math.PI / 2, -Math.PI / 2 + pw * Math.PI * 2); g.stroke();
-    g.strokeStyle = 'rgba(239,232,218,.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(A.sx, A.sy); g.lineTo(A.cx, A.cy); g.stroke();
-    g.fillStyle = 'rgba(239,232,218,.5)'; g.beginPath(); g.arc(A.cx, A.cy, 16, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(239,232,218,.2)'; g.lineWidth = 1; g.beginPath(); g.moveTo(A.sx, A.sy); g.lineTo(A.cx, A.cy); g.stroke();
+    g.strokeStyle = 'rgba(239,232,218,.45)'; g.beginPath(); g.arc(A.cx, A.cy, 14, 0, 7); g.stroke();
     }
   }
   // trick labels drift up slowly and fade
@@ -726,9 +847,9 @@ function draw() {
   for (const l of S.labels) {
     if (l.age < 0) continue;
     const [sx, sy] = toScr(l.x, l.y), a = l.age < 0.2 ? l.age / 0.2 : 1 - Math.max(0, l.age - 1.1) / 0.7;
-    g.fillStyle = `rgba(255,211,110,${a})`; g.fillText(l.text, sx, sy - 26 - l.slot * 22 - l.age * 22);
+    g.fillStyle = `rgba(255,211,110,${a})`; g.fillText(l.text, sx, sy - 26 - l.slot * 22 - Math.min(l.age, 0.5) * 22);
   }
-  if (CLIP) { g.font = '500 13px Jost, system-ui, sans-serif'; g.fillStyle = 'rgba(239,232,218,.6)'; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
+  if (CLIP) { g.font = '400 12px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = 'rgba(239,232,218,.6)'; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
   g.textAlign = 'start';
 }
 
@@ -740,8 +861,11 @@ cvs.addEventListener('pointerdown', e => {
   Sound.wake();
   if (S.won) { if (S.time - S.wonAt > 1.2 && !S.replay) next(); return; }
   // a second finger while aiming cancels the throw
-  if (pointer !== null) { S.aim = null; pointer = null; buzz(6); return; }
+  if (pointer !== null) { if (S.aim) S.band = { x: pullOffset(S.aim)[0], y: pullOffset(S.aim)[1], vx: 0, vy: 0 }; S.aim = null; pointer = null; buzz(6); return; }
   if (S.replay) return;
+  // a tap while a comet with a power is in flight uses the power
+  if (S.comets.some(c => c.alive && c.power)) { S.wantPower = true; buzz(8); return; }
+  if (S.three && S.left <= 0) return;
   releaseTitle();
   cvs.setPointerCapture(e.pointerId);
   pointer = e.pointerId;
@@ -761,12 +885,13 @@ cvs.addEventListener('pointermove', e => {
 const release = e => {
   if (e.pointerId !== pointer) return;
   pointer = null; const A = S.aim; S.aim = null;
-  if (A && e.type === 'pointerup' && !A.cancel && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1]);
+  if (A && !A.cancel) { const o = pullOffset(A); S.band = { x: o[0], y: o[1], vx: 0, vy: 0 }; }
+  if (A && e.type === 'pointerup' && !A.cancel && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1], S.kind);
 };
 cvs.addEventListener('pointerup', release); cvs.addEventListener('pointercancel', release);
 document.addEventListener('gesturestart', e => e.preventDefault());
 window.addEventListener('keydown', e => {
-  if (e.key === 'r' || e.key === 'R') load(S.idx);
+  if (e.key === 'r' || e.key === 'R') restart();
   if (e.key === 'n' || e.key === 'N') next();
 });
 
@@ -777,8 +902,29 @@ const next = () => {
   else if (world().daily) load(Math.min(store.last || 0, DAILY0 - 1));
   else load(S.idx + 1 >= ALL.length || isDaily(S.idx + 1) ? 0 : S.idx + 1);
 };
+// the picker, the hard-mode eye and the menu's comet count
+function syncControls() {
+  if (CLIP) return;
+  const L = level(), rubble = !!(L.piles && L.piles.length), show = !S.won && !S.replay;
+  $('#picker').hidden = !show;
+  document.querySelectorAll('#picker .kind').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.k === S.kind)); b.hidden = b.dataset.k === 'h' && !rubble; });
+  $('#hardBtn').setAttribute('aria-pressed', String(S.hard)); $('#hardBtn').hidden = !show;
+}
+document.querySelectorAll('#picker .kind').forEach(b => b.onclick = () => { S.kind = b.dataset.k; Sound.wake(); Sound.tone(660, 0.18, 'sine', 0.03); syncControls(); });
+$('#hardBtn').onclick = () => {
+  S.hard = store.hard = !S.hard; save();
+  // the guide can only be given up before the first throw, so a change mid-attempt starts the level over
+  if (S.shots && !S.won) load(S.idx); else { S.hardRun = S.hard && !S.replay; syncControls(); }
+};
 $('#speedBtn').onclick = () => { S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length]; $('#speedBtn').textContent = S.speed + '×'; };
-$('#restartBtn').onclick = () => load(S.idx);
+// restart rewinds: leapfrog is time-reversible, so running a flight backward is just its own trail in reverse
+function restart() {
+  const tr = S.comets.filter(c => c.trail && c.trail.length > 8).map(c => c.trail.slice());
+  if (!tr.length || REDUCED || S.won) { load(S.idx); return; }
+  S.rewind = { tr, t0: S.time }; S.aim = null;
+  Sound.tone(523.25, 0.3, 'sine', 0.03); Sound.tone(392, 0.3, 'sine', 0.03, 0.12);
+}
+$('#restartBtn').onclick = restart;
 $('#skipBtn').onclick = () => { store.skipped = [...new Set([...(store.skipped || []), level().gid])]; save(); next(); };
 $('#hintBtn').onclick = () => { const L = level(); if (L.sol) load(S.idx, { throws: [[0, L.sol[0], L.sol[1]]], hint: true }); };
 $('#menuBtn').onclick = () => { buildMenu(); $('#menu').hidden = false; };
@@ -818,6 +964,8 @@ function buildMenu() {
     });
     sec.append(h, grid); box.append(sec);
   });
+  const cr = $('#cometRow'); cr.replaceChildren();
+  [[false, 'Unlimited'], [true, 'Three']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === S.three)); b.onclick = () => { if (S.three === id) return; S.three = store.three = id; save(); buildMenu(); load(S.idx); }; cr.append(b); });
   const r = $('#soundRow'); r.replaceChildren();
   [[true, 'On'], [false, 'Off']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === Sound.on)); b.onclick = () => { Sound.on = store.sound = id; save(); if (id) Sound.wake(); buildMenu(); }; r.append(b); });
 }
@@ -826,7 +974,15 @@ function buildMenu() {
 // A replay is the level plus the throws: on which step each was made and how hard.
 const b36 = n => (n < 0 ? '-' : '') + Math.abs(n).toString(36);
 // Links name the level by id and fingerprint rather than position, so adding levels never breaks them.
-function replayCode() { const L = level(); return `${L.gid}~${fp(L)}.` + S.throws.map(([t, vx, vy]) => [t, Math.round(vx * 1e5), Math.round(vy * 1e5)].map(b36).join('.')).join('_'); }
+const KCODE = ['n', 's', 'b', 'h'];
+function replayCode() {
+  const L = level();
+  return `${L.gid}~${fp(L)}.` + S.throws.map(([t, vx, vy, kind, act]) => {
+    const a = [t, Math.round(vx * 1e5), Math.round(vy * 1e5)];
+    if (kind && kind !== 'n') a.push(KCODE.indexOf(kind), act == null ? -1 : act);
+    return a.map(b36).join('.');
+  }).join('_');
+}
 function parseReplay(code) {
   const cut = code.indexOf('.'), head = code.slice(0, cut);
   let idx;
@@ -835,7 +991,8 @@ function parseReplay(code) {
     if (idx < 0) return null;
     if (fp(ALL[idx]) !== f) return { idx, throws: [] };
   } else { idx = parseInt(head, 10); if (!(idx >= 0 && idx < ALL.length)) return null; }
-  const throws = code.slice(cut + 1).split('_').map(s => s.split('.').map(v => parseInt(v, 36))).filter(a => a.length === 3 && a.every(Number.isFinite)).map(([t, x, y]) => [t, x / 1e5, y / 1e5]);
+  const throws = code.slice(cut + 1).split('_').map(s => s.split('.').map(v => parseInt(v, 36))).filter(a => (a.length === 3 || a.length === 5) && a.every(Number.isFinite))
+    .map(([t, x, y, k, act]) => k == null ? [t, x / 1e5, y / 1e5] : [t, x / 1e5, y / 1e5, KCODE[k] || 'n', act]);
   return { idx, throws };
 }
 $('#shareBtn').onclick = async () => {
@@ -913,7 +1070,7 @@ function stillShot() {
   renderGL(); draw();
   const out = document.createElement('canvas'); out.width = W; out.height = H; const oc = out.getContext('2d');
   oc.drawImage(cvs, 0, 0); oc.drawImage(fx, 0, 0);
-  oc.font = `500 ${13 * DPR}px Jost, system-ui, sans-serif`; oc.textAlign = 'center'; oc.fillStyle = 'rgba(239,232,218,.6)';
+  oc.font = `400 ${12 * DPR}px "IBM Plex Mono", ui-monospace, monospace`; oc.textAlign = 'center'; oc.fillStyle = 'rgba(239,232,218,.6)';
   oc.fillText('areabake.com/phone', W / 2, H - 26 * DPR);
   out.toBlob(blob => {
     if (!blob) { toast('Could not make a picture.', 3000); return; }
@@ -939,6 +1096,7 @@ function loop(now) {
   const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000)); last = now;
   if (document.hidden || CLIP) { Sound.hum(0); return; }
   S.time += dt;
+  if (S.rewind) { renderGL(); draw(); if (S.time - S.rewind.t0 > 0.5) { S.rewind = null; load(S.idx); } return; }
   simulate(dt); renderGL(); draw();
   const hc = !S.won && S.comets[0];
   Sound.hum(hc && S.ffK < 2 ? Math.hypot(hc.vx, hc.vy) : 0);
@@ -947,6 +1105,7 @@ function loop(now) {
     $('#nextBtn').setAttribute('aria-label', S.replay ? 'Play this level' : 'Next level');
   }
   if (S.replay && !S.won && !S.comets.length && S.replay.throws.every(q => q.done)) load(S.idx);
+  if (S.outAt && S.time - S.outAt > 1.9) load(S.idx);
 }
 window.addEventListener('resize', resize);
 resize();
