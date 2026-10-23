@@ -2,7 +2,7 @@ const fs = require('fs');
 const DT = 1 / 600;
 const read = f => fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : [];
 // rock piles chosen by place.js, keyed by layout; none on the first build
-const PILES = process.env.NOPILES ? {} : (fs.existsSync('piles.json') ? JSON.parse(fs.readFileSync('piles.json', 'utf8')) : {});
+const PILES = {}; // rubble was tried and taken out: it knocked looping comets off their orbits
 const withPiles = L => { const p = PILES[JSON.stringify([L.launch, L.targets])]; return p ? { ...L, piles: p } : L; };
 // moons advance by an exact rotation each step; these constants make that identical on every device
 const exact = L => ({ ...L, bodies: L.bodies.map(b => b.orbit ? { ...b, orbit: { ...b.orbit,
@@ -32,17 +32,19 @@ function pick(w, n) {
     .map((L, i) => exact({ name: names[w][i], par: L.par, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol }));
 }
 const orig = JSON.parse(fs.readFileSync('originals.json', 'utf8'));
-const keep = [
-  { ...orig.find(l => l.name === 'Bend it'), par: 1, sol: [0.36592, 0.23763] },
-  { ...orig.find(l => l.name === 'One lap'), par: 1, sol: [0.03802, 0.72538] },
-];
+// three of the original hand-made levels still play well with the larger targets
+const OS = read('orig-sols.json');
+const keep = [{ ...orig.find(l => l.name === 'Bend it'), par: 1, sol: [0.36592, 0.23763] }];
+const keep2 = [{ ...orig.find(l => l.name === 'Two suns'), name: 'Binary', par: 1, sol: OS['Two suns'] }, { ...orig.find(l => l.name === 'Figure eight'), name: 'Infinity', par: 1, sol: OS['Figure eight'] }];
+// the campaign is hand-made (lab.js): each world easiest first, by the share of throws that win
+const hand = w => read(`hand-${w}.json`).sort((a, b) => b.win - a.win)
+  .map(L => exact({ name: L.name, par: 1, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol }));
 const WORLDS = [
-  { id: 'w1', name: 'First light', theme: { acc: '#9ad7ff', neb: '#d65fae' }, levels: [...keep.map(exact), ...pick('first', 10)] },
-  { id: 'w2', name: 'Two suns', theme: { acc: '#ffb48a', neb: '#ff5f9a' }, levels: pick('binary', 12) },
-  { id: 'w5', name: 'Waltz', theme: { acc: '#ffc4dc', neb: '#7a8cff' }, levels: pick('waltz', 12) },
-  { id: 'w3', name: 'Moons', theme: { acc: '#b6a8ff', neb: '#5df2ff' }, levels: pick('moons', 12) },
-  { id: 'w4', name: 'Crowds', theme: { acc: '#8fe3a8', neb: '#ffd166' }, levels: pick('crowd', 12) },
-  { id: 'w6', name: 'Event horizon', theme: { acc: '#ffcf9a', neb: '#8a5cff' }, levels: pick('horizon', 12) },
+  { id: 'w1', name: 'First light', theme: { acc: '#9ad7ff', neb: '#d65fae' }, levels: [...keep.map(exact), ...hand('first')] },
+  { id: 'w2', name: 'Two suns', theme: { acc: '#ffb48a', neb: '#ff5f9a' }, levels: [...keep2.map(exact), ...hand('binary')] },
+  { id: 'w5', name: 'Waltz', theme: { acc: '#ffc4dc', neb: '#7a8cff' }, levels: hand('waltz') },
+  { id: 'w3', name: 'Moons', theme: { acc: '#b6a8ff', neb: '#5df2ff' }, levels: hand('moons') },
+  { id: 'w6', name: 'Event horizon', theme: { acc: '#ffcf9a', neb: '#8a5cff' }, levels: hand('horizon') },
 ];
 // the daily sky: every spare layout, shuffled by a fixed seed and named for real stars
 const STARS = ['Vega', 'Deneb', 'Altair', 'Rigel', 'Sirius', 'Arcturus', 'Capella', 'Procyon', 'Aldebaran', 'Antares', 'Spica', 'Pollux', 'Castor', 'Regulus',
@@ -56,9 +58,13 @@ const rnd = () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imu
 for (let k = spare.length - 1; k > 0; k--) { const j = Math.floor(rnd() * (k + 1)); [spare[k], spare[j]] = [spare[j], spare[k]]; }
 // once a day has a level it keeps it: the frozen order lives in daily-pool.json and new layouts only join the end
 const key = L => JSON.stringify([L.launch, L.targets]);
-const frozen = read('daily-pool.json'), seen = new Set(frozen.map(key));
-const daily = [...frozen, ...spare.filter(L => !seen.has(key(L)))];
-if (process.env.FREEZE) fs.writeFileSync('daily-pool.json', JSON.stringify(daily));
+// only generated layouts that proved generous (daily-good.json, from dailyfilter.js) make the daily sky
+// plus layouts the lab designed from random skies (dailylab.js), interleaved so the kinds of sky alternate
+const labbed = [11, 22, 33, 44].map(s => read(`daily-lab-${s}.json`)), mixed = [];
+for (let i = 0; labbed.some(a => i < a.length); i++) for (const a of labbed) if (a[i]) mixed.push(a[i]);
+const frozen = read('daily-v3.json'), seen = new Set(frozen.map(key));
+const daily = [...frozen, ...[...read('daily-good.json'), ...mixed].filter(L => !seen.has(key(L)))];
+if (process.env.FREEZE) fs.writeFileSync('daily-v3.json', JSON.stringify(daily));
 spare.length = 0; spare.push(...daily);
 WORLDS.push({ id: 'd', name: 'Today', daily: true, theme: { acc: '#ffe3a3', neb: '#5d7bff' },
   levels: spare.map((L, i) => exact({ name: STARS[i % STARS.length] + (i >= STARS.length ? ' ' + (1 + Math.floor(i / STARS.length)) : ''), par: L.par, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol })) });

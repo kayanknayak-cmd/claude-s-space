@@ -7,7 +7,7 @@
 // from its start, and moons advance by an exact rotation each step, so a
 // throw replays bit for bit on any device. Only + - * / and sqrt appear in a step:
 // those are the operations every device rounds the same way.
-const EPS2 = 0.0004, DT = 1 / 600, TR = 0.075, STALE = 4.5;
+const EPS2 = 0.0004, DT = 1 / 600, TR = 0.09, STALE = 4.5;
 function startPos(L) { return L.bodies.map(b => b.orbit ? [b.orbit.cx + b.orbit.ox, b.orbit.cy + b.orbit.oy] : [b.x, b.y]); }
 function advance(L, P, Q) {
   for (let i = 0; i < L.bodies.length; i++) {

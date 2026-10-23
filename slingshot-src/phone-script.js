@@ -77,15 +77,14 @@ const starTemp = m => 2700 + 10800 * Math.pow(clamp((m - 0.05) / 0.35, 0, 1), 0.
 
 /* ======================= state ======================= */
 const ALL = WORLDS.flatMap((w, wi) => w.levels.map((L, li) => ({ ...L, wi, li, gid: `${w.id}-${li}`, cols: L.bodies.map(b => b.bh ? [1, 0.86, 0.68] : isMoon(b) ? [0.55, 0.7, 0.98] : blackbody(starTemp(b.m))) })));
-const store = (() => { try { return JSON.parse(localStorage.getItem('areabake.slingshot.v2') || '{}') || {}; } catch (e) { return {}; } })();
+const store = (() => { try { return JSON.parse(localStorage.getItem('areabake.slingshot.v3') || '{}') || {}; } catch (e) { return {}; } })();
 store.best = store.best || {};
-const save = () => { if (CLIP) return; try { localStorage.setItem('areabake.slingshot.v2', JSON.stringify(store)); } catch (e) {} };
+const save = () => { if (CLIP) return; try { localStorage.setItem('areabake.slingshot.v3', JSON.stringify(store)); } catch (e) {} };
 if (store.sound === false) Sound.on = false;
 const S = {
   idx: 0, tick: 0, acc: 0, speed: 1, ffK: 1, ff: false, comets: [], ghosts: [], dust: [], sparks: [], waves: [], labels: [],
   got: [], order: [], shots: 0, score: 0, tricks: [], won: false, wonAt: 0, gold: null, aim: null, flash: 0, hitStop: 0, throws: [], replay: null,
-  coached: !!store.coached, time: 0, P: [], Q: [], title: null, W: null, shards: [], band: null, kind: 'n', left: 3, outAt: 0,
-  three: !!store.three, hard: !!store.hard,
+  coached: !!store.coached, time: 0, P: [], Q: [], title: null, W: null, band: null, tg: [],
 };
 const level = () => ALL[S.idx];
 const world = () => WORLDS[level().wi];
@@ -121,6 +120,7 @@ const FS = `#version 300 es
 precision highp float; precision highp int;
 uniform vec2 u_center; uniform float u_scale, u_time, u_flash; uniform int u_n; uniform vec4 u_b[10]; uniform float u_kind[10]; uniform vec3 u_sc[10];
 uniform vec3 u_acc, u_neb; uniform vec4 u_gw; uniform vec2 u_gw2;
+uniform int u_tn; uniform vec4 u_tg[6]; uniform vec3 u_tcol[6]; uniform float u_tr;
 out vec4 o;
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
@@ -132,6 +132,35 @@ vec3 bb(float T){ T /= 100.0; vec3 c;
   c.g = T <= 66.0 ? clamp(0.39008157876 * log(T) - 0.63184144378, 0.0, 1.0) : clamp(1.12989086089 * pow(T - 60.0, -0.0755148492), 0.0, 1.0);
   c.b = T >= 66.0 ? 1.0 : T <= 19.0 ? 0.0 : clamp(0.54320678911 * log(T - 10.0) - 1.19625408914, 0.0, 1.0);
   return c; }
+// Bessel J_n by its integral form, (1 / pi) int_0^pi cos(n tau - x sin tau) d tau
+float besselJ(float n, float x){ float s = 0.0; for (int i = 0; i < 20; i++) { float tau = (float(i) + 0.5) * 3.14159265 / 20.0; s += cos(n * tau - x * sin(tau)); } return s / 20.0; }
+// a drumhead mode: n nodal diameters, and k the m-th zero of J_n so the rim stays still
+vec2 chMode(float m){
+  if (m < 0.5) return vec2(2.0, 8.4172); if (m < 1.5) return vec2(3.0, 9.7610); if (m < 2.5) return vec2(1.0, 7.0156);
+  if (m < 3.5) return vec2(4.0, 11.0647); if (m < 4.5) return vec2(0.0, 8.6537); return vec2(5.0, 12.2251);
+}
+vec3 plates(vec2 p){
+  vec3 add = vec3(0.0);
+  for (int i = 0; i < 6; i++) {
+    if (i >= u_tn) break;
+    vec4 T = u_tg[i];
+    if (T.z < 0.0) continue;
+    vec2 d = (p - T.xy) / u_tr; float r = length(d);
+    if (r > 1.02) continue;
+    float hit = T.w, shake = hit < 0.0 ? 0.0 : clamp(hit / 0.35, 0.0, 1.0), gone = hit < 0.0 ? 0.0 : clamp((hit - 0.25) / 0.95, 0.0, 1.0);
+    vec2 nk = chMode(T.z); float th = atan(d.y, d.x) + u_time * 0.12 * (mod(T.z, 2.0) > 0.5 ? 1.0 : -1.0);
+    float u = besselJ(nk.x, nk.y * r) * cos(nk.x * th);
+    // the sand: dense on the nodes, loosened by a hit, then gone
+    vec2 cell = floor(gl_FragCoord.xy * 0.8);
+    float jit = (h21(cell + floor(u_time * 24.0)) - 0.5) * shake * 0.5, eps = 0.05 + 0.3 * shake;
+    float sand = exp(-pow((u + jit) / eps, 2.0)) * step(0.42 + 0.3 * shake, h21(cell + float(i) * 13.1));
+    float edge = smoothstep(1.0, 0.94, r), keep = 1.0 - gone;
+    vec3 hue = u_tcol[i];
+    add = add * (1.0 - edge * keep * 0.85) + (hue * 0.05 + vec3(0.012, 0.014, 0.024)) * edge * keep
+        + mix(hue, vec3(1.0), 0.35) * sand * edge * keep * 1.15 + hue * exp(-abs(r - 1.0) * 70.0) * 0.5 * keep;
+  }
+  return add;
+}
 void main(){
   vec2 p = (gl_FragCoord.xy - u_center) / u_scale;
   // gravitational lensing by black holes: the thin-lens map beta = theta - thetaE^2 (theta - x) / |theta - x|^2
@@ -212,6 +241,10 @@ void main(){
   col += lc * line * (0.07 + 0.22 * smoothstep(0.0, 2.4, log(phi + 1.0)));
   col += u_acc * 0.028 * smoothstep(0.2, 3.0, phi) + light + vec3(0.55, 0.85, 1.0) * u_flash * 0.08;
   col = col * shadow + vec3(1.0, 0.86, 0.68) * ring;
+  // plates sit over the sky: darken beneath them, then lay the sand
+  { vec3 pl = plates(p); float cover = 0.0;
+    for (int i = 0; i < 6; i++) { if (i >= u_tn) break; vec4 T = u_tg[i]; if (T.z < 0.0) continue; float r = length(p - T.xy) / u_tr; float gone = T.w < 0.0 ? 0.0 : clamp((T.w - 0.25) / 0.95, 0.0, 1.0); cover = max(cover, smoothstep(1.0, 0.94, r) * (1.0 - gone)); }
+    col = col * (1.0 - cover * 0.9) + pl; }
   col = 1.0 - exp(-col * 1.15);
   o = vec4(col, 1.0);
 }`;
@@ -222,7 +255,7 @@ if (gl) {
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
   void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`));
   gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
-  for (const n of ['u_center', 'u_scale', 'u_time', 'u_flash', 'u_n', 'u_b', 'u_kind', 'u_sc', 'u_acc', 'u_neb', 'u_gw', 'u_gw2']) U[n] = gl.getUniformLocation(prog, n);
+  for (const n of ['u_center', 'u_scale', 'u_time', 'u_flash', 'u_n', 'u_b', 'u_kind', 'u_sc', 'u_acc', 'u_neb', 'u_gw', 'u_gw2', 'u_tn', 'u_tg', 'u_tcol', 'u_tr']) U[n] = gl.getUniformLocation(prog, n);
   gl.bindVertexArray(gl.createVertexArray());
 }
 function geom() {
@@ -247,6 +280,14 @@ function renderGL() {
   gl.uniform1f(U.u_time, S.time % 1000); gl.uniform1f(U.u_flash, S.flash);
   gl.uniform1i(U.u_n, n); gl.uniform4fv(U.u_b, arr); gl.uniform1fv(U.u_kind, kind); gl.uniform3fv(U.u_sc, col);
   gl.uniform3fv(U.u_acc, hex(th.acc)); gl.uniform3fv(U.u_neb, hex(th.neb));
+  // Chladni plates are drawn by the shader: position, mode (or -1 for a cell), and time since hit
+  const tg = new Float32Array(24), tc = new Float32Array(18), nt = Math.min(6, L.targets.length);
+  for (let i = 0; i < nt; i++) {
+    const o = S.tg[i] || { kind: 'cell', hit: -1 }, done = S.got[i] && o.hit < 0;
+    tg.set([L.targets[i][0], L.targets[i][1], o.kind === 'plate' && !done ? o.mode : -1, o.hit], i * 4);
+    tc.set(hex(o.hue || '#ffffff'), i * 3);
+  }
+  gl.uniform1i(U.u_tn, nt); gl.uniform4fv(U.u_tg, tg); gl.uniform3fv(U.u_tcol, tc); gl.uniform1f(U.u_tr, TR);
   // a pair of stars sharing one orbit center radiates; its waves leave at a slow, visible "speed of light"
   const pair = B.map((b, i) => i).filter(i => B[i].star && B[i].orbit);
   if (pair.length >= 2) {
@@ -264,16 +305,14 @@ function load(i, replay) {
   const W = makeWorld(L);
   Object.assign(S, { W, tick: 0, acc: 0, ffK: 1, ff: false, comets: W.comets, ghosts: [], dust: [], sparks: [], waves: [], labels: [],
     got: W.got, order: [], shots: 0, score: 0, tricks: [], won: false, gold: null, aim: null, throws: [], replay: replay || null, flash: 0, hitStop: 0,
-    P: W.P, Q: W.Q, shards: [], band: null, left: 3, outAt: 0, wantPower: false, rewind: null, hardRun: S.hard && !replay });
-  if (!L.cracks) L.cracks = L.targets.map((t, i) => fracture(Math.floor((t[0] + 2) * 1e4) * 31 + Math.floor((t[1] + 3) * 1e4) + i));
-  if (S.kind === 'h' && !(L.piles && L.piles.length)) S.kind = 'n';
+    P: W.P, Q: W.Q, band: null, rewind: null, tg: makeTargets(L) });
   if (!CLIP) {
     document.documentElement.style.setProperty('--accent', world().theme.acc);
     $('#lvname').textContent = `${L.li + 1}. ${L.name}`;
     $('#winbar').hidden = true; $('#toast').hidden = true; $('#hintBtn').hidden = true; $('#speedBtn').hidden = false;
     $('#replayTag').hidden = !replay; $('#replayTag').textContent = replay && replay.hint ? 'Hint' : 'Replay';
     if (!world().daily) store.last = S.idx;
-    save(); hudPips(); syncControls();
+    save(); hudPips();
   }
   titleCard();
 }
@@ -346,33 +385,15 @@ function fire(vx, vy, kind = 'n') {
   S.comets.push(c);
   if (!S.replay) S.throws.push(kind === 'n' ? [S.tick, vx, vy] : [S.tick, vx, vy, kind, -1]);
   S.shots++; S.ff = false; S.ffK = 1;
-  if (S.three && !S.replay) S.left--;
   S.waves.push({ x, y, age: 0, r0: 0.02, col: '239,232,218' });
   Sound.whoosh(Math.min(1, Math.hypot(vx, vy) / (PULL * SPEED))); buzz(8);
   if (!S.coached && !CLIP) { S.coached = store.coached = true; save(); }
   hudPips();
 }
-// a tap while a comet with a power is flying: split it in two, or fire its burn
-function power() {
-  const W = S.W, c = W.comets.find(q => q.alive && q.power); if (!c) return;
-  const v0 = Math.hypot(c.vx, c.vy), twin = activate(W, c);
-  if (!S.replay) { const rec = S.throws[S.throws.length - 1]; if (rec && rec.length === 5 && rec[4] < 0) rec[4] = W.tick; }
-  if (twin) {
-    twin.trail = c.trail.slice(); twin.winds = c.winds.slice(); twin.angs = c.angs.slice();
-    burst(c.x, c.y, '#bfe8ff', 18); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.02, col: '191,232,255' });
-    Sound.tone(880, 0.35, 'triangle', 0.04); Sound.tone(1318.5, 0.35, 'triangle', 0.03, 0.03); buzz(10);
-  } else {
-    // exhaust leaves backward at high speed: the comet's gain in momentum is the plume's loss
-    const ux = c.vx / Math.hypot(c.vx, c.vy), uy = c.vy / Math.hypot(c.vx, c.vy);
-    for (let k = 0; k < 26; k++) { const j = (Math.random() - 0.5) * 0.5, v = 0.6 + Math.random() * 0.9; S.sparks.push({ x: c.x, y: c.y, vx: -(ux + uy * j) * v, vy: -(uy - ux * j) * v, life: 0.35 + Math.random() * 0.4, age: 0, col: '#ffb46a' }); }
-    Sound.whoosh(0.9); buzz(12);
-    if (v0 > 1.0) award(c, 'Oberth burn', 300);
-  }
-}
 const HOOKS = {
-  hit: (o, i) => o.rock ? onHit(o.by, i, o) : onHit(o, i),
+  hit: (c, i) => onHit(c, i),
   track: c => tricks(c),
-  dead: o => { if (!o.rock) retire(o); else if (o.fate === 'crash') burst(o.x, o.y, '#d9b48c', 10); },
+  dead: c => retire(c),
 };
 function retire(c) {
   if (c.fate === 'crash') { Sound.thud(); burst(c.x, c.y, '#ffb47a', 30, 1.4); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); buzz(20); }
@@ -395,9 +416,6 @@ function win(c) {
   S.won = true; S.wonAt = S.time; S.gold = c.trail; Sound.fanfare(); buzz([12, 40, 12]);
   const L = level(), parBonus = Math.max(0, L.par - S.shots + 1) * 300;
   S.score += parBonus; if (parBonus) S.tricks.push([S.shots < L.par ? 'Under par' : 'On par', parBonus]);
-  if (S.three && !S.replay && S.left > 0) { const b = S.left * 1000; S.score += b; S.tricks.push([S.left > 1 ? `Spare comets ×${S.left}` : 'Spare comet', b]); }
-  // no aiming guide at all: half again the score
-  if (S.hardRun) { const b = Math.round(S.score * 0.5); S.score += b; S.tricks.unshift(['Blind', b]); }
   L.targets.forEach(([x, y], i) => { burst(x, y, TH[i % TH.length], 40); S.waves.push({ x, y, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') }); });
   if (!S.replay && !CLIP) {
     const prev = store.best[L.gid], rec = { shots: S.shots, score: S.score, stars: stars() };
@@ -406,7 +424,7 @@ function win(c) {
     if (S.idx === todayIdx()) { store.days = store.days || {}; store.days[dayNo()] = Math.max(store.days[dayNo()] || 0, rec.stars); }
     save();
   }
-  $('#hintBtn').hidden = true; $('#skipBtn').hidden = true; syncControls();
+  $('#hintBtn').hidden = true; $('#skipBtn').hidden = true;
 }
 
 /* ======================= simulation ======================= */
@@ -431,14 +449,10 @@ function tricks(c) {
   // Measured away from the moving bodies, where their own pull is not mid-swing.
   if (c.moving && far && energy(B, S.P, c.x, c.y, c.vx, c.vy) - c.E0 > 0.1) c.moon = true;
 }
-function onHit(c, i, rock) {
+function onHit(c, i) {
   c.hits++; S.order.push(i);
-  // knocked rock that found a target, or a comet that went through rubble first
-  if (rock) award(c, 'Chain reaction', 400, rock);
-  else if (c.bumped) award(c, c.kind === 'h' ? 'Wrecking ball' : 'Demolition', 250);
   const L = level(), [tx, ty] = L.targets[i];
-  shatter(i, rock || c);
-  burst(tx, ty, '#e6f6ff', 22); S.waves.push({ x: tx, y: ty, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') });
+  targetHit(i, c); S.waves.push({ x: tx, y: ty, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') });
   S.hitStop = 0.45; S.flash = 1; S.score += 500;
   Sound.chime(S.order.length - 1); buzz(14);
   const B = L.bodies, TAU = Math.PI * 2;
@@ -465,11 +479,8 @@ function simulate(dt) {
   let n = 0;
   while (S.acc >= DT && n < 9000) {
     S.acc -= DT; n++;
-    // a replayed throw launches (and uses its power) on exactly the step the original did
-    if (S.replay) {
-      const r = S.replay.throws.find(q => q[0] === W.tick && !q.done); if (r) { r.done = true; fire(r[1], r[2], r[3] || 'n'); S.cur = r; }
-      for (const q of S.replay.throws) if (q.done && q[4] === W.tick && !q.used) { q.used = true; power(); }
-    } else if (S.wantPower) { S.wantPower = false; power(); }
+    // a replayed throw launches on exactly the step the original did
+    if (S.replay) { const r = S.replay.throws.find(q => q[0] === W.tick && !q.done); if (r) { r.done = true; fire(r[1], r[2]); } }
     step(W, HOOKS);
     S.P = W.P; S.Q = W.Q; S.tick = W.tick;
   }
@@ -483,9 +494,7 @@ function simulate(dt) {
     if (l.age > 0) { accel(B, S.P, l.x, l.y, a); l.vx += a[0] * dt * 0.06; l.vy += a[1] * dt * 0.06; l.x += l.vx * dt; l.y += l.vy * dt; } } }
   S.dust = S.dust.filter(p => p.age < p.life); S.sparks = S.sparks.filter(p => p.age < p.life);
   S.waves = S.waves.filter(w => w.age < 1); S.labels = S.labels.filter(l => l.age < 1.8);
-  stepTitle(dt); stepShards(dt); stepBand(dt);
-  // three comets per attempt: once the last one is gone without a win, the attempt starts over
-  if (S.three && !S.replay && !S.won && S.left <= 0 && !S.comets.length && !S.outAt) S.outAt = S.time;
+  stepTitle(dt); stepTargets(dt); stepBand(dt);
   // time speeds up once every comet still flying has gone stale (decided per step inside the physics)
   S.ff = !S.won && S.comets.length > 0 && S.comets.every(c => c.ff);
   if (!CLIP) { const show = S.ffK > 1.6; if ($('#ff').hidden === show) $('#ff').hidden = !show; }
@@ -524,64 +533,85 @@ function tails(dt, B) {
   }
 }
 
-/* ---- ice moons: each target is a small frozen moon, pre-cracked along a Voronoi pattern ---- */
-// Seeds are scattered in the disc; each shard is the set of points nearer its seed than any other,
-// found by clipping the disc with the perpendicular bisector to every other seed (Sutherland-Hodgman).
-// The faint lines you see on a moon are exactly where it will break.
-function seeded(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-function clipHalf(poly, px, py, nx, ny) {
-  // keep the side where (q - p) . n <= 0
-  const out = [];
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i], b = poly[(i + 1) % poly.length], da = (a[0] - px) * nx + (a[1] - py) * ny, db = (b[0] - px) * nx + (b[1] - py) * ny;
-    if (da <= 0) out.push(a);
-    if ((da < 0) !== (db < 0) && da !== db) { const t = da / (da - db); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+/* ---- targets: two kinds of living pattern, alternating, each in its own color ---- */
+// A Chladni plate: sand on a vibrating drumhead gathers where the plate stays still, the nodal lines of the
+// mode J_n(k r) cos(n theta) = 0 (k a zero of the Bessel function J_n). Drawn in the sky shader.
+// A Morphogen cell: a dish of Gray-Scott chemistry, u' = Du lap u - u v^2 + f (1 - u), v' = Dv lap v + u v^2 - (f + k) v,
+// the same reaction as the Morphogen exhibit, run on a small wrap-around grid per cell and seen through a round window.
+const CELL_N = 30, CH_MODES = 6;
+function makeTargets(L) {
+  return L.targets.map((t, i) => {
+    const kind = (i + L.li) % 2 ? 'cell' : 'plate', o = { kind, hue: TH[i % TH.length], hit: -1, mode: (i * 2 + L.li) % CH_MODES };
+    if (kind === 'cell') {
+      const N = CELL_N; o.U = new Float32Array(N * N).fill(1); o.V = new Float32Array(N * N); o.U2 = new Float32Array(N * N); o.V2 = new Float32Array(N * N);
+      for (let s = 0; s < 6; s++) { const cx = Math.random() * N, cy = Math.random() * N; for (let j = -2; j <= 2; j++) for (let k = -2; k <= 2; k++) { const q = ((cy + j + N) % N | 0) * N + ((cx + k + N) % N | 0); o.U[q] = 0.5; o.V[q] = 0.25; } }
+      o.cv = document.createElement('canvas'); o.cv.width = o.cv.height = N; o.cx = o.cv.getContext('2d'); o.img = o.cx.createImageData(N, N);
+      for (let n = 0; n < 1500; n++) cellStep(o, 0.0367, 0.0649);
+      paintCell(o);
+    }
+    return o;
+  });
+}
+function cellStep(o, f, k) {
+  const N = CELL_N, U = o.U, V = o.V, U2 = o.U2, V2 = o.V2;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    // edges wrap around (a dish wall would feed the reaction and pile it into a ring)
+    const q = j * N + i, l = (j ? q - N : q + N * (N - 1)), r = (j < N - 1 ? q + N : i), a = (i ? q - 1 : q + N - 1), b = (i < N - 1 ? q + 1 : q - N + 1);
+    const lu = U[l] + U[r] + U[a] + U[b] - 4 * U[q], lv = V[l] + V[r] + V[a] + V[b] - 4 * V[q], uvv = U[q] * V[q] * V[q];
+    // Pearson's scaling of the diffusion rates, under which f = 0.0367, k = 0.0649 makes spots that divide
+    U2[q] = U[q] + 0.2097 * lu - uvv + f * (1 - U[q]);
+    V2[q] = V[q] + 0.105 * lv + uvv - (f + k) * V[q];
   }
-  return out;
+  o.U = U2; o.U2 = U; o.V = V2; o.V2 = V;
 }
-function fracture(seed) {
-  const rnd = seeded(seed), n = 7 + Math.floor(rnd() * 3), pts = [];
-  for (let i = 0; i < n; i++) { const r = 0.92 * Math.sqrt(rnd()), a = rnd() * Math.PI * 2; pts.push([r * Math.cos(a), r * Math.sin(a)]); }
-  const disc = []; for (let k = 0; k < 28; k++) disc.push([Math.cos(k * Math.PI / 14), Math.sin(k * Math.PI / 14)]);
-  return pts.map((p, i) => {
-    let poly = disc;
-    pts.forEach((q, j) => { if (j !== i && poly.length) poly = clipHalf(poly, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, q[0] - p[0], q[1] - p[1]); });
-    const cx = poly.reduce((s, v) => s + v[0], 0) / poly.length, cy = poly.reduce((s, v) => s + v[1], 0) / poly.length;
-    return { poly, cx, cy };
-  }).filter(c => c.poly.length > 2);
-}
-// where the light comes from at (x, y): every star weighted by luminosity / r^2 (black holes by their disks)
-function lightDir(x, y) {
-  const B = level().bodies; let lx = 0, ly = 0;
-  for (let k = 0; k < B.length; k++) {
-    const b = B[k], dx = S.P[k][0] - x, dy = S.P[k][1] - y, d2 = dx * dx + dy * dy + 0.01, w = (b.bh ? 0.6 : lum(b)) / d2;
-    lx += dx / Math.sqrt(d2) * w; ly += dy / Math.sqrt(d2) * w;
+function paintCell(o) {
+  const N = CELL_N, d = o.img.data, [hr, hg, hb] = hex(o.hue);
+  for (let q = 0; q < N * N; q++) {
+    const v = Math.min(1, o.V[q] * 3.4), w = Math.pow(v, 2.4), i = q * 4;
+    d[i] = (10 + 245 * (hr * v * 0.85 + w * 0.3)) | 0; d[i + 1] = (12 + 243 * (hg * v * 0.85 + w * 0.3)) | 0; d[i + 2] = (24 + 231 * (hb * v * 0.85 + w * 0.3)) | 0; d[i + 3] = 255;
   }
-  const l = Math.hypot(lx, ly) || 1; return [lx / l, -ly / l];
+  o.cx.putImageData(o.img, 0, 0);
 }
-const ROCKS = [];
-function rockShape(id) {
-  if (ROCKS[id]) return ROCKS[id];
-  const rnd = seeded(id * 7919 + 17), n = 7 + Math.floor(rnd() * 3), pts = [];
-  for (let k = 0; k < n; k++) { const a = (k + rnd() * 0.6) / n * Math.PI * 2, r = 0.68 + rnd() * 0.5; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
-  return (ROCKS[id] = { pts, spin: (rnd() < 0.5 ? -1 : 1) * (0.25 + rnd() * 0.5), a0: rnd() * 6.28 });
-}
-function shatter(i, src) {
-  const L = level(), [tx, ty] = L.targets[i], cells = L.cracks[i], Rw = TR * 0.92, rot = S.time * 0.25 + i, cr = Math.cos(rot), sr = Math.sin(rot);
-  for (const c of cells) {
-    const ox = c.cx * cr - c.cy * sr, oy = -(c.cx * sr + c.cy * cr), d = Math.hypot(ox, oy) || 1, kick = 0.25 + Math.random() * 0.35;
-    S.shards.push({ x: tx + ox * Rw, y: ty + oy * Rw, vx: src.vx * 0.3 + ox / d * kick, vy: src.vy * 0.3 + oy / d * kick,
-      pts: c.poly.map(v => [(v[0] - c.cx) * Rw, (v[1] - c.cy) * Rw]), ang: rot, w: (Math.random() - 0.5) * 9, age: 0, life: 2.4 + Math.random(), hue: TH[i % TH.length] });
+function targetHit(i, c) {
+  const L = level(), o = S.tg[i], [tx, ty] = L.targets[i];
+  o.hit = 0;
+  // sand thrown off the plate, or the cell's contents spilling out: grains of its color, falling in the real field
+  for (let k = 0; k < 46; k++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * TR * 0.8, v = 0.15 + Math.random() * 0.45;
+    S.sparks.push({ x: tx + Math.cos(a) * r, y: ty + Math.sin(a) * r, vx: Math.cos(a) * v + c.vx * 0.2, vy: Math.sin(a) * v + c.vy * 0.2, life: 1 + Math.random() * 1.2, age: 0, col: k % 4 ? o.hue : '#fff6e6' });
   }
 }
-function stepShards(dt) {
-  const B = level().bodies, a = [0, 0, -1];
-  for (const p of S.shards) {
-    // the pieces fall into the level's real gravity, and melt into any star they reach
-    accel(B, S.P, p.x, p.y, a); p.vx += a[0] * dt; p.vy += a[1] * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.ang += p.w * dt; p.age += dt;
-    if (a[2] >= 0) { p.age = p.life; S.sparks.push({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.4, age: 0, col: '#dff4ff' }); }
+function stepTargets(dt) {
+  for (const o of S.tg) {
+    if (o.hit >= 0) o.hit += dt;
+    if (o.kind !== 'cell' || o.hit > 1.6) continue;
+    // alive, the cell keeps dividing; hit, it blooms (more feed), then dissolves (more kill)
+    const f = o.hit < 0 ? 0.0367 : o.hit < 0.5 ? 0.046 : 0.03, k = o.hit < 0 ? 0.0649 : o.hit < 0.5 ? 0.063 : 0.075;
+    for (let n = 0; n < (o.hit < 0 ? 3 : 8); n++) cellStep(o, f, k);
+    paintCell(o);
   }
-  S.shards = S.shards.filter(p => p.age < p.life);
+}
+function drawTargets(g, t) {
+  const L = level();
+  L.targets.forEach(([x, y], i) => {
+    const o = S.tg[i]; if (!o) return;
+    const [sx, sy] = toScr(x, y), R = TR * G.s, gone = o.hit > 1.2;
+    if (gone || S.got[i] && o.hit < 0) {
+      // where it was: a faint ring in its color
+      g.strokeStyle = rgba(o.hue, 0.3); g.lineWidth = 1; g.setLineDash([2, 4]); g.beginPath(); g.arc(sx, sy, R * 0.95, 0, 7); g.stroke(); g.setLineDash([]);
+      return;
+    }
+    const fade = o.hit < 0 ? 1 : clamp(1 - o.hit / 1.2, 0, 1);
+    const glow = g.createRadialGradient(sx, sy, R * 0.7, sx, sy, R * 2.2);
+    glow.addColorStop(0, rgba(o.hue, 0.2 * fade)); glow.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, R * 2.2, 0, 7); g.fill();
+    if (o.kind === 'cell') {
+      const grow = o.hit < 0 ? 1 : 1 + 0.35 * Math.sin(Math.min(1, o.hit / 0.5) * Math.PI / 2);
+      g.save(); g.globalAlpha = fade; g.beginPath(); g.arc(sx, sy, R * 0.92 * grow, 0, 7); g.clip();
+      g.imageSmoothingEnabled = true; g.drawImage(o.cv, sx - R * grow, sy - R * grow, 2 * R * grow, 2 * R * grow); g.restore();
+      g.strokeStyle = rgba(o.hue, 0.6 * fade); g.lineWidth = 1; g.beginPath(); g.arc(sx, sy, R * 0.92 * grow, 0, 7); g.stroke();
+    }
+  });
 }
 
 /* ---- the slingshot: two prongs and an elastic band that obeys Hooke's law ---- */
@@ -593,12 +623,40 @@ function stepBand(dt) {
   for (let k = 0; k < 4; k++) { const h = dt / 4; b.vx += (-BAND_K * b.x - BAND_C * b.vx) * h; b.vy += (-BAND_K * b.y - BAND_C * b.vy) * h; b.x += b.vx * h; b.y += b.vy * h; }
   if (Math.abs(b.x) + Math.abs(b.y) < 0.2 && Math.abs(b.vx) + Math.abs(b.vy) < 2) S.band = null;
 }
+// The slingshot itself: a Y-shaped frame and a band. Slack, the band hangs in a shallow catenary
+// (y = a cosh(x / a), sag set by its weight); pulled, it runs straight from each prong to the pouch.
+function drawSlingshot(g, t) {
+  const L = level(), [lx, ly] = toScr(L.launch[0], L.launch[1]), tipL = [lx - 17, ly - 5], tipR = [lx + 17, ly - 5], crotch = [lx, ly + 15], base = [lx, ly + 36];
+  // the frame: two arms meeting in a smooth crotch, and a handle; a dark core with a lit edge
+  const frame = () => { g.beginPath(); g.moveTo(tipL[0], tipL[1]); g.quadraticCurveTo(lx - 15, ly + 12, crotch[0], crotch[1]); g.quadraticCurveTo(lx + 15, ly + 12, tipR[0], tipR[1]); g.moveTo(crotch[0], crotch[1]); g.lineTo(base[0], base[1]); };
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(8,9,16,.9)'; g.lineWidth = 5.5; frame(); g.stroke();
+  g.strokeStyle = 'rgba(214,206,190,.95)'; g.lineWidth = 3.2; frame(); g.stroke();
+  g.strokeStyle = 'rgba(255,250,240,.55)'; g.lineWidth = 1; g.save(); g.translate(-0.8, -0.8); frame(); g.stroke(); g.restore();
+  for (const q of [tipL, tipR]) { g.fillStyle = 'rgba(232,226,212,1)'; g.beginPath(); g.arc(q[0], q[1], 2.6, 0, 7); g.fill(); }
+  // the band
+  const off = S.aim && !S.aim.cancel ? pullOffset(S.aim) : S.band ? [S.band.x, S.band.y] : [0, 0], stretch = Math.hypot(off[0], off[1]);
+  const pouch = [lx + off[0], ly + off[1]], acc = world().theme.acc;
+  for (const q of [tipL, tipR]) {
+    const len = Math.hypot(pouch[0] - q[0], pouch[1] - q[1]), w = 2.4 * Math.sqrt(18 / Math.max(len, 18));
+    const sag = Math.max(0, 3.5 - stretch * 0.25), mx = (q[0] + pouch[0]) / 2, my = (q[1] + pouch[1]) / 2 + sag;
+    g.strokeStyle = rgba(acc, 0.9); g.lineWidth = w; g.beginPath(); g.moveTo(q[0], q[1]); g.quadraticCurveTo(mx, my, pouch[0], pouch[1]); g.stroke();
+  }
+  // the pouch, turned across the pull, with the next comet sitting in it
+  const ang = stretch > 0.5 ? Math.atan2(off[1], off[0]) + Math.PI / 2 : 0;
+  g.save(); g.translate(pouch[0], pouch[1]); g.rotate(ang); g.fillStyle = 'rgba(70,58,48,1)'; g.strokeStyle = rgba(acc, 0.9); g.lineWidth = 1;
+  g.beginPath(); g.ellipse(0, 0, 7, 3.4, 0, 0, 7); g.fill(); g.stroke(); g.restore();
+  if (!S.won && !S.replay && !CLIP && (S.aim || !S.comets.length)) {
+    const gp = g.createRadialGradient(pouch[0], pouch[1] - 2, 0, pouch[0], pouch[1] - 2, 10);
+    gp.addColorStop(0, '#ffffff'); gp.addColorStop(0.35, 'rgba(200,230,255,.55)'); gp.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gp; g.beginPath(); g.arc(pouch[0], pouch[1] - 2, 10, 0, 7); g.fill();
+  }
+}
 function pullOffset(A) {
   // the finger's drag, scaled down to the slingshot: full power stretches the band 70 px
   const maxDrag = PULL * G.s / 0.55, dx = A.cx - A.sx, dy = A.cy - A.sy, l = Math.hypot(dx, dy), f = 70 / maxDrag * Math.min(1, maxDrag / Math.max(l, 1e-6));
   return [dx * f, dy * f];
 }
-const KIND_COL = { n: '#ffffff', s: '#bfe8ff', b: '#ffbf7a', h: '#ffd98a' };
 
 /* ======================= drawing ======================= */
 function spCol(v, a) {
@@ -651,45 +709,7 @@ function draw() {
   g.setLineDash([2, 7]); g.strokeStyle = 'rgba(239,232,218,.13)';
   for (const b of L.bodies) if (b.orbit) { const [ox, oy] = toScr(b.orbit.cx, b.orbit.cy); g.beginPath(); g.arc(ox, oy, b.orbit.R * G.s, 0, 7); g.stroke(); }
   g.setLineDash([]);
-  // targets: small ice moons, lit from the side the starlight comes from, cracked where they will break
-  L.targets.forEach(([x, y], i) => {
-    const [sx, sy] = toScr(x, y), R = TR * G.s * 0.92, hue = TH[i % TH.length];
-    if (S.got[i]) {
-      // where a moon was: a faint ring in its color
-      g.strokeStyle = rgba(hue, 0.35); g.lineWidth = 1; g.setLineDash([2, 4]); g.beginPath(); g.arc(sx, sy, R * 1.25, 0, 7); g.stroke(); g.setLineDash([]);
-      return;
-    }
-    const glow = g.createRadialGradient(sx, sy, R * 0.8, sx, sy, R * 2.6);
-    glow.addColorStop(0, rgba(hue, 0.22)); glow.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, R * 2.6, 0, 7); g.fill();
-    const [ux, uy] = lightDir(x, y), body = g.createRadialGradient(sx + ux * R * 0.45, sy + uy * R * 0.45, R * 0.05, sx, sy, R * 1.02);
-    body.addColorStop(0, '#f7fcff'); body.addColorStop(0.42, '#cfe8f6'); body.addColorStop(0.8, '#5d7f9c'); body.addColorStop(1, '#1d2b3d');
-    g.fillStyle = body; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
-    // a wash of the moon's own color, then its fracture lines, turning slowly with it
-    g.fillStyle = rgba(hue, 0.22); g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
-    const rot = t * 0.25 + i, cr = Math.cos(rot), sr = Math.sin(rot);
-    g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 0.8;
-    for (const c of L.cracks[i]) { g.beginPath(); c.poly.forEach((v, k) => { const px = sx + (v[0] * cr - v[1] * sr) * R, py = sy + (v[0] * sr + v[1] * cr) * R; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.stroke(); }
-    g.strokeStyle = rgba(hue, 0.75); g.lineWidth = 1.2; g.beginPath(); g.arc(sx, sy, R * 1.28, rot * 0.6, rot * 0.6 + Math.PI * 1.6); g.stroke();
-  });
-  // ice shards, falling
-  for (const p of S.shards) {
-    const [sx, sy] = toScr(p.x, p.y), a = clamp((p.life - p.age) / 0.6, 0, 1), cr = Math.cos(p.ang), sr = Math.sin(p.ang);
-    // a flat facet catches the light as it turns: brightness follows the cosine of its angle to the light
-    const lit = 0.55 + 0.45 * Math.cos(p.ang * 1.7);
-    g.globalAlpha = a; g.fillStyle = `rgb(${120 + 115 * lit | 0},${160 + 88 * lit | 0},${190 + 65 * lit | 0})`; g.strokeStyle = rgba(p.hue, 0.8); g.lineWidth = 0.8;
-    g.beginPath(); p.pts.forEach((v, k) => { const px = sx + (v[0] * cr - v[1] * sr) * G.s, py = sy + (v[0] * sr + v[1] * cr) * G.s; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.fill(); g.stroke();
-  }
-  g.globalAlpha = 1;
-  // rubble: lit from the starlight side, tumbling faster once something has hit them
-  for (const r of S.W.rocks) {
-    if (!r.alive) continue;
-    const sh = rockShape(r.id), [sx, sy] = toScr(r.x, r.y), R = RR * G.s, ang = sh.a0 + t * sh.spin * (r.by ? 5 : 1), [ux, uy] = lightDir(r.x, r.y);
-    const gr = g.createRadialGradient(sx + ux * R * 0.5, sy + uy * R * 0.5, R * 0.1, sx, sy, R * 1.2);
-    gr.addColorStop(0, '#e4d4bd'); gr.addColorStop(0.55, '#7b6c5d'); gr.addColorStop(1, '#2a241f');
-    g.fillStyle = gr; g.strokeStyle = 'rgba(20,16,12,.7)'; g.lineWidth = 0.8;
-    g.beginPath(); sh.pts.forEach((v, k) => { const px = sx + (v[0] * Math.cos(ang) - v[1] * Math.sin(ang)) * R, py = sy + (v[0] * Math.sin(ang) + v[1] * Math.cos(ang)) * R; k ? g.lineTo(px, py) : g.moveTo(px, py); }); g.closePath(); g.fill(); g.stroke();
-  }
+  drawTargets(g, t);
   g.globalCompositeOperation = 'lighter';
   // the title, written in starlight
   const T = S.title, BHI = L.bodies.map((b, k) => b.bh ? k : -1).filter(k => k >= 0);
@@ -729,12 +749,9 @@ function draw() {
   if (S.gold) ribbon(S.gold, true, 1);
   for (const c of S.rewind ? [] : S.comets) {
     if (c.trail !== S.gold) ribbon(c.trail, false, 1);
-    const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy), R = (16 + 10 * clamp(sp, 0, 1)) * Math.sqrt(c.m / 4) ** 0.5, grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
-    grd.addColorStop(0, c.power || c.kind === 'h' ? KIND_COL[c.kind] : '#ffffff'); grd.addColorStop(0.18, spCol(sp, 0.65)); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy), R = 16 + 10 * clamp(sp, 0, 1), grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
+    grd.addColorStop(0, '#ffffff'); grd.addColorStop(0.18, spCol(sp, 0.65)); grd.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grd; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
-    // a comet still holding its power pulses gently, so you know a tap will use it
-    if (c.power) { g.strokeStyle = rgba(KIND_COL[c.kind], 0.45 + 0.3 * Math.sin(t * 8)); g.lineWidth = 1; g.beginPath(); g.arc(sx, sy, 7 + 2 * Math.sin(t * 8), 0, 7); g.stroke(); }
-    if (c.kind === 'h') { g.fillStyle = '#5a3a10'; g.globalAlpha = 0.5; g.beginPath(); g.arc(sx, sy, 3.2, 0, 7); g.fill(); g.globalAlpha = 1; }
   }
   g.fillStyle = 'rgb(255,214,150)';
   for (const p of S.dust) if (!p.ion) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = (1 - p.age / p.life) * 0.5; g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8); }
@@ -782,39 +799,7 @@ function draw() {
     g.save(); g.translate(G.cx + dx * k, G.cy + dy * k); g.rotate(Math.atan2(dy, dx)); g.fillStyle = 'rgba(255,244,226,.9)';
     g.beginPath(); g.moveTo(11, 0); g.lineTo(-6, -7); g.lineTo(-2, 0); g.lineTo(-6, 7); g.closePath(); g.fill(); g.restore();
   }
-  // launcher: a small planet with a ring and a moonlet
-  const [lx, ly] = toScr(L.launch[0], L.launch[1]);
-  const pg = g.createRadialGradient(lx - 2, ly - 2, 0, lx, ly, 7); pg.addColorStop(0, '#fff8ea'); pg.addColorStop(1, '#b9b2a2');
-  g.fillStyle = pg; g.beginPath(); g.arc(lx, ly, 6.5, 0, 7); g.fill();
-  g.strokeStyle = acc; g.lineWidth = 1.3; g.beginPath(); g.ellipse(lx, ly, 14, 5.5, -0.35, 0, 7); g.stroke();
-  const ma = t * 1.3; g.fillStyle = 'rgba(239,232,218,.8)'; g.beginPath(); g.arc(lx + Math.cos(ma) * 20, ly + Math.sin(ma) * 8, 1.8, 0, 7); g.fill();
-  // the slingshot: prongs either side of the launcher and a band between them
-  const p1 = [lx - 19, ly - 3], p2 = [lx + 19, ly - 3];
-  let off = S.aim && !S.aim.cancel ? pullOffset(S.aim) : S.band ? [S.band.x, S.band.y] : [0, 0];
-  const pouch = [lx + off[0], ly - 3 + off[1]], stretch = Math.hypot(off[0], off[1]);
-  for (const q of [p1, p2]) {
-    const len = Math.hypot(pouch[0] - q[0], pouch[1] - q[1]), w = 2.8 * Math.sqrt(19 / Math.max(len, 19));
-    g.strokeStyle = rgba(acc, 0.25); g.lineWidth = w * 3.2; g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(pouch[0], pouch[1]); g.stroke();
-    g.strokeStyle = rgba(acc, 0.55 + 0.4 * clamp(stretch / 70, 0, 1)); g.lineWidth = w; g.beginPath(); g.moveTo(q[0], q[1]); g.lineTo(pouch[0], pouch[1]); g.stroke();
-    g.fillStyle = '#fff8ea'; g.beginPath(); g.arc(q[0], q[1], 2.2, 0, 7); g.fill();
-  }
-  const ready = !S.won && !S.replay && !CLIP && (!S.three || S.left > 0);
-  if (ready && (S.aim || !S.comets.length)) {
-    // the next comet, sitting in the pouch
-    const kc = KIND_COL[S.kind], gp = g.createRadialGradient(pouch[0], pouch[1], 0, pouch[0], pouch[1], 11);
-    gp.addColorStop(0, kc); gp.addColorStop(0.35, rgba(kc, 0.5)); gp.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gp; g.beginPath(); g.arc(pouch[0], pouch[1], 11, 0, 7); g.fill();
-  }
-  // comets still to come wait on circular orbits about the launcher; Kepler's third law sets their pace (T ~ r^1.5)
-  if (S.three && !S.won && !S.replay) for (let k = 0; k < S.left - (ready && !S.comets.length ? 1 : 0); k++) {
-    const r = 30 + k * 9, w = 1.6 * Math.pow(30 / r, 1.5), a = t * w + k * 2.1;
-    g.fillStyle = 'rgba(239,232,218,.75)'; g.beginPath(); g.arc(lx + Math.cos(a) * r, ly + Math.sin(a) * r * 0.42, 2.2, 0, 7); g.fill();
-  }
-  if (S.outAt) {
-    const a = clamp((t - S.outAt) / 0.6, 0, 1);
-    g.textAlign = 'center'; g.font = '400 italic 24px "Cormorant Garamond", serif'; g.fillStyle = `rgba(239,232,218,${0.8 * a})`;
-    g.fillText('out of comets', cssW / 2, cssH * 0.46); g.textAlign = 'start';
-  }
+  drawSlingshot(g, t);
   // first time only: a ghost finger showing the gesture
   if (!S.coached && !S.aim && !S.comets.length && !CLIP && (!S.title || S.title.released)) {
     const ph = (t % 2.6) / 2.6, pull = Math.sin(Math.min(1, ph / 0.7) * Math.PI / 2), fade = ph < 0.8 ? 1 : 1 - (ph - 0.8) / 0.2;
@@ -833,11 +818,8 @@ function draw() {
       if (A.moved) { const q = 8; g.beginPath(); g.moveTo(A.sx - q, A.sy - q); g.lineTo(A.sx + q, A.sy + q); g.moveTo(A.sx + q, A.sy - q); g.lineTo(A.sx - q, A.sy + q); g.stroke(); }
     } else {
     g.fillStyle = acc;
-    if (!S.hardRun) A.path.forEach((p, i) => { if (i % 4) return; const [sx, sy] = toScr(p[0], p[1]); g.globalAlpha = 1 - i / A.path.length; g.beginPath(); g.arc(sx, sy, 2, 0, 7); g.fill(); });
+    A.path.forEach((p, i) => { if (i % 4) return; const [sx, sy] = toScr(p[0], p[1]); g.globalAlpha = 1 - i / A.path.length; g.beginPath(); g.arc(sx, sy, 2, 0, 7); g.fill(); });
     g.globalAlpha = 1;
-    const hot = Math.round(154 + 101 * pw);
-    g.strokeStyle = `rgb(${hot},${Math.round(215 - 36 * pw)},${Math.round(255 - 148 * pw)})`; g.lineWidth = 3;
-    g.beginPath(); g.arc(lx, ly, 22, -Math.PI / 2, -Math.PI / 2 + pw * Math.PI * 2); g.stroke();
     g.strokeStyle = 'rgba(239,232,218,.2)'; g.lineWidth = 1; g.beginPath(); g.moveTo(A.sx, A.sy); g.lineTo(A.cx, A.cy); g.stroke();
     g.strokeStyle = 'rgba(239,232,218,.45)'; g.beginPath(); g.arc(A.cx, A.cy, 14, 0, 7); g.stroke();
     }
@@ -863,9 +845,6 @@ cvs.addEventListener('pointerdown', e => {
   // a second finger while aiming cancels the throw
   if (pointer !== null) { if (S.aim) S.band = { x: pullOffset(S.aim)[0], y: pullOffset(S.aim)[1], vx: 0, vy: 0 }; S.aim = null; pointer = null; buzz(6); return; }
   if (S.replay) return;
-  // a tap while a comet with a power is in flight uses the power
-  if (S.comets.some(c => c.alive && c.power)) { S.wantPower = true; buzz(8); return; }
-  if (S.three && S.left <= 0) return;
   releaseTitle();
   cvs.setPointerCapture(e.pointerId);
   pointer = e.pointerId;
@@ -886,7 +865,7 @@ const release = e => {
   if (e.pointerId !== pointer) return;
   pointer = null; const A = S.aim; S.aim = null;
   if (A && !A.cancel) { const o = pullOffset(A); S.band = { x: o[0], y: o[1], vx: 0, vy: 0 }; }
-  if (A && e.type === 'pointerup' && !A.cancel && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1], S.kind);
+  if (A && e.type === 'pointerup' && !A.cancel && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1]);
 };
 cvs.addEventListener('pointerup', release); cvs.addEventListener('pointercancel', release);
 document.addEventListener('gesturestart', e => e.preventDefault());
@@ -901,20 +880,6 @@ const next = () => {
   if (S.replay) load(S.idx);
   else if (world().daily) load(Math.min(store.last || 0, DAILY0 - 1));
   else load(S.idx + 1 >= ALL.length || isDaily(S.idx + 1) ? 0 : S.idx + 1);
-};
-// the picker, the hard-mode eye and the menu's comet count
-function syncControls() {
-  if (CLIP) return;
-  const L = level(), rubble = !!(L.piles && L.piles.length), show = !S.won && !S.replay;
-  $('#picker').hidden = !show;
-  document.querySelectorAll('#picker .kind').forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.k === S.kind)); b.hidden = b.dataset.k === 'h' && !rubble; });
-  $('#hardBtn').setAttribute('aria-pressed', String(S.hard)); $('#hardBtn').hidden = !show;
-}
-document.querySelectorAll('#picker .kind').forEach(b => b.onclick = () => { S.kind = b.dataset.k; Sound.wake(); Sound.tone(660, 0.18, 'sine', 0.03); syncControls(); });
-$('#hardBtn').onclick = () => {
-  S.hard = store.hard = !S.hard; save();
-  // the guide can only be given up before the first throw, so a change mid-attempt starts the level over
-  if (S.shots && !S.won) load(S.idx); else { S.hardRun = S.hard && !S.replay; syncControls(); }
 };
 $('#speedBtn').onclick = () => { S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length]; $('#speedBtn').textContent = S.speed + '×'; };
 // restart rewinds: leapfrog is time-reversible, so running a flight backward is just its own trail in reverse
@@ -964,8 +929,6 @@ function buildMenu() {
     });
     sec.append(h, grid); box.append(sec);
   });
-  const cr = $('#cometRow'); cr.replaceChildren();
-  [[false, 'Unlimited'], [true, 'Three']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === S.three)); b.onclick = () => { if (S.three === id) return; S.three = store.three = id; save(); buildMenu(); load(S.idx); }; cr.append(b); });
   const r = $('#soundRow'); r.replaceChildren();
   [[true, 'On'], [false, 'Off']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === Sound.on)); b.onclick = () => { Sound.on = store.sound = id; save(); if (id) Sound.wake(); buildMenu(); }; r.append(b); });
 }
@@ -1105,7 +1068,6 @@ function loop(now) {
     $('#nextBtn').setAttribute('aria-label', S.replay ? 'Play this level' : 'Next level');
   }
   if (S.replay && !S.won && !S.comets.length && S.replay.throws.every(q => q.done)) load(S.idx);
-  if (S.outAt && S.time - S.outAt > 1.9) load(S.idx);
 }
 window.addEventListener('resize', resize);
 resize();

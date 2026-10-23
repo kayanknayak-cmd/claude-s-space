@@ -1,11 +1,13 @@
 # Slingshot (phone) sources
 
-- `phone-head.html` + `phone-script.js`: the game. `build2.js` inserts the levels and writes `../slingshot-phone.html`.
-- `gen5.js`: level generator. Runs the game's exact physics, proposes layouts, and keeps only ones a solver proves fair
-  (no target you can hit by aiming straight at it, par from a set cover of solver throws, a stored hint throw).
-  `node gen5.js <first|binary|waltz|moons|crowd|horizon> <count> <seed> <minutes>` writes `levels5-<world>-<seed>.json`.
-- `phys.js`: the shared step physics (gravity, black holes, rubble contacts, comet powers). The game inlines it; `check.js` and `place.js` require it.
-- `place.js`: puts rock piles on stable orbits and keeps only those that leave every stored hint working (`piles.json`). `node check.js worlds-piles.json` re-verifies every hint.
-- `daily-pool.json`: the frozen order of Today's sky. New layouts only join the end (`FREEZE=1 node build2.js`).
+- `phone-head.html` + `phone-script.js`: the game. `build2.js` inlines `phys.js` and the levels and writes `../slingshot-phone.html`.
+- `phys.js`: the shared step physics (gravity, black holes, moving bodies). The game inlines it; the Node tools require it.
+- `lab.js`: the hand-made campaign. Each level's bodies and idea are written by hand in `SPECS`; the lab flies a fan of throws,
+  maps where looping flights come back to, and places the targets there, measuring the share of winning throws and how many of
+  those wins went round at least once. `node lab.js <first|binary|waltz|moons|horizon>` writes `hand-<world>.json`.
+- `dailylab.js`: the same lab on random skies, for Today's sky (`daily-lab-<seed>.json`); `dailyfilter.js` keeps the generous older ones.
+- `daily-v3.json`: the frozen order of Today's sky. New layouts only join the end (`FREEZE=1 node build2.js`).
+- `check.js`: re-verifies that every level's stored hint clears it (`node check.js worlds.json`).
+- `gen5.js`: the older random generator, kept for reference.
 
-To rebuild, copy `levels/*.json` next to the scripts and run `node build2.js` there (both scripts read and write files in the working directory).
+To rebuild, copy `levels/*.json` next to the scripts and run `node build2.js` there.
