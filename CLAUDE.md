@@ -19,9 +19,12 @@ Whenever the owner asks for improvements, put these first on the list:
 3. Ambient hum: each level hums a quiet chord tuned to its orbit periods.
 
 ## Owner's requested changes, not yet built (Oct 28)
-- Minimal color theme inspired by Totally Accurate Battle Simulator and Morphogen's first palette
-  ("Specimen": coral #ef7d62, teal #63cdb9, sand #e8c06e, cream #fff6e6 on near-black #080a11).
+- Two minimal color schemes, palette from Morphogen's first option ("Specimen": coral #ef7d62, teal #63cdb9,
+  sand #e8c06e, cream #fff6e6, near-black #080a11):
+  1. Dark Specimen, with a background that looks like a real night sky.
+  2. A light scheme inspired by Totally Accurate Battle Simulator; free to experiment (the owner picked light).
 - Remove: the star rating, the total score, the constellation lines (triangles) between targets on a win,
-  the buttons that appear after a level, and the trick labels ("Double", "Triple", "On par", "Long game"...).
+  and the trick labels ("Double", "Triple", "On par", "Long game"...).
+- The buttons after a win, share, and highlight reels stay, but redesign them so they look cool.
 - Replace the star background: it shows strips and pulses and looks unnatural.
-- Never any moving stars or bodies.
+- Never any moving stars or bodies: remove the Waltz and Moons worlds.
