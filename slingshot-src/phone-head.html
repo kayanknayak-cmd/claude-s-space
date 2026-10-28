@@ -86,12 +86,18 @@ a{color:var(--accent)}
 .lvname,.pips{transition:opacity .5s ease}
 body.titling .lvname,body.titling .pips{opacity:0}
 /* after a win: a row of quiet icons instead of a panel */
-.winbar{position:fixed;left:50%;transform:translateX(-50%);top:226px;display:flex;justify-content:center;align-items:center;gap:22px;animation:fade .8s ease both}
-.winbar .round{width:56px;height:56px}
-/* the way on: a lit ring, like the photon ring around a black hole */
-.winbar .go{width:74px;height:74px;border-radius:50%;color:var(--accent);opacity:1;box-shadow:inset 0 0 0 1px var(--accent),0 0 18px color-mix(in srgb,var(--accent) 45%,transparent);
-  background:radial-gradient(circle,color-mix(in srgb,var(--accent) 16%,transparent),transparent 70%)}
-.winbar .go svg{width:28px;height:28px;stroke-width:1.5}
+/* after a win: ringed controls, each with a small spaced label; Next is the lit one */
+.winbar{position:fixed;left:0;right:0;bottom:calc(var(--bot) + 34px);display:flex;justify-content:center;align-items:flex-end;gap:20px;animation:fade .8s ease both}
+.wb{appearance:none;border:0;background:none;color:var(--paper);padding:0;cursor:pointer;display:grid;justify-items:center;gap:9px}
+.wb .ic{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(255,246,230,.24);
+  background:radial-gradient(circle at 50% 38%,rgba(255,246,230,.09),rgba(255,246,230,0) 68%);transition:box-shadow .2s,transform .15s}
+.wb svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.wb .lb{font:500 9px/1 var(--mono);letter-spacing:.32em;text-transform:uppercase;color:var(--mist);padding-left:.32em}
+.wb:active .ic{transform:scale(.93)}
+.wb.go .ic{width:70px;height:70px;color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent),0 0 26px color-mix(in srgb,var(--accent) 35%,transparent);
+  background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--accent) 20%,transparent),transparent 70%)}
+.wb.go svg{width:26px;height:26px;stroke-width:1.6}
+.wb.go .lb{color:var(--accent)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bot) + 110px);font:400 italic 19px/1.3 var(--display);color:var(--paper);
   padding:8px 16px;border-radius:14px;background:rgba(5,6,12,.6);text-align:center;max-width:calc(100vw - 40px);text-shadow:0 0 10px rgba(5,6,12,.9)}
 .toast button{appearance:none;border:0;background:none;color:var(--accent);font:inherit;text-decoration:underline;padding:4px;cursor:pointer}
@@ -107,10 +113,12 @@ body.titling .lvname,body.titling .pips{opacity:0}
 </div>
 <div class="ff" id="ff" hidden aria-label="Fast-forward"><i></i><i></i><i></i></div>
 <div class="replay" id="replayTag" hidden>Replay</div>
-<!-- after a win, two small glyphs sit in the sky under the score: tap anywhere else for the next level -->
+<!-- after a win: four plain controls in a row; a tap anywhere else in the sky also goes on -->
 <div class="winbar" id="winbar" hidden>
-  <button class="round" id="shareBtn" type="button" aria-label="Share a replay link"><svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></button>
-  <button class="round" id="clipBtn" type="button" aria-label="Make a highlight reel of this run"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3z"/></svg></button>
+  <button class="wb" id="retryBtn" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 4.5v4.2h4.2"/></svg></span><span class="lb">Again</span></button>
+  <button class="wb" id="shareBtn" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></span><span class="lb">Share</span></button>
+  <button class="wb" id="clipBtn" type="button"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3z"/></svg></span><span class="lb">Reel</span></button>
+  <button class="wb go" id="nextBtn" type="button"><span class="ic"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span class="lb">Next</span></button>
 </div>
 <div class="toast" id="toast" hidden aria-live="polite"></div>
 

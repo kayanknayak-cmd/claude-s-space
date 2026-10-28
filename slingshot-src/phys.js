@@ -3,7 +3,8 @@
 // Newtonian gravity with a little softening, integrated by leapfrog (kick,
 // drift, kick) so orbits keep their energy. Black holes pull with the
 // Paczynski-Wiita force m / (r - rs)^2, a one-line stand-in for general
-// relativity that reproduces its precessing, zoom-whirl orbits. Every level runs in fixed steps
+// relativity that reproduces its precessing, zoom-whirl orbits. A star cluster is a Plummer sphere,
+// potential -m / sqrt(r^2 + a^2): a comet can fly right through it, and its orbits precess into rosettes. Every level runs in fixed steps
 // from its start, and moons advance by an exact rotation each step, so a
 // throw replays bit for bit on any device. Only + - * / and sqrt appear in a step:
 // those are the operations every device rounds the same way.
@@ -24,7 +25,7 @@ function accel(B, P, x, y, out) {
     if (r2 < b.r * b.r) hit = i;
     let inv;
     if (b.rs) { const r = Math.sqrt(r2), q = Math.max(r - b.rs, 1e-3); inv = b.m / (r * q * q); }
-    else { const e = r2 + EPS2; inv = b.m / (e * Math.sqrt(e)); }
+    else { const e = r2 + (b.soft || EPS2); inv = b.m / (e * Math.sqrt(e)); }
     ax += dx * inv; ay += dy * inv;
   }
   out[0] = ax; out[1] = ay; out[2] = hit; return out;
@@ -32,7 +33,7 @@ function accel(B, P, x, y, out) {
 const isMoon = b => b.orbit && !b.star;
 function energy(B, P, x, y, vx, vy) {
   let pot = 0;
-  for (let k = 0; k < B.length; k++) { const dx = P[k][0] - x, dy = P[k][1] - y, r = Math.sqrt(dx * dx + dy * dy); pot -= B[k].m / (B[k].rs ? Math.max(r - B[k].rs, 1e-3) : r); }
+  for (let k = 0; k < B.length; k++) { const dx = P[k][0] - x, dy = P[k][1] - y, r2 = dx * dx + dy * dy, r = Math.sqrt(r2); pot -= B[k].m / (B[k].rs ? Math.max(r - B[k].rs, 1e-3) : B[k].soft ? Math.sqrt(r2 + B[k].soft) : r); }
   return 0.5 * (vx * vx + vy * vy) + pot;
 }
 

@@ -14,6 +14,8 @@ const exact = L => ({ ...L, bodies: L.bodies.map(b => b.orbit ? { ...b, orbit: {
 const f3 = v => +v.toFixed(3), rad = m => f3(0.035 + Math.sqrt(m) * 0.08);
 const star = (x, y, m) => ({ x, y, m, r: rad(m) });
 const bh = (x, y, m) => ({ x, y, m, rs: f3(0.15 * m), r: f3(0.39 * m), bh: true });
+// a star cluster: a Plummer sphere of scale a; nothing to crash into, so its crash radius is zero
+const cluster = (x, y, m, a) => ({ x, y, m, soft: f3(a * a), a, r: 0, cluster: true });
 const moon = (cx, cy, R, period, phase, m = 0.08) => ({ m, r: f3(0.03 + Math.sqrt(m) * 0.05), orbit: { cx, cy, R, period, phase } });
 // two stars on a true Kepler circle about their barycenter: omega^2 a^3 = m1 + m2
 const pair = (cx, cy, a, m1, m2, phase, sign) => {
@@ -58,6 +60,22 @@ const SPECS = {
     { name: 'Shepherd', bodies: [star(-0.1, 0.4, 0.3), moon(-0.1, 0.4, 0.5, 6.5, 1, 0.1)], launch: [0.2, -1.38], t: [2, 6, 9], T: 0.04 },
     { name: 'Syzygy', bodies: [star(0, 0.3, 0.28), moon(0, 0.3, 0.45, 6, 0), moon(0, 0.3, 0.75, 9, 0)], launch: [-0.15, -1.38], t: [3, 7], T: 0.035 },
   ],
+  cluster: [
+    { name: 'Globular', bodies: [cluster(0, 0.2, 0.32, 0.22)], launch: [0, -1.38], w: [1, 2] },
+    { name: 'Rosette', bodies: [cluster(0.1, 0.3, 0.36, 0.2)], launch: [-0.15, -1.38], w: [1, 2, 3] },
+    { name: 'Core', bodies: [cluster(-0.1, 0.25, 0.4, 0.25)], launch: [0.2, -1.38], w: [1, 2] },
+    { name: 'Halo', bodies: [cluster(0, 0.4, 0.3, 0.17), star(0.5, -0.4, 0.08)], launch: [-0.2, -1.38], w: [1, 2, 3] },
+    { name: 'Tidal tail', bodies: [cluster(0.15, 0.1, 0.38, 0.22)], launch: [-0.25, -1.38], w: [1, 2] },
+    { name: 'Deep field', bodies: [cluster(0, 0.3, 0.45, 0.26)], launch: [0.1, -1.38], w: [1, 2, 3] },
+  ],
+  trinity: [
+    { name: 'Trinity', bodies: [star(-0.4, 0.1, 0.14), star(0.4, 0.1, 0.14), star(0, 0.75, 0.14)], launch: [0, -1.38], w: [1, 2] },
+    { name: 'Triangle', bodies: [star(-0.35, -0.1, 0.16), star(0.35, -0.1, 0.16), star(0, 0.6, 0.12)], launch: [0.1, -1.38], w: [1, 2, 3] },
+    { name: 'Lantern', bodies: [star(0, 0.0, 0.2), star(-0.45, 0.7, 0.1), star(0.45, 0.7, 0.1)], launch: [-0.2, -1.38], w: [1, 2] },
+    { name: 'Three body', bodies: [star(-0.3, 0.3, 0.15), star(0.3, 0.45, 0.15), star(0, -0.15, 0.12)], launch: [0.25, -1.38], w: [1, 2, 3] },
+    { name: 'Pinwheel', bodies: [star(-0.45, 0.4, 0.13), star(0.45, 0.2, 0.13), star(0.05, 0.95, 0.13)], launch: [0, -1.38], w: [1, 2] },
+    { name: 'Delta', bodies: [star(0, 0.5, 0.22), star(-0.4, -0.2, 0.1), star(0.4, -0.2, 0.1)], launch: [0.15, -1.38], w: [1, 2, 3] },
+  ],
   horizon: [
     { name: 'Shadow', bodies: [bh(0, 0.25, 0.26)], launch: [0, -1.38], w: [1.0 * PI, 2.0 * PI], T: 0.07 },
     { name: 'Photon ring', bodies: [bh(0.1, 0.35, 0.3)], launch: [-0.15, -1.38], w: [0.8 * PI, 2.6 * PI], T: 0.06 },
@@ -94,7 +112,7 @@ function okSpot(L, x, y, placed) {
   if (Math.hypot(x - L.launch[0], y - L.launch[1]) < 0.45) return false;
   for (const b of L.bodies) {
     if (b.orbit) { if (Math.abs(Math.hypot(x - b.orbit.cx, y - b.orbit.cy) - b.orbit.R) < b.r + 0.08) return false; }
-    else if (Math.hypot(x - b.x, y - b.y) < b.r + (b.bh ? 0.16 : 0.11)) return false;
+    else if (Math.hypot(x - b.x, y - b.y) < (b.cluster ? 0.6 * b.a + 0.09 : b.r + (b.bh ? 0.16 : 0.11))) return false;
   }
   return placed.every(p => Math.hypot(p[0] - x, p[1] - y) > 0.3);
 }
@@ -195,4 +213,4 @@ if (require.main === module) {
     fs.writeFileSync(`hand-${w}.json`, JSON.stringify(out));
   }
 }
-module.exports = { SPECS, fly, measure, exact, design, star, bh, moon, pair };
+module.exports = { SPECS, fly, measure, exact, design, star, bh, moon, pair, cluster };

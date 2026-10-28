@@ -1,5 +1,10 @@
 <script>
 'use strict';
+// one source, two games: 'night' is Slingshot in Morphogen's Specimen colors under a real night sky;
+// 'toy' is the bright, playful one, built on the same physics
+const THEME = /*THEME*/'night', TOY = THEME === 'toy';
+// the Specimen palette: coral, teal, sand on cream and near-black
+const PAL = { coral: '#ef7d62', teal: '#63cdb9', sand: '#e8c06e', cream: '#fff6e6', ink: '#080a11', deep: '#1f2a33' };
 const $ = s => document.querySelector(s);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
@@ -77,9 +82,11 @@ function blackbody(T) {
   return [r, g, b].map(v => clamp(v, 0, 255) / 255);
 }
 const starTemp = m => 2700 + 10800 * Math.pow(clamp((m - 0.05) / 0.35, 0, 1), 0.85);
+// stars in the palette: light ones sand-warm, heavy ones cream-white (toy: sand to coral)
+function starCol(m) { const k = clamp((m - 0.08) / 0.3, 0, 1), a = hex(TOY ? PAL.sand : PAL.sand), b = hex(TOY ? PAL.coral : PAL.cream); return a.map((v, i) => v + (b[i] - v) * k); }
 
 /* ======================= state ======================= */
-const ALL = WORLDS.flatMap((w, wi) => w.levels.map((L, li) => ({ ...L, wi, li, gid: `${w.id}-${li}`, cols: L.bodies.map(b => b.bh ? [1, 0.86, 0.68] : isMoon(b) ? [0.55, 0.7, 0.98] : blackbody(starTemp(b.m))) })));
+const ALL = WORLDS.flatMap((w, wi) => w.levels.map((L, li) => ({ ...L, wi, li, gid: `${w.id}-${li}`, cols: L.bodies.map(b => b.bh ? hex(PAL.sand) : b.cluster ? hex(PAL.cream) : starCol(b.m)) })));
 const store = (() => { try { return JSON.parse(localStorage.getItem('areabake.slingshot.v3') || '{}') || {}; } catch (e) { return {}; } })();
 store.best = store.best || {};
 const save = () => { if (CLIP) return; try { localStorage.setItem('areabake.slingshot.v3', JSON.stringify(store)); } catch (e) {} };
@@ -91,6 +98,8 @@ const S = {
 };
 const level = () => ALL[S.idx];
 const world = () => WORLDS[level().wi];
+// every world wears the same palette now: teal for lines and accents, coral for the haze
+for (const w of WORLDS) w.theme = TOY ? { acc: '#2f8f80', neb: PAL.coral } : { acc: PAL.teal, neb: PAL.coral };
 const isDaily = i => !!WORLDS[ALL[i].wi].daily;
 // every world opens on its first level; inside a world, each level opens the next
 function unlocked(i) { return ALL[i].li === 0 || isDaily(i) || store.best[ALL[i - 1].gid] || store.best[ALL[i].gid] || (store.skipped || []).includes(ALL[i - 1].gid); }
@@ -124,7 +133,7 @@ precision highp float; precision highp int;
 uniform vec2 u_center; uniform float u_scale, u_time, u_flash; uniform int u_n; uniform vec4 u_b[10]; uniform float u_kind[10]; uniform vec3 u_sc[10];
 uniform vec3 u_acc, u_neb; uniform vec4 u_gw; uniform vec2 u_gw2;
 uniform int u_tn; uniform vec4 u_tg[6]; uniform vec3 u_tcol[6]; uniform float u_tr;
-uniform vec4 u_dent; uniform float u_dentA;
+uniform vec4 u_dent; uniform float u_dentA; uniform float u_dpr;
 out vec4 o;
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
@@ -182,21 +191,22 @@ void main(){
     ring += exp(-abs(r - b.w * 1.035) / (b.w * 0.025)) * 0.9 + exp(-max(r - b.w, 0.0) / (b.w * 0.45)) * 0.12 * step(b.w, r);
   }
   vec2 ps = p - defl, fq = ps * u_scale + u_center;
-  vec3 col = vec3(0.010, 0.011, 0.026);
+  // a still night sky. The Milky Way is a faint tilted band with dark dust lanes; stars sit one to a cell of
+  // a jittered grid, brighter ones far rarer (a steep power law, as real star counts are), each a tiny point
+  // of light. Nothing here moves or twinkles, and it stays put when the camera zooms, like a distant sky.
+  vec2 m = fq / (u_dpr * 420.0);
+  float band = dot(m - vec2(0.45, 1.0), normalize(vec2(0.92, -0.4)));
+  float mw = exp(-band * band / 0.06) * (0.55 + 0.45 * fbm(m * 3.1 + 2.3)) * (1.0 - 0.75 * smoothstep(0.5, 0.72, fbm(m * 7.3 + 9.1)));
+  vec3 col = vec3(0.031, 0.039, 0.067) + mix(vec3(1.0, 0.96, 0.9), vec3(0.91, 0.75, 0.43), 0.35) * mw * 0.055;
   for (int l = 0; l < 2; l++) {
-    float sc = l == 0 ? 3.0 : 5.0;
-    vec2 q = fq / sc + vec2(0.0, u_time * (l == 0 ? 1.2 : 2.6));
-    float s = h21(floor(q) + float(l) * 17.0);
-    if (s > 0.994) col += vec3(0.6, 0.65, 0.85) * (s - 0.994) * (l == 0 ? 55.0 : 90.0) * (0.6 + 0.4 * sin(u_time * 1.3 + s * 900.0)) * squeeze;
-  }
-  float nb = fbm(ps * 1.1 + vec2(0.0, u_time * 0.006)), nb2 = fbm(ps * 2.2 - vec2(u_time * 0.008, 3.1));
-  col += mix(u_acc, u_neb, nb2) * pow(smoothstep(0.34, 0.95, nb), 2.0) * 0.16;
-  // gravitational waves from a waltzing pair: the quadrupole pattern h ~ cos 2(Omega t - phi - Omega r / c) / r,
-  // a two-armed spiral turning with the stars at twice their frequency. The pattern is the real one; its
-  // strength is exaggerated many millions of times so you can see it.
-  if (u_gw2.x > 0.0) {
-    vec2 d = p - u_gw.xy; float r = length(d), w = cos(2.0 * (u_gw.z - atan(d.y, d.x)) - u_gw.w * r);
-    col += mix(u_acc, u_neb, 0.5) * w * u_gw2.x * smoothstep(u_gw2.y * 0.6, u_gw2.y * 1.6, r) / (r + 0.35);
+    float cs = (l == 0 ? 7.0 : 21.0) * u_dpr;
+    vec2 cell = floor(fq / cs), f = fq - cell * cs;
+    float h = h21(cell + float(l) * 31.7), keep = l == 0 ? 0.26 + 0.45 * mw : 0.86;
+    if (h > keep) continue;
+    vec2 at = vec2(h21(cell * 1.7 + 4.1), h21(cell * 2.3 + 9.2)) * (cs - 4.0 * u_dpr) + 2.0 * u_dpr;
+    float mag = pow(h21(cell + 7.7 + float(l)), l == 0 ? 16.0 : 6.0), w = (0.5 + mag * 1.1) * u_dpr;
+    vec3 tint = h21(cell + 3.3) > 0.75 ? vec3(0.82, 0.92, 1.0) : h21(cell + 5.5) > 0.7 ? vec3(1.0, 0.88, 0.7) : vec3(1.0, 0.97, 0.92);
+    col += tint * exp(-dot(f - at, f - at) / (w * w)) * (0.05 + 1.3 * mag) * squeeze;
   }
   float phi = 0.0; vec3 light = vec3(0.0);
   // the launcher's dent drags space toward the pull; the field lines are drawn in the dragged space
@@ -205,6 +215,16 @@ void main(){
     if (i >= u_n) break;
     vec4 b = u_b[i]; vec2 d = p - b.xy; float r = length(d);
     float rw = length(pw - b.xy);
+    if (u_kind[i] > 2.5) {
+      // a star cluster, a Plummer sphere: surface density (1 + R^2 / a^2)^-2, drawn as a glow and as resolved
+      // stars, one chance per small cell with that probability; the potential is m / sqrt(r^2 + a^2)
+      float a = b.w, sig = 1.0 / pow(1.0 + r * r / (a * a), 2.0);
+      phi += b.z / sqrt(rw * rw + a * a);
+      vec2 cc = floor(gl_FragCoord.xy / (3.0 * u_dpr)), ff = gl_FragCoord.xy - (cc + 0.5) * 3.0 * u_dpr;
+      float pick = step(h21(cc + float(i) * 5.1), 0.55 * sig), br = 0.4 + 0.6 * h21(cc + 2.2);
+      light += u_sc[i] * (sig * 0.16 + pick * br * exp(-dot(ff, ff) / (0.9 * u_dpr * u_dpr)) * 0.9);
+      continue;
+    }
     if (u_kind[i] > 1.5) {
       float rs = b.w / 2.6, rin = 3.0 * rs, rout = 7.0 * rs;
       phi += b.z / max(rw - rs, 0.004);
@@ -234,19 +254,17 @@ void main(){
     vec3 sc = u_sc[i];
     // the disc: limb darkening (brighter at the center, I = 1 - u(1 - mu)) and slowly boiling granulation
     float mu = sqrt(max(0.0, 1.0 - r * r / (b.w * b.w)));
-    float gran = 0.84 + 0.32 * fbm(d / b.w * 6.0 + vec2(u_time * 0.11, -u_time * 0.08) + float(i) * 7.3);
+    float gran = 0.86 + 0.28 * fbm(d / b.w * 6.0 + float(i) * 7.3);
     vec3 disc = sc * (1.0 - 0.62 * (1.0 - mu)) * gran * 2.4 + vec3(1.0) * pow(mu, 6.0) * 0.6;
-    float ang = atan(d.y, d.x);
-    float rays = 0.78 + 0.22 * sin(ang * 9.0 + u_time * 0.45 + float(i) * 1.7) * sin(ang * 5.0 - u_time * 0.3 + float(i));
-    float halo = exp(-max(r - b.w, 0.0) / (b.w * 0.8)) * 0.7 * rays + 0.006 * b.z / (r * r + 0.004);
+    float halo = exp(-max(r - b.w, 0.0) / (b.w * 0.8)) * 0.6 + 0.006 * b.z / (r * r + 0.004);
     light += disc * core + sc * halo * (1.0 - core);
   }
   float v = log(phi + 0.02) * 4.5, fw = max(fwidth(v), 1e-4);
   float line = (1.0 - smoothstep(0.35, 1.35, abs(fract(v + 0.5) - 0.5) / fw)) * clamp(0.16 / fw, 0.0, 1.0);
   float dp = smoothstep(0.35, 5.5, phi);
-  vec3 lc = dp < 0.5 ? mix(vec3(0.52, 0.38, 1.0), vec3(0.22, 0.86, 0.82), dp * 2.0) : mix(vec3(0.22, 0.86, 0.82), vec3(1.0, 0.8, 0.45), dp * 2.0 - 1.0);
+  vec3 lc = mix(vec3(0.39, 0.8, 0.73), vec3(0.91, 0.75, 0.43), dp);
   col += lc * line * (0.07 + 0.22 * smoothstep(0.0, 2.4, log(phi + 1.0)));
-  col += u_acc * 0.028 * smoothstep(0.2, 3.0, phi) + light + vec3(0.55, 0.85, 1.0) * u_flash * 0.08;
+  col += u_acc * 0.02 * smoothstep(0.2, 3.0, phi) + light + vec3(1.0, 0.96, 0.9) * u_flash * 0.06;
   // the dent itself: log-spaced rings of a small well, stretched with the sheet, and a faint dimple of shade
   if (u_dentA > 0.0) {
     vec2 qq = pw - u_dent.xy; float rr = length(qq), v2 = log(rr + 0.012) * 6.5, fw2 = max(fwidth(v2), 1e-4);
@@ -261,14 +279,127 @@ void main(){
   col = 1.0 - exp(-col * 1.15);
   o = vec4(col, 1.0);
 }`;
+// The toy sky: daylight, flat and soft. Bodies are low-poly balls: each pixel's sphere normal is snapped to
+// a facet (ten slices around, eight down), lit by one sun from the upper left, and casts a soft shadow onto
+// the backdrop. Plates are drums seen at a tilt, a top face and a side band, and they jiggle like jelly.
+const FS_TOY = `#version 300 es
+precision highp float; precision highp int;
+uniform vec2 u_center; uniform float u_scale, u_time, u_flash; uniform int u_n; uniform vec4 u_b[10]; uniform float u_kind[10]; uniform vec3 u_sc[10];
+uniform vec3 u_acc, u_neb; uniform vec4 u_gw; uniform vec2 u_gw2;
+uniform int u_tn; uniform vec4 u_tg[6]; uniform vec3 u_tcol[6]; uniform float u_tr;
+uniform vec4 u_dent; uniform float u_dentA; uniform float u_dpr;
+out vec4 o;
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float besselJ(float n, float x){ float s = 0.0; for (int i = 0; i < 20; i++) { float tau = (float(i) + 0.5) * 3.14159265 / 20.0; s += cos(n * tau - x * sin(tau)); } return s / 20.0; }
+vec2 chMode(float m){
+  if (m < 0.5) return vec2(2.0, 8.4172); if (m < 1.5) return vec2(3.0, 9.7610); if (m < 2.5) return vec2(1.0, 7.0156);
+  if (m < 3.5) return vec2(4.0, 11.0647); if (m < 4.5) return vec2(0.0, 8.6537); return vec2(5.0, 12.2251);
+}
+const vec3 SUN = vec3(-0.55, 0.62, 0.56);
+// a faceted ball: the normal snapped to a facet, lit with a wrap so the dark side never goes black
+vec3 ball(vec2 d, vec3 base, float facets){
+  float z = sqrt(max(0.0, 1.0 - dot(d, d))), th = atan(d.y, d.x), ph = acos(clamp(z, -1.0, 1.0));
+  float st = 6.2831853 / facets, sp = 1.5707963 / (facets * 0.4);
+  th = (floor(th / st) + 0.5) * st; ph = (floor(ph / sp) + 0.5) * sp;
+  vec3 nrm = vec3(cos(th) * sin(ph), sin(th) * sin(ph), cos(ph));
+  float lam = dot(nrm, normalize(SUN)) * 0.5 + 0.5;
+  return base * (0.5 + 0.62 * lam) + vec3(1.0) * pow(max(dot(nrm, normalize(SUN + vec3(0.0, 0.0, 1.0))), 0.0), 18.0) * 0.18;
+}
+void main(){
+  vec2 p = (gl_FragCoord.xy - u_center) / u_scale, sp = gl_FragCoord.xy / (u_dpr * 900.0);
+  // the backdrop: cream at the bottom into a pale teal sky, with a faint paper grain that never moves
+  vec3 col = mix(vec3(1.0, 0.965, 0.9), vec3(0.84, 0.93, 0.92), smoothstep(0.0, 1.0, sp.y * 0.9 + 0.05));
+  col *= 0.985 + 0.03 * h21(floor(gl_FragCoord.xy / u_dpr));
+  // field lines first, drawn as thin teal contours of the potential, in the space the launcher drags
+  float phi = 0.0;
+  vec2 dq = p - u_dent.xy, pw = p - u_dent.zw * exp(-dot(dq, dq) / 0.05);
+  for (int i = 0; i < 10; i++) {
+    if (i >= u_n) break;
+    vec4 b = u_b[i]; float rw = length(pw - b.xy);
+    phi += u_kind[i] > 2.5 ? b.z / sqrt(rw * rw + b.w * b.w) : u_kind[i] > 1.5 ? b.z / max(rw - b.w / 2.6, 0.004) : b.z / sqrt(rw * rw + 0.0004);
+  }
+  float v = log(phi + 0.02) * 4.0, fw = max(fwidth(v), 1e-4);
+  float line = (1.0 - smoothstep(0.3, 1.2, abs(fract(v + 0.5) - 0.5) / fw)) * clamp(0.18 / fw, 0.0, 1.0);
+  col = mix(col, vec3(0.19, 0.56, 0.5), line * 0.28);
+  // soft shadows of every body and plate, cast down and to the right
+  vec2 so = vec2(0.035, -0.05);
+  for (int i = 0; i < 10; i++) {
+    if (i >= u_n) break;
+    vec4 b = u_b[i]; if (u_kind[i] > 2.5) continue;
+    float r = length(p - b.xy - so) / max(b.w, 0.02);
+    col *= 1.0 - 0.16 * smoothstep(1.25, 0.6, r);
+  }
+  for (int i = 0; i < 6; i++) {
+    if (i >= u_tn) break; vec4 T = u_tg[i]; if (T.z < 0.0) continue;
+    float gone = T.w < 0.0 ? 0.0 : clamp((T.w - 0.3) / 0.9, 0.0, 1.0);
+    col *= 1.0 - 0.13 * (1.0 - gone) * smoothstep(1.2, 0.7, length((p - T.xy - so * 0.7) / u_tr));
+  }
+  // bodies
+  for (int i = 0; i < 10; i++) {
+    if (i >= u_n) break;
+    vec4 b = u_b[i]; vec2 d = p - b.xy; float r = length(d);
+    if (u_kind[i] > 2.5) {
+      // a star cluster: a puff of confetti stars, Plummer-distributed (density (1 + R^2/a^2)^-2)
+      float a = b.w, sig = 1.0 / pow(1.0 + r * r / (a * a), 2.0);
+      col = mix(col, vec3(1.0, 0.9, 0.78), sig * 0.35);
+      vec2 cc = floor(gl_FragCoord.xy / (5.0 * u_dpr)), ff = gl_FragCoord.xy - (cc + 0.5) * 5.0 * u_dpr;
+      float pick = step(h21(cc + float(i) * 5.1), 0.45 * sig), hh = h21(cc + 2.2);
+      vec3 cf = hh < 0.33 ? vec3(0.94, 0.49, 0.38) : hh < 0.66 ? vec3(0.39, 0.8, 0.73) : vec3(0.91, 0.75, 0.43);
+      col = mix(col, cf, pick * smoothstep(2.2 * u_dpr, 1.2 * u_dpr, length(ff)));
+      continue;
+    }
+    float R = b.w; if (r > R * 1.02) continue;
+    float aa = smoothstep(R, R * 0.97, r);
+    vec3 base = u_kind[i] > 1.5 ? vec3(0.09, 0.1, 0.13) : u_sc[i];
+    vec3 c = ball(d / R, base, u_kind[i] > 1.5 ? 12.0 : 10.0);
+    // a black hole wears a thin sand ring, its photon ring, flat around it
+    col = mix(col, c, aa);
+  }
+  for (int i = 0; i < 10; i++) {
+    if (i >= u_n || u_kind[i] < 1.5 || u_kind[i] > 2.5) continue;
+    float r = length(p - u_b[i].xy) / u_b[i].w;
+    col = mix(col, vec3(0.91, 0.75, 0.43), smoothstep(0.06, 0.0, abs(r - 1.18)) * 0.9);
+  }
+  // plates: a tilted drum, top face and side band; on a hit the skin jiggles like jelly
+  for (int i = 0; i < 6; i++) {
+    if (i >= u_tn) break;
+    vec4 T = u_tg[i]; if (T.z < 0.0) continue;
+    float hit = T.w, gone = hit < 0.0 ? 0.0 : clamp((hit - 0.3) / 0.9, 0.0, 1.0);
+    if (gone >= 1.0) continue;
+    // jelly: a damped wobble, x and y squashing out of phase (area kept), e^(-t / 0.3) sin(2 pi 7 t)
+    float wob = hit < 0.0 ? 0.0 : 0.22 * exp(-hit / 0.3) * sin(hit * 44.0);
+    vec2 d = (p - T.xy) / (u_tr * (1.0 - 0.35 * gone)); d.x /= 1.0 + wob; d.y *= 1.0 + wob;
+    vec2 top = vec2(d.x, (d.y - 0.07) / 0.78), bot = vec2(d.x, (d.y + 0.09) / 0.78);
+    float inTop = smoothstep(1.0, 0.95, length(top)), inBot = smoothstep(1.0, 0.95, length(bot)) * step(d.y, 0.07);
+    vec3 hue = u_tcol[i];
+    col = mix(col, hue * 0.62, max(inBot, 0.0) * (1.0 - gone));
+    vec2 nk = chMode(T.z); float th = atan(top.y, top.x), rr = length(top);
+    float u = besselJ(nk.x, nk.y * rr) * cos(nk.x * th);
+    vec2 cell = floor(gl_FragCoord.xy / (1.6 * u_dpr));
+    float shake = hit < 0.0 ? 0.0 : clamp(hit / 0.3, 0.0, 1.0), jit = (h21(cell + floor(u_time * 24.0)) - 0.5) * shake * 0.5;
+    float sand = exp(-pow((u + jit) / (0.07 + 0.3 * shake), 2.0)) * step(0.35 + 0.35 * shake, h21(cell + float(i) * 13.1));
+    vec3 face = mix(hue * 1.08, vec3(1.0), 0.12) * (0.92 + 0.08 * top.y);
+    face = mix(face, vec3(1.0, 0.98, 0.94), sand * 0.9);
+    col = mix(col, face, inTop * (1.0 - gone));
+    col = mix(col, hue * 0.72, smoothstep(0.07, 0.0, abs(length(top) - 0.965)) * (1.0 - gone));
+  }
+  // the launcher's dent: teal rings of a small well, stretched toward the pull
+  if (u_dentA > 0.0) {
+    vec2 qq = pw - u_dent.xy; float rr = length(qq), v2 = log(rr + 0.012) * 6.5, fw2 = max(fwidth(v2), 1e-4);
+    float rings = (1.0 - smoothstep(0.3, 1.25, abs(fract(v2) - 0.5) / fw2)) * clamp(0.2 / fw2, 0.0, 1.0) * smoothstep(0.4, 0.05, length(dq));
+    col = mix(col, vec3(0.19, 0.56, 0.5), rings * 0.5 * u_dentA);
+  }
+  col += vec3(1.0, 0.95, 0.85) * u_flash * 0.06;
+  o = vec4(col, 1.0);
+}`;
 let prog = null, U = {};
 if (gl) {
   const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
   prog = gl.createProgram();
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
   void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`));
-  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
-  for (const n of ['u_center', 'u_scale', 'u_time', 'u_flash', 'u_n', 'u_b', 'u_kind', 'u_sc', 'u_acc', 'u_neb', 'u_gw', 'u_gw2', 'u_tn', 'u_tg', 'u_tcol', 'u_tr', 'u_dent', 'u_dentA']) U[n] = gl.getUniformLocation(prog, n);
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, TOY ? FS_TOY : FS)); gl.linkProgram(prog);
+  for (const n of ['u_center', 'u_scale', 'u_time', 'u_flash', 'u_n', 'u_b', 'u_kind', 'u_sc', 'u_acc', 'u_neb', 'u_gw', 'u_gw2', 'u_tn', 'u_tg', 'u_tcol', 'u_tr', 'u_dent', 'u_dentA', 'u_dpr']) U[n] = gl.getUniformLocation(prog, n);
   gl.bindVertexArray(gl.createVertexArray());
 }
 function geom() {
@@ -319,10 +450,10 @@ const toScr = (x, y) => [V.cx + x * V.s, V.cy - y * V.s];
 function renderGL() {
   if (!gl) return;
   const L = level(), B = L.bodies, n = Math.min(10, B.length), arr = new Float32Array(40), kind = new Float32Array(10), col = new Float32Array(30), th = world().theme;
-  for (let i = 0; i < n; i++) { arr.set([S.P[i][0], S.P[i][1], B[i].m, B[i].r], i * 4); kind[i] = B[i].bh ? 2 : isMoon(B[i]) ? 1 : 0; col.set(L.cols[i], i * 3); }
+  for (let i = 0; i < n; i++) { arr.set([S.P[i][0], S.P[i][1], B[i].m, B[i].cluster ? B[i].a : B[i].r], i * 4); kind[i] = B[i].cluster ? 3 : B[i].bh ? 2 : isMoon(B[i]) ? 1 : 0; col.set(L.cols[i], i * 3); }
   gl.viewport(0, 0, W, H); gl.useProgram(prog);
   gl.uniform2f(U.u_center, V.cx * DPR, H - V.cy * DPR); gl.uniform1f(U.u_scale, V.s * DPR);
-  gl.uniform1f(U.u_time, S.time % 1000); gl.uniform1f(U.u_flash, S.flash);
+  gl.uniform1f(U.u_time, S.time % 1000); gl.uniform1f(U.u_flash, S.flash); gl.uniform1f(U.u_dpr, DPR);
   gl.uniform1i(U.u_n, n); gl.uniform4fv(U.u_b, arr); gl.uniform1fv(U.u_kind, kind); gl.uniform3fv(U.u_sc, col);
   gl.uniform3fv(U.u_acc, hex(th.acc)); gl.uniform3fv(U.u_neb, hex(th.neb));
   // Chladni plates are drawn by the shader: position, mode (or -1 once collected), and time since hit
@@ -336,24 +467,18 @@ function renderGL() {
   // the launcher's dent: where it sits, how far it is pulled (in world units), and how strongly it shows
   const off = dentOffset(), ready = !S.won && !S.replay && (S.aim || !S.comets.length);
   gl.uniform4f(U.u_dent, L.launch[0], L.launch[1], off[0] / V.s, -off[1] / V.s); gl.uniform1f(U.u_dentA, CLIP && !ready ? 0.3 : ready ? 1 : 0.35);
-  // a pair of stars sharing one orbit center radiates; its waves leave at a slow, visible "speed of light"
-  const pair = B.map((b, i) => i).filter(i => B[i].star && B[i].orbit);
-  if (pair.length >= 2) {
-    const o = B[pair[0]].orbit, ang = Math.atan2(S.P[pair[0]][1] - o.cy, S.P[pair[0]][0] - o.cx), om = 2 * Math.PI / o.period;
-    gl.uniform4f(U.u_gw, o.cx, o.cy, ang, 2 * om / 0.3); gl.uniform2f(U.u_gw2, 0.045, o.R + B[pair[1]].orbit.R);
-  } else gl.uniform2f(U.u_gw2, 0, 0);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
 /* ======================= level flow ======================= */
-const TH = ['#ff7aa8', '#ffd166', '#6ef0c8', '#8fb0ff', '#c79bff'];
+const TH = [PAL.coral, PAL.teal, PAL.sand];
 function load(i, replay) {
   S.idx = clamp(i, 0, ALL.length - 1);
   const L = level();
   const W = makeWorld(L);
   Object.assign(S, { W, tick: 0, acc: 0, ffK: 1, ff: false, comets: W.comets, ghosts: [], dust: [], sparks: [], waves: [], labels: [],
     got: W.got, order: [], shots: 0, score: 0, tricks: [], won: false, gold: null, aim: null, throws: [], replay: replay || null, flash: 0, hitStop: 0,
-    P: W.P, Q: W.Q, band: null, rewind: null, tg: makeTargets(L), cam: { z: 1, x: 0, y: 0 }, camShot: null, near: null });
+    P: W.P, Q: W.Q, band: null, rewind: null, tg: makeTargets(L), cam: { z: 1, x: 0, y: 0 }, camShot: null, near: null, puffs: [] });
   setView();
   if (!CLIP) {
     document.documentElement.style.setProperty('--accent', world().theme.acc);
@@ -363,36 +488,41 @@ function load(i, replay) {
     if (!world().daily) store.last = S.idx;
     save(); hudPips();
   }
-  titleCard();
+  const glide = S.glideFor === S.idx && S.glide ? S.glide : null; S.glide = null; S.glideFor = -1;
+  titleCard(glide);
 }
 function hudPips() {
   if (CLIP) return;
   const L = level(), p = $('#pips'); p.replaceChildren();
   L.targets.forEach((_, i) => { const d = document.createElement('span'); d.className = 'pip' + (S.got[i] ? ' on' : ''); d.style.setProperty('--pc', TH[i % TH.length]); p.append(d); });
-  const s = document.createElement('span'); s.className = 'shots'; s.textContent = `${S.shots} · par ${L.par}`; p.append(s);
 }
 
 /* ---- the title: the level name written in starlight, then released into the level's gravity ---- */
-function titleCard() {
-  const L = level(), c = document.createElement('canvas'), w = Math.round(cssW), h = 160;
+// the level's name as a field of points, in layout coordinates (where the title is written)
+const TITLE_FONT = fs => TOY ? `600 ${fs}px Fredoka, "Varela Round", system-ui, sans-serif` : `300 italic ${fs}px "Cormorant Garamond", Garamond, serif`;
+function titlePoints(name) {
+  const c = document.createElement('canvas'), w = Math.round(cssW), h = 160;
   c.width = w; c.height = h;
   const x = c.getContext('2d');
-  let fs = 64; x.font = `300 italic ${fs}px "Cormorant Garamond", Garamond, serif`;
-  fs = Math.min(70, fs * (w * 0.84) / Math.max(1, x.measureText(L.name).width));
-  x.font = `300 italic ${fs}px "Cormorant Garamond", Garamond, serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';
-  x.fillText(L.name, w / 2, h / 2);
+  let fs = TOY ? 54 : 64; x.font = TITLE_FONT(fs);
+  fs = Math.min(TOY ? 58 : 70, fs * (w * 0.84) / Math.max(1, x.measureText(name).width));
+  x.font = TITLE_FONT(fs); x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#fff';
+  x.fillText(name, w / 2, h / 2);
   const d = x.getImageData(0, 0, w, h).data, pts = [];
   for (let yy = 0; yy < h; yy += 2) for (let xx = 0; xx < w; xx += 2) if (d[(yy * w + xx) * 4 + 3] > 120) pts.push([xx, yy]);
   for (let k = pts.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [pts[k], pts[j]] = [pts[j], pts[k]]; }
-  const cy = cssH * 0.4, th = world().theme, tint = hex(th.acc);
-  const parts = pts.slice(0, 720).map(([px, py]) => {
-    const sx = px, sy = cy + py - h / 2, ax = (sx - V.cx) / V.s, ay = -(sy - V.cy) / V.s, sc = Math.random();
-    return { x: ax, y: ay, hx: ax, hy: ay, vx: 0, vy: 0, ox: (Math.random() - 0.5) * 0.5, oy: (Math.random() - 0.5) * 0.5, tw: Math.random() * 6.28, sc, alive: true };
-  });
-  S.title = { parts, t0: S.time, released: false, eyebrow: `${S.replay && !CLIP ? (S.replay.hint ? 'Hint' : 'Replay') : world().daily ? 'Today' : world().name} · ${L.li + 1}`, par: `par ${L.par}`, tint };
+  const cy = cssH * 0.4;
+  return pts.slice(0, 720).map(([px, py]) => [(px - G.cx) / G.s, -(cy + py - h / 2 - G.cy) / G.s]);
+}
+function titleCard(from) {
+  const L = level(), th = world().theme, tint = hex(th.acc);
+  // a win in the toy game hands its drifting sand straight to the next title, so the name is already there
+  const parts = from ? from.map(q => ({ x: q.tx, y: q.ty, hx: q.tx, hy: q.ty, vx: 0, vy: 0, ox: 0, oy: 0, tw: Math.random() * 6.28, sc: Math.random(), col: q.col, alive: true }))
+    : titlePoints(L.name).map(([ax, ay]) => ({ x: ax, y: ay, hx: ax, hy: ay, vx: 0, vy: 0, ox: (Math.random() - 0.5) * 0.5, oy: (Math.random() - 0.5) * 0.5, tw: Math.random() * 6.28, sc: Math.random(), alive: true }));
+  S.title = { parts, t0: S.time - (from ? 0.7 : 0), released: false, eyebrow: `${S.replay && !CLIP ? (S.replay.hint ? 'Hint' : 'Replay') : world().daily ? 'Today' : world().name} · ${L.li + 1}`, tint };
   if (!CLIP) document.body.classList.add('titling');
-  // the italic face may still be loading on the very first level
-  if (!CLIP && document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (S.title && !S.title.released && S.time - S.title.t0 < 0.6) titleCard(); });
+  // the face may still be loading on the very first level
+  if (!from && !CLIP && document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (S.title && !S.title.released && S.time - S.title.t0 < 0.6) titleCard(); });
 }
 function releaseTitle() {
   const T = S.title; if (!T || T.released) return;
@@ -429,6 +559,7 @@ function fire(vx, vy, kind = 'n') {
   const L = level(), [x, y] = L.launch, c = newComet(S.W, vx, vy, kind);
   Object.assign(c, { trail: [[x, y]], winds: L.bodies.map(() => 0), angs: L.bodies.map(() => null), close: false, moon: false, hits: 0,
     moving: L.bodies.some(b => b.orbit), E0: energy(L.bodies, S.P, x, y, vx, vy) });
+  c.born = S.time;
   S.comets.push(c);
   if (!S.replay) S.throws.push(kind === 'n' ? [S.tick, vx, vy] : [S.tick, vx, vy, kind, -1]);
   S.shots++; S.ff = false; S.ffK = 1;
@@ -443,27 +574,36 @@ const HOOKS = {
   dead: c => retire(c),
 };
 function retire(c) {
-  if (c.fate === 'crash') { Sound.thud(); burst(c.x, c.y, '#ffb47a', 30, 1.4); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); buzz(20); }
+  if (c.fate === 'crash') {
+    Sound.thud(); buzz(20);
+    // the toy game ends a crash in a little puff of cartoon smoke: a few round clouds that swell and thin out
+    if (TOY) { Sound.tone(220, 0.25, 'triangle', 0.05); Sound.tone(165, 0.3, 'sine', 0.05, 0.05); for (let k = 0; k < 7; k++) { const a = k / 7 * 6.283 + Math.random(), v = 0.12 + Math.random() * 0.18; S.puffs.push({ x: c.x, y: c.y, vx: Math.cos(a) * v + c.vx * 0.08, vy: Math.sin(a) * v + c.vy * 0.08, r: 0.02 + Math.random() * 0.02, age: 0, life: 0.7 + Math.random() * 0.4 }); } }
+    else { burst(c.x, c.y, '#ffb47a', 30, 1.4); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); }
+  }
   if (c.trail !== S.gold) { S.ghosts.push(c.trail); if (S.ghosts.length > 3) S.ghosts.shift(); }
 }
 function burst(x, y, col, n, life = 0.6) {
   for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 0.2 + Math.random() * 0.7; S.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: life + Math.random() * life, age: 0, col }); }
 }
-function award(c, name, pts, at) {
-  // each trick pays once per level, and labels earned together queue up and stack instead of overprinting
+function award(c, name, pts) {
+  // tricks are kept as quiet bookkeeping (each pays once per level); nothing is written on screen
   const kind = name.split(' ×')[0];
   if (S.tricks.some(q => q[0].split(' ×')[0] === kind)) return;
   S.tricks.push([name, pts]); S.score += pts;
-  const k = S.labels.filter(l => l.age < 0.4).length;
-  const p = at || c;
-  S.labels.push({ x: p.x, y: p.y, vx: 0, vy: 0, text: `${name} +${pts}`, age: -0.4 * k, slot: k, chimed: false });
 }
 function stars() { const L = level(); return S.shots <= L.par ? 3 : S.shots <= L.par + 2 ? 2 : 1; }
 function win(c) {
   S.won = true; S.wonAt = S.time; S.gold = c.trail; Sound.fanfare(); buzz([12, 40, 12]);
   const L = level(), parBonus = Math.max(0, L.par - S.shots + 1) * 300;
   S.score += parBonus; if (parBonus) S.tricks.push([S.shots < L.par ? 'Under par' : 'On par', parBonus]);
-  L.targets.forEach(([x, y], i) => { burst(x, y, TH[i % TH.length], 40); S.waves.push({ x, y, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') }); });
+  L.targets.forEach(([x, y], i) => { burst(x, y, S.tg[i] ? S.tg[i].hue : TH[i % TH.length], 40); S.waves.push({ x, y, age: 0, r0: TR, col: hex(S.tg[i] ? S.tg[i].hue : TH[i % TH.length]).map(v => v * 255 | 0).join(',') }); });
+  // the toy game: every plate's sand lifts and drifts into the next level's name, waiting to begin
+  if (TOY && !S.replay && !CLIP) {
+    const ni = nextIdx(), pts = titlePoints(ALL[ni].name);
+    S.glide = pts.map(([tx, ty], k) => { const j = k % L.targets.length, [px, py] = L.targets[j], a = Math.random() * 6.283, r = Math.sqrt(Math.random()) * TR;
+      return { sx: px + Math.cos(a) * r, sy: py + Math.sin(a) * r, tx, ty, d: 0.5 + Math.random() * 0.7, col: S.tg[j] ? S.tg[j].hue : PAL.coral }; });
+    S.glideFor = ni;
+  }
   if (!S.replay && !CLIP) {
     const prev = store.best[L.gid], rec = { shots: S.shots, score: S.score, stars: stars() };
     if (!prev || rec.score > prev.score) store.best[L.gid] = rec;
@@ -543,6 +683,8 @@ function simulate(dt) {
   S.dust = S.dust.filter(p => p.age < p.life); S.sparks = S.sparks.filter(p => p.age < p.life);
   S.waves = S.waves.filter(w => w.age < 1); S.labels = S.labels.filter(l => l.age < 1.8);
   stepTitle(dt); stepTargets(dt); stepBand(dt); if (!CLIP) stepCamera(dt);
+  for (const q of S.puffs) { q.age += dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.95; q.vy *= 0.95; }
+  S.puffs = S.puffs.filter(q => q.age < q.life);
   // time speeds up once every comet still flying has gone stale (decided per step inside the physics)
   S.ff = !S.won && S.comets.length > 0 && S.comets.every(c => c.ff);
   if (!CLIP) { const show = S.ffK > 1.6 || !!S.hold; if ($('#ff').hidden === show) $('#ff').hidden = !show; }
@@ -556,6 +698,7 @@ function simulate(dt) {
 // The comet sheds faster as the starlight on it grows (flux ~ L / r^2), so tails flare near stars.
 const lum = b => b.bh || isMoon(b) ? 0 : Math.pow(b.m / 0.25, 2.5);
 function tails(dt, B) {
+  if (TOY) return;
   for (const c of S.comets) {
     let flux = 0;
     for (let k = 0; k < B.length; k++) { const dx = S.P[k][0] - c.x, dy = S.P[k][1] - c.y; flux += lum(B[k]) * B[k].m / (dx * dx + dy * dy + 0.01); }
@@ -629,6 +772,7 @@ function drawLauncher(g) {
   if (S.won || S.replay || CLIP || !(S.aim || !S.comets.length)) return;
   // the next comet, resting where the sheet is pulled to
   const L = level(), [lx, ly] = toScr(L.launch[0], L.launch[1]), off = dentOffset(), px = lx + off[0], py = ly + off[1];
+  if (TOY) { toyBall(g, px, py, -off[0], -off[1], Math.hypot(off[0], off[1]) / 40, 9); return; }
   const gp = g.createRadialGradient(px, py, 0, px, py, 12);
   gp.addColorStop(0, '#ffffff'); gp.addColorStop(0.3, 'rgba(200,230,255,.55)'); gp.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = gp; g.beginPath(); g.arc(px, py, 12, 0, 7); g.fill();
@@ -641,8 +785,8 @@ function pullOffset(A) {
 
 /* ======================= drawing ======================= */
 function spCol(v, a) {
-  // slow comets glow violet, fast ones gold-white (speeds now top out near 1)
-  const t = clamp((v - 0.15) / 0.95, 0, 1), A = [122, 108, 255], B = [79, 216, 232], C = [255, 241, 196];
+  // slow comets glow teal, fast ones sand and then cream-white (speeds top out near 1)
+  const t = clamp((v - 0.15) / 0.95, 0, 1), A = [99, 205, 185], B = [232, 192, 110], C = [255, 246, 230];
   const m = t < 0.5 ? A.map((x, i) => x + (B[i] - x) * t * 2) : B.map((x, i) => x + (C[i] - x) * (t * 2 - 1));
   return `rgba(${m[0] | 0},${m[1] | 0},${m[2] | 0},${a})`;
 }
@@ -664,6 +808,11 @@ function preview(vx, vy, dur = 3.2) {
 function ribbon(tr, gold, fade) {
   const g = g2, n = tr.length; if (n < 2) return;
   const seg = Math.max(1, Math.floor(n / 36));
+  if (TOY) {
+    // one clean tail, thickening toward the comet
+    for (let k = 0; k < n - 1; k += seg) { const e = Math.min(n - 1, k + seg), age = k / n; g.strokeStyle = gold ? `rgba(214,160,60,${0.9 * fade})` : `rgba(239,125,98,${Math.pow(age, 1.2) * 0.85 * fade})`; g.lineWidth = (gold ? 3 : 1 + 3.2 * age); path(tr, k, e + 1); g.stroke(); }
+    return;
+  }
   for (const [wm, am] of [[5.5, 0.05], [2.4, 0.16], [1, 0.85]]) {
     for (let k = 0; k < n - 1; k += seg) {
       const e = Math.min(n - 1, k + seg), q0 = tr[k], q1 = tr[e], v = Math.hypot(q1[0] - q0[0], q1[1] - q0[1]) / (0.01 * Math.max(1, e - k));
@@ -674,6 +823,16 @@ function ribbon(tr, gold, fade) {
     }
   }
 }
+// the toy comet: a shiny ball that stretches along its motion and squashes on launch.
+// Its area is kept (length * width = 1), so it reads as squishy rather than growing.
+function toyBall(g, x, y, vx, vy, sp, age) {
+  const R = 7.5, squash = 1 - 0.35 * Math.exp(-age * 16) * Math.min(1, age * 40 + 0.2), along = (1 + 0.45 * clamp(sp, 0, 1.3)) * squash, across = 1 / along;
+  const a = Math.atan2(vy, vx);
+  g.save(); g.translate(x + 2.5, y + 3.5); g.rotate(a); g.fillStyle = 'rgba(31,42,51,.15)'; g.beginPath(); g.ellipse(0, 0, R * along, R * across, 0, 0, 7); g.fill(); g.restore();
+  g.save(); g.translate(x, y); g.rotate(a);
+  const gr = g.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.1, 0, 0, R * 1.1); gr.addColorStop(0, '#fffaf2'); gr.addColorStop(0.45, PAL.coral); gr.addColorStop(1, '#b8513c');
+  g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, R * along, R * across, 0, 0, 7); g.fill(); g.restore();
+}
 function starShape(g, x, y, R, fill) {
   // a five-pointed star: vertices alternate between radius R and R * 0.42 every 36 degrees
   g.beginPath();
@@ -682,16 +841,18 @@ function starShape(g, x, y, R, fill) {
 }
 function draw() {
   const g = g2, t = S.time, L = level(), acc = world().theme.acc;
+  // light adds up on the night sky; the toy sky is daylight, where colors simply paint over one another
+  const ADD = TOY ? 'source-over' : 'lighter', INK = TOY ? '31,42,51' : '239,232,218';
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); g.setTransform(DPR, 0, 0, DPR, 0, 0);
   g.lineCap = 'round'; g.lineJoin = 'round';
-  g.lineWidth = 1; g.strokeStyle = 'rgba(239,232,218,.14)';
+  g.lineWidth = 1; g.strokeStyle = `rgba(${INK},.14)`;
   for (const tr of S.ghosts) { path(tr, 0, tr.length); g.stroke(); }
   // every moving body keeps to a circle; a faint trace of it lets you read the timing
-  g.setLineDash([2, 7]); g.strokeStyle = 'rgba(239,232,218,.13)';
+  g.setLineDash([2, 7]); g.strokeStyle = `rgba(${INK},.13)`;
   for (const b of L.bodies) if (b.orbit) { const [ox, oy] = toScr(b.orbit.cx, b.orbit.cy); g.beginPath(); g.arc(ox, oy, b.orbit.R * V.s, 0, 7); g.stroke(); }
   g.setLineDash([]);
   drawTargets(g, t);
-  g.globalCompositeOperation = 'lighter';
+  g.globalCompositeOperation = ADD;
   // the title, written in starlight
   const T = S.title, BHI = L.bodies.map((b, k) => b.bh ? k : -1).filter(k => k >= 0);
   if (T) {
@@ -702,21 +863,20 @@ function draw() {
       let px = p.x, py = p.y;
       if (!T.released) { const e = 1 - Math.pow(1 - clamp(age / 0.7, 0, 1), 3); px = p.hx + p.ox * (1 - e); py = p.hy + p.oy * (1 - e); }
       const [sx, sy] = toScr(px, py), tw = 0.65 + 0.35 * Math.sin(t * 5 + p.tw);
-      const a = (T.released ? fade : clamp(age / 0.4, 0, 1)) * tw, col = `rgba(${235 + 20 * p.sc | 0},${(225 + 30 * T.tint[1] * p.sc) | 0},${(215 + 40 * T.tint[2] * p.sc) | 0},${a})`;
+      const a = (T.released ? fade : clamp(age / 0.4, 0, 1)) * (TOY ? 1 : tw);
+      const col = TOY ? rgba(p.col || (p.sc < 0.33 ? PAL.coral : p.sc < 0.66 ? '#2f8f80' : '#c99a3c'), a) : `rgba(${235 + 20 * p.sc | 0},${(225 + 30 * T.tint[1] * p.sc) | 0},${(215 + 40 * T.tint[2] * p.sc) | 0},${a})`;
       // near a black hole each grain is pulled apart along the line to it: the tidal stretch grows as 2 m / r^3
       let st = 0, ux = 0, uy = 0;
       if (T.released && BHI.length) for (const k of BHI) { const dx = S.P[k][0] - px, dy = S.P[k][1] - py, r2 = dx * dx + dy * dy, r = Math.sqrt(r2), q = 2 * L.bodies[k].m / (r2 * r) * 0.004; if (q > st) { st = q; ux = dx / r; uy = -dy / r; } }
       if (st > 0.08) { const len = Math.min(16, st * 6); g.strokeStyle = col; g.lineWidth = 1.4; g.beginPath(); g.moveTo(sx - ux * len, sy - uy * len); g.lineTo(sx + ux * len, sy + uy * len); g.stroke(); }
-      else { g.fillStyle = col; g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8); }
+      else { g.fillStyle = col; const z = TOY ? 1.3 : 0.9; g.fillRect(sx - z, sy - z, 2 * z, 2 * z); }
     }
     const ta = T.released ? clamp(1 - rel / 0.6, 0, 1) : clamp(age / 0.5, 0, 1);
     if (ta > 0) {
       g.globalCompositeOperation = 'source-over'; g.textAlign = 'center';
       g.font = '500 10px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = rgba(acc, 0.9 * ta);
       g.fillText(T.eyebrow.toUpperCase().split('').join(' '), cssW / 2, cssH * 0.4 - 52);
-      g.font = '400 13px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = `rgba(155,152,170,${ta})`;
-      g.fillText(T.par, cssW / 2, cssH * 0.4 + 56);
-      g.textAlign = 'start'; g.globalCompositeOperation = 'lighter';
+      g.textAlign = 'start'; g.globalCompositeOperation = ADD;
     }
   }
   if (S.rewind) {
@@ -730,46 +890,36 @@ function draw() {
   if (S.gold) ribbon(S.gold, true, 1);
   for (const c of S.rewind ? [] : S.comets) {
     if (c.trail !== S.gold) ribbon(c.trail, false, 1);
-    const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy), R = 16 + 10 * clamp(sp, 0, 1), grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
+    const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy);
+    if (TOY) { toyBall(g, sx, sy, c.vx, -c.vy, sp, t - (c.born || 0)); continue; }
+    const R = 16 + 10 * clamp(sp, 0, 1), grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
     grd.addColorStop(0, '#ffffff'); grd.addColorStop(0.18, spCol(sp, 0.65)); grd.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grd; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
   }
-  g.fillStyle = 'rgb(255,214,150)';
+  g.fillStyle = 'rgb(232,192,110)';
   for (const p of S.dust) if (!p.ion) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = (1 - p.age / p.life) * 0.5; g.fillRect(sx - 0.9, sy - 0.9, 1.8, 1.8); }
-  g.fillStyle = 'rgb(120,200,255)';
+  g.fillStyle = 'rgb(99,205,185)';
   for (const p of S.dust) if (p.ion) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = (1 - p.age / p.life) * 0.55; g.fillRect(sx - 0.8, sy - 0.8, 1.6, 1.6); }
-  for (const p of S.sparks) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = 1 - p.age / p.life; g.fillStyle = p.col; g.beginPath(); g.arc(sx, sy, 1.8, 0, 7); g.fill(); }
+  for (const p of S.sparks) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = 1 - p.age / p.life; g.fillStyle = p.col; g.beginPath(); g.arc(sx, sy, TOY ? 2.2 : 1.8, 0, 7); g.fill(); }
   g.globalAlpha = 1;
+  // cartoon puffs: round clouds that swell and thin out, each with a soft shadow below
+  for (const q of S.puffs) {
+    const [sx, sy] = toScr(q.x, q.y), e = q.age / q.life, R = (q.r + 0.05 * Math.sqrt(e)) * V.s, a = 1 - e * e;
+    g.fillStyle = `rgba(31,42,51,${0.08 * a})`; g.beginPath(); g.arc(sx + 3, sy + 4, R, 0, 7); g.fill();
+    g.fillStyle = `rgba(255,250,242,${0.95 * a})`; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
+  }
+  // the toy win: sand drifting from the plates into the next level's name (eased, each grain on its own clock)
+  if (S.glide && S.won) {
+    const k = t - S.wonAt;
+    for (const q of S.glide) {
+      const e = clamp((k - q.d) / 1.3, 0, 1), sm = e * e * (3 - 2 * e), lift = Math.sin(sm * Math.PI) * 0.18;
+      const [sx, sy] = toScr(q.sx + (q.tx - q.sx) * sm, q.sy + (q.ty - q.sy) * sm + lift);
+      g.fillStyle = rgba(q.col, clamp(k / 0.3, 0, 1)); g.fillRect(sx - 1.3, sy - 1.3, 2.6, 2.6);
+    }
+  }
   for (const w of S.waves) {
     const [sx, sy] = toScr(w.x, w.y), e = 1 - Math.pow(1 - w.age, 3);
     g.strokeStyle = `rgba(${w.col},${(1 - w.age) * 0.7})`; g.lineWidth = 1.8; g.beginPath(); g.arc(sx, sy, (w.r0 + e * 0.34) * V.s, 0, 7); g.stroke();
-  }
-  // a win, drawn in the sky: the targets join into a constellation, stars and score glow above
-  if (S.won) {
-    const k = t - S.wonAt, P = S.order.map(i => toScr(...L.targets[i]));
-    const draw1 = clamp((k - 0.2) / 0.9, 0, 1) * (P.length - 1 + (P.length > 2 ? 1 : 0));
-    g.strokeStyle = 'rgba(255,214,120,.55)'; g.lineWidth = 1.2;
-    for (let s = 0; s < draw1; s++) {
-      const a = P[s % P.length], b = P[(s + 1) % P.length], f = Math.min(1, draw1 - s);
-      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f); g.stroke();
-    }
-    const st = stars(), cy = (CLIP ? 70 : 96) + 34;
-    for (let s = 0; s < 3; s++) {
-      const pop = clamp((k - 0.5 - s * 0.18) / 0.35, 0, 1), sc = pop < 1 ? 1.4 - 0.4 * pop : 1, x = cssW / 2 + (s - 1) * 44;
-      if (!pop) continue;
-      g.globalAlpha = pop; g.fillStyle = s < st ? '#ffd36e' : 'rgba(239,232,218,.12)';
-      starShape(g, x, cy, 15 * sc, true);
-    }
-    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-    const sa = clamp((k - 1.0) / 0.5, 0, 1);
-    if (sa) {
-      g.textAlign = 'center'; g.font = '500 26px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = `rgba(239,232,218,${sa})`;
-      g.fillText(S.score.toLocaleString('en-US'), cssW / 2, cy + 50);
-      g.font = '400 12px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = `rgba(255,211,110,${0.8 * sa})`;
-      g.fillText(S.tricks.slice(0, 4).map(q => q[0]).join('  ·  '), cssW / 2, cy + 74);
-      g.textAlign = 'start';
-    }
-    g.globalCompositeOperation = 'lighter';
   }
   g.globalCompositeOperation = 'source-over';
   // off-screen comets get an arrow at the edge
@@ -777,7 +927,7 @@ function draw() {
     const [sx, sy] = toScr(c.x, c.y), m = 30;
     if (sx > m && sx < cssW - m && sy > m + 60 && sy < cssH - m) continue;
     const dx = sx - G.cx, dy = sy - G.cy, k = Math.min((dx > 0 ? cssW - m - G.cx : G.cx - m) / Math.abs(dx || 1e-6), (dy > 0 ? cssH - m - G.cy : G.cy - m - 60) / Math.abs(dy || 1e-6));
-    g.save(); g.translate(G.cx + dx * k, G.cy + dy * k); g.rotate(Math.atan2(dy, dx)); g.fillStyle = 'rgba(255,244,226,.9)';
+    g.save(); g.translate(G.cx + dx * k, G.cy + dy * k); g.rotate(Math.atan2(dy, dx)); g.fillStyle = TOY ? 'rgba(31,42,51,.8)' : 'rgba(255,244,226,.9)';
     g.beginPath(); g.moveTo(11, 0); g.lineTo(-6, -7); g.lineTo(-2, 0); g.lineTo(-6, 7); g.closePath(); g.fill(); g.restore();
   }
   drawLauncher(g);
@@ -785,9 +935,9 @@ function draw() {
   if (!S.coached && !S.aim && !S.comets.length && !CLIP && (!S.title || S.title.released)) {
     const ph = (t % 2.6) / 2.6, pull = Math.sin(Math.min(1, ph / 0.7) * Math.PI / 2), fade = ph < 0.8 ? 1 : 1 - (ph - 0.8) / 0.2;
     const ox = cssW / 2, oy = cssH * 0.62, fy = oy + pull * cssH * 0.16;
-    g.strokeStyle = `rgba(239,232,218,${0.35 * fade})`; g.setLineDash([3, 5]); g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox, fy); g.stroke(); g.setLineDash([]);
-    g.fillStyle = `rgba(239,232,218,${0.28 * fade})`; g.beginPath(); g.arc(ox, fy, 20, 0, 7); g.fill();
-    g.strokeStyle = `rgba(239,232,218,${0.6 * fade})`; g.lineWidth = 1.5; g.beginPath(); g.arc(ox, fy, 20, 0, 7); g.stroke();
+    g.strokeStyle = `rgba(${INK},${0.35 * fade})`; g.setLineDash([3, 5]); g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox, fy); g.stroke(); g.setLineDash([]);
+    g.fillStyle = `rgba(${INK},${0.2 * fade})`; g.beginPath(); g.arc(ox, fy, 20, 0, 7); g.fill();
+    g.strokeStyle = `rgba(${INK},${0.6 * fade})`; g.lineWidth = 1.5; g.beginPath(); g.arc(ox, fy, 20, 0, 7); g.stroke();
   }
   // after five misses, a throw that works shows as a faint path (unless hints are off in the menu)
   if (store.hints !== false && L.sol && S.shots >= 5 && !S.won && !S.replay && !CLIP) {
@@ -800,7 +950,7 @@ function draw() {
   if (S.aim) {
     const A = S.aim, sp = Math.hypot(A.v[0], A.v[1]), pw = sp / (PULL * SPEED);
     // the spot the drag began is the cancel zone: slide back into it and let go to call the throw off
-    g.strokeStyle = `rgba(239,232,218,${A.cancel && A.moved ? 0.75 : 0.22})`; g.lineWidth = 1.2;
+    g.strokeStyle = `rgba(${INK},${A.cancel && A.moved ? 0.75 : 0.22})`; g.lineWidth = 1.2;
     g.beginPath(); g.arc(A.sx, A.sy, CANCEL_R, 0, 7); g.stroke();
     if (A.cancel) {
       if (A.moved) { const q = 8; g.beginPath(); g.moveTo(A.sx - q, A.sy - q); g.lineTo(A.sx + q, A.sy + q); g.moveTo(A.sx + q, A.sy - q); g.lineTo(A.sx - q, A.sy + q); g.stroke(); }
@@ -808,18 +958,11 @@ function draw() {
     g.fillStyle = acc;
     A.path.forEach((p, i) => { if (i % 4) return; const [sx, sy] = toScr(p[0], p[1]); g.globalAlpha = 1 - i / A.path.length; g.beginPath(); g.arc(sx, sy, 2, 0, 7); g.fill(); });
     g.globalAlpha = 1;
-    g.strokeStyle = 'rgba(239,232,218,.2)'; g.lineWidth = 1; g.beginPath(); g.moveTo(A.sx, A.sy); g.lineTo(A.cx, A.cy); g.stroke();
-    g.strokeStyle = 'rgba(239,232,218,.45)'; g.beginPath(); g.arc(A.cx, A.cy, 14, 0, 7); g.stroke();
+    g.strokeStyle = `rgba(${INK},.2)`; g.lineWidth = 1; g.beginPath(); g.moveTo(A.sx, A.sy); g.lineTo(A.cx, A.cy); g.stroke();
+    g.strokeStyle = `rgba(${INK},.45)`; g.beginPath(); g.arc(A.cx, A.cy, 14, 0, 7); g.stroke();
     }
   }
-  // trick labels drift up slowly and fade
-  g.font = '500 15px "IBM Plex Mono", ui-monospace, monospace'; g.textAlign = 'center';
-  for (const l of S.labels) {
-    if (l.age < 0) continue;
-    const [sx, sy] = toScr(l.x, l.y), a = l.age < 0.2 ? l.age / 0.2 : 1 - Math.max(0, l.age - 1.1) / 0.7;
-    g.fillStyle = `rgba(255,211,110,${a})`; g.fillText(l.text, sx, sy - 26 - l.slot * 22 - Math.min(l.age, 0.5) * 22);
-  }
-  if (CLIP) { g.font = '400 12px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = 'rgba(239,232,218,.6)'; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
+  if (CLIP) { g.font = '400 12px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = `rgba(${INK},.6)`; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
   g.textAlign = 'start';
 }
 
@@ -882,11 +1025,12 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { if (e.key === ' ') S.hold = false; });
 
 /* ======================= buttons and sheets ======================= */
-const next = () => {
-  if (S.replay) load(S.idx);
-  else if (world().daily) load(Math.min(store.last || 0, DAILY0 - 1));
-  else load(S.idx + 1 >= ALL.length || isDaily(S.idx + 1) ? 0 : S.idx + 1);
-};
+function nextIdx() {
+  if (S.replay) return S.idx;
+  if (world().daily) return Math.min(store.last || 0, DAILY0 - 1);
+  return S.idx + 1 >= ALL.length || isDaily(S.idx + 1) ? 0 : S.idx + 1;
+}
+const next = () => load(nextIdx());
 // restart rewinds: leapfrog is time-reversible, so running a flight backward is just its own trail in reverse
 function restart() {
   const tr = S.comets.filter(c => c.trail && c.trail.length > 8).map(c => c.trail.slice());
@@ -896,6 +1040,8 @@ function restart() {
 }
 $('#skipBtn').onclick = () => { store.skipped = [...new Set([...(store.skipped || []), level().gid])]; save(); $('#menu').hidden = true; next(); };
 $('#menuBtn').onclick = () => { buildMenu(); $('#menu').hidden = false; };
+$('#retryBtn').onclick = () => load(S.idx);
+$('#nextBtn').onclick = () => next();
 $('#closeMenu').onclick = () => $('#menu').hidden = true;
 function toast(html, ms) {
   const t = $('#toast'); t.innerHTML = html; t.hidden = false;
@@ -909,7 +1055,7 @@ function buildMenu() {
     const L = ALL[ti], b = document.createElement('button');
     b.type = 'button'; b.className = 'today'; b.style.setProperty('--dc', DAILY.theme.acc);
     b.innerHTML = '<span></span><small></small>'; b.firstChild.textContent = "Today's sky"; const sk = streak(), done = (store.days || {})[dayNo()];
-    b.lastChild.textContent = (done ? '★'.repeat(done) : `No. ${L.li + 1}`) + (sk > 1 ? ` · ${sk} days` : '');
+    b.lastChild.textContent = (done ? '●' : `No. ${L.li + 1}`) + (sk > 1 ? ` · ${sk} days` : '');
     b.onclick = () => { $('#menu').hidden = true; load(ti); };
     box.append(b);
   }
@@ -917,14 +1063,14 @@ function buildMenu() {
   WORLDS.forEach(w => {
     if (w.daily) return;
     const sec = document.createElement('div'), h = document.createElement('h2'), grid = document.createElement('div');
-    const got = w.levels.reduce((s, _, i) => s + ((store.best[`${w.id}-${i}`] || {}).stars || 0), 0);
-    h.innerHTML = '<span></span><span></span>'; h.firstChild.textContent = w.name; h.lastChild.textContent = `★ ${got}/${w.levels.length * 3}`;
+    const got = w.levels.filter((_, i) => store.best[`${w.id}-${i}`]).length;
+    h.innerHTML = '<span></span><span></span>'; h.firstChild.textContent = w.name; h.lastChild.textContent = `${got} / ${w.levels.length}`;
     grid.className = 'grid'; grid.style.setProperty('--wc', w.theme.acc);
     w.levels.forEach((L, i) => {
       const idx = gi++, b = document.createElement('button'), best = store.best[`${w.id}-${i}`];
       b.type = 'button'; b.className = 'tile' + (idx === S.idx ? ' cur' : ''); b.disabled = !unlocked(idx);
-      b.innerHTML = `${i + 1}<small>${best ? '★'.repeat(best.stars) : ''}</small>`;
-      b.setAttribute('aria-label', `${w.name} level ${i + 1}, ${L.name}${best ? `, ${best.stars} stars` : ''}`);
+      b.innerHTML = `${i + 1}<small>${best ? '●' : ''}</small>`;
+      b.setAttribute('aria-label', `${w.name} level ${i + 1}, ${L.name}${best ? ', cleared' : ''}`);
       b.onclick = () => { $('#menu').hidden = true; load(idx); };
       grid.append(b);
     });
@@ -965,7 +1111,7 @@ function parseReplay(code) {
 $('#shareBtn').onclick = async () => {
   const base = ON_SITE ? location.origin + '/phone' : 'https://areabake.com/phone';
   const url = `${base}#r=${replayCode()}`, L = level();
-  const text = `Slingshot, ${world().daily ? "today's sky" : world().name} ${L.li + 1}: ${'★'.repeat(stars())} ${S.score.toLocaleString('en-US')} points. Watch my throw:`;
+  const text = `${TOY ? 'Bonk' : 'Slingshot'}, ${world().daily ? "today's sky" : world().name} ${L.li + 1}. Watch my throw:`;
   try { if (navigator.share) { await navigator.share({ title: 'Slingshot', text, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
   try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link copied', 2500); } catch (e) { toast(url); }
 };
@@ -1184,8 +1330,8 @@ function loop(now) {
   simulate(dt); renderGL(); draw();
   const hc = !S.won && S.comets[0];
   Sound.hum(hc && S.ffK < 2 ? Math.hypot(hc.vx, hc.vy) : 0);
-  if (S.won && $('#winbar').hidden && S.time - S.wonAt > 1.1) {
-    $('#winbar').hidden = !!S.replay;
+  if (S.won && $('#winbar').hidden && S.time - S.wonAt > (TOY && S.glide ? 2.3 : 1.1)) {
+    $('#winbar').hidden = false; $('#shareBtn').hidden = $('#clipBtn').hidden = !!S.replay; $('#retryBtn').hidden = !!S.replay;
   }
   if (S.replay && !S.won && !S.comets.length && S.replay.throws.every(q => q.done)) load(S.idx);
 }

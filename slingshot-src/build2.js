@@ -39,13 +39,14 @@ const keep2 = [{ ...orig.find(l => l.name === 'Two suns'), name: 'Binary', par: 
 // the campaign is hand-made (lab.js): each world easiest first, by the share of throws that win
 const hand = w => read(`hand-${w}.json`).sort((a, b) => b.win - a.win)
   .map(L => exact({ name: L.name, par: 1, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol }));
-const WORLDS = [
-  { id: 'w1', name: 'First light', theme: { acc: '#9ad7ff', neb: '#d65fae' }, levels: [...keep.map(exact), ...hand('first')] },
-  { id: 'w2', name: 'Two suns', theme: { acc: '#ffb48a', neb: '#ff5f9a' }, levels: [...keep2.map(exact), ...hand('binary')] },
-  { id: 'w5', name: 'Waltz', theme: { acc: '#ffc4dc', neb: '#7a8cff' }, levels: hand('waltz') },
-  { id: 'w3', name: 'Moons', theme: { acc: '#b6a8ff', neb: '#5df2ff' }, levels: hand('moons') },
-  { id: 'w6', name: 'Event horizon', theme: { acc: '#ffcf9a', neb: '#8a5cff' }, levels: hand('horizon') },
-];
+// nothing moves in either game any more, so the orbiting worlds (Waltz, Moons) are gone.
+// The toy game also gets two worlds of its own: star clusters (Plummer spheres) and three fixed suns.
+const W_FIRST = { id: 'w1', name: 'First light', levels: [...keep.map(exact), ...hand('first')] };
+const W_TWO = { id: 'w2', name: 'Two suns', levels: [...keep2.map(exact), ...hand('binary')] };
+const W_BH = { id: 'w6', name: 'Event horizon', levels: hand('horizon') };
+const W_CL = { id: 'w7', name: 'Star clusters', levels: hand('cluster') };
+const W_TRI = { id: 'w8', name: 'Three suns', levels: hand('trinity') };
+const WORLDS = [W_FIRST, W_TWO, W_BH];
 // the daily sky: every spare layout, shuffled by a fixed seed and named for real stars
 const STARS = ['Vega', 'Deneb', 'Altair', 'Rigel', 'Sirius', 'Arcturus', 'Capella', 'Procyon', 'Aldebaran', 'Antares', 'Spica', 'Pollux', 'Castor', 'Regulus',
   'Fomalhaut', 'Achernar', 'Canopus', 'Mira', 'Polaris', 'Alnitak', 'Alnilam', 'Mintaka', 'Bellatrix', 'Saiph', 'Algol', 'Mizar', 'Alcor', 'Dubhe', 'Merak',
@@ -62,17 +63,36 @@ const key = L => JSON.stringify([L.launch, L.targets]);
 // plus layouts the lab designed from random skies (dailylab.js), interleaved so the kinds of sky alternate
 const labbed = [11, 22, 33, 44].map(s => read(`daily-lab-${s}.json`)), mixed = [];
 for (let i = 0; labbed.some(a => i < a.length); i++) for (const a of labbed) if (a[i]) mixed.push(a[i]);
-const frozen = read('daily-v3.json'), seen = new Set(frozen.map(key));
-const daily = [...frozen, ...[...read('daily-good.json'), ...mixed].filter(L => !seen.has(key(L)))];
-if (process.env.FREEZE) fs.writeFileSync('daily-v3.json', JSON.stringify(daily));
+// still skies only: anything with an orbiting body leaves the daily list; static layouts from dailylab fill in
+const still = L => !L.bodies.some(b => b.orbit);
+const fresh = [...read('daily-static-55.json'), ...read('daily-static-66.json')];
+const frozen = read('daily-v4.json'), seen = new Set(frozen.map(key));
+const daily = [...frozen, ...[...read('daily-v3.json'), ...fresh].filter(still).filter(L => !seen.has(key(L)))];
+if (process.env.FREEZE) fs.writeFileSync('daily-v4.json', JSON.stringify(daily));
 spare.length = 0; spare.push(...daily);
-WORLDS.push({ id: 'd', name: 'Today', daily: true, theme: { acc: '#ffe3a3', neb: '#5d7bff' },
+const DAILYW = ({ id: 'd', name: 'Today', daily: true,
   levels: spare.map((L, i) => exact({ name: STARS[i % STARS.length] + (i >= STARS.length ? ' ' + (1 + Math.floor(i / STARS.length)) : ''), par: L.par, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol })) });
-for (let i = WORLDS.length - 1; i >= 0; i--) if (!WORLDS[i].levels.length) WORLDS.splice(i, 1);
-fs.writeFileSync('worlds.json', JSON.stringify(WORLDS));
-for (const w of WORLDS) w.levels = w.levels.map(withPiles);
-fs.writeFileSync('worlds-piles.json', JSON.stringify(WORLDS));
-const head = fs.readFileSync('phone-head.html', 'utf8'), script = fs.readFileSync('phone-script.js', 'utf8');
+// two games: the night one (Slingshot) and the toy one (Bonk), each with its own worlds and store
+const GAMES = [
+  { theme: 'night', out: '/home/user/claude-s-space/slingshot-phone.html', worlds: [W_FIRST, W_TWO, W_BH, DAILYW] },
+  { theme: 'toy', out: '/home/user/claude-s-space/bonk.html', worlds: [W_FIRST, W_TWO, W_CL, W_TRI, W_BH, DAILYW] },
+];
+const head = fs.readFileSync('phone-head.html', 'utf8'), script = fs.readFileSync('phone-script.js', 'utf8'), toyCss = fs.readFileSync('toy.css', 'utf8');
 const phys = fs.readFileSync('phys.js', 'utf8').replace(/\nif \(typeof module[^\n]*\n?$/, '\n');
-fs.writeFileSync('/home/user/claude-s-space/slingshot-phone.html', head + script.replace('/*PHYS*/', () => phys).replace('const WORLDS = /*LEVELS*/[];', () => 'const WORLDS = /*LEVELS*/' + JSON.stringify(WORLDS) + ';'));
-console.log(WORLDS.map(w => `${w.name}: ${w.levels.length}`).join(', '));
+const all = [];
+for (const G of GAMES) {
+  const worlds = G.worlds.filter(w => w.levels.length);
+  let h = head;
+  if (G.theme === 'toy') {
+    h = h.replace('<title>Slingshot</title>', '<title>Bonk</title>')
+      .replace('family=Cormorant+Garamond', 'family=Fredoka:wght@500;600&family=Cormorant+Garamond')
+      .replace('</style>', toyCss + '\n</style>')
+      .replace('A gravity game for your phone. Throw a comet past stars and moons and collect every target.', 'A bright, squishy gravity toy: fling a ball past stars and wobbly drums.');
+  }
+  fs.writeFileSync(G.out, h + script.replace('/*PHYS*/', () => phys).replace("const THEME = /*THEME*/'night'", () => `const THEME = /*THEME*/'${G.theme}'`)
+    .split("'areabake.slingshot.v3'").join(G.theme === 'toy' ? "'areabake.bonk.v1'" : "'areabake.slingshot.v3'")
+    .replace('const WORLDS = /*LEVELS*/[];', () => 'const WORLDS = /*LEVELS*/' + JSON.stringify(worlds) + ';'));
+  all.push(...worlds.filter(w => !all.includes(w)));
+  console.log(G.theme + ': ' + worlds.map(w => `${w.name} ${w.levels.length}`).join(', '));
+}
+fs.writeFileSync('worlds.json', JSON.stringify(all.filter((w, i) => all.indexOf(w) === i)));
