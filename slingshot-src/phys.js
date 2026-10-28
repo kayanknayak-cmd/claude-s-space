@@ -56,7 +56,23 @@ function makeRocks(L) {
   });
   return out;
 }
-function makeWorld(L) { return { L, P: startPos(L), Q: startPos(L), tick: 0, comets: [], rocks: makeRocks(L), got: L.targets.map(() => false), won: false }; }
+function makeWorld(L) { return { L, P: startPos(L), Q: startPos(L), tick: 0, comets: [], rocks: makeRocks(L), grains: [], got: L.targets.map(() => false), won: false }; }
+/* ---- chain bonks (levels marked chain: true) ---- */
+// A hit plate throws off a spray of sand. The grains are real test particles, falling in the same field,
+// and a grain that crosses another plate rings it too. Their directions come from an integer hash of the
+// step and the plate, not from Math.random, so a chain happens identically on every replay and device.
+const GRAINS = 10, GRAIN_LIFE = 1440;
+function ihash(a, b, c) { let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x632be5ab, 0xc2b2ae35) ^ Math.imul(c + 0x27d4eb2f, 0x165667b1); h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; return (h >>> 0) / 4294967296; }
+function spray(W, i, by, gen) {
+  const T = W.L.targets[i];
+  for (let k = 0; k < GRAINS; k++) {
+    // a direction on the unit circle from the rational parametrization ((1 - t^2), 2t) / (1 + t^2):
+    // only + - * /, so it rounds the same everywhere (cos and sin are not guaranteed to)
+    const u = ihash(W.tick, i, k), v = ihash(W.tick, i, k + 99), t = (2 * u - 1) * 2.4, sg = k % 2 ? -1 : 1;
+    const ca = sg * (1 - t * t) / (1 + t * t), sa = sg * 2 * t / (1 + t * t), sp = 0.22 + 0.34 * v;
+    W.grains.push({ x: T[0] + ca * TR * 0.6, y: T[1] + sa * TR * 0.6, vx: ca * sp + by.vx * 0.2, vy: sa * sp + by.vy * 0.2, a: [0, 0, -1], k: 0, age: 0, n: 0, alive: true, grain: true, by, gen, from: i });
+  }
+}
 function newComet(W, vx, vy, kind) {
   const [x, y] = W.L.launch;
   kind = KINDS[kind] ? kind : 'n';
@@ -124,6 +140,7 @@ function step(W, H) {
         W.got[i] = true;
         const c = o.rock ? o.by : o; c.fresh = c.age;
         if (W.got.every(Boolean)) W.won = true;
+        if (L.chain) spray(W, i, o, 1);
         if (H.hit) H.hit(o, i);
       }
     }
@@ -133,6 +150,26 @@ function step(W, H) {
     }
     if (!o.alive && H.dead) H.dead(o);
   }
+  // sand in flight: leapfrog like everything else, ringing any plate it crosses (two generations at most)
+  for (const q of W.grains) {
+    if (!q.alive) continue;
+    accel(B, P, q.x, q.y, q.a); q.vx += q.a[0] * DT * 0.5; q.vy += q.a[1] * DT * 0.5;
+    q.x += q.vx * DT; q.y += q.vy * DT;
+    accel(B, Q, q.x, q.y, q.a); q.vx += q.a[0] * DT * 0.5; q.vy += q.a[1] * DT * 0.5;
+    if (q.a[2] >= 0 || ++q.n > GRAIN_LIFE) { q.alive = false; continue; }
+    if (q.n % 3 === 0 && !W.won) for (let i = 0; i < T.length; i++) if (!W.got[i] && i !== q.from) {
+      const dx = T[i][0] - q.x, dy = T[i][1] - q.y;
+      if (dx * dx + dy * dy < TR * TR * 0.5) {
+        W.got[i] = true; q.alive = false;
+        const c = q.by.grain ? q.by.by : q.by; c.fresh = c.age;
+        if (W.got.every(Boolean)) W.won = true;
+        if (q.gen < 2) spray(W, i, q, q.gen + 1);
+        if (H.hit) H.hit(q, i);
+        break;
+      }
+    }
+  }
+  if (W.grains.length > 60 && W.tick % 120 === 0) W.grains = W.grains.filter(q => q.alive);
   W.P = Q; W.Q = P; W.tick++;
 }
 function track(W, c) {

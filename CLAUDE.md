@@ -24,3 +24,9 @@ Whenever the owner asks for improvements, put these first on the list:
 - Two games: Slingshot (night, Morphogen's Specimen palette, real night sky) and Bonk (light, playful, 3D-ish,
   inspired by Totally Accurate Battle Simulator; free to experiment there).
 - No star rating, total score, win lines or trick labels. Never any moving stars or bodies.
+
+## Bonk notes
+- Links use only artifact-safe hashes: `#c.<code>` challenge (friend's ghost flies beside you), `#r.<code>` replay,
+  `#s.<code>` a made sky (editor or "type a name"), all parsed at boot in phone-script.js.
+- Today's leaderboard uses the artifact `db` + `user` capabilities (`runs/<user id>`); republish Bonk with them.
+  Viewers outside the owner's organization only get read access, so they can't post times.

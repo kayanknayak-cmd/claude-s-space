@@ -57,9 +57,48 @@ const Sound = {
     if (on) this.h.o.frequency.setTargetAtTime(110 * Math.pow(2, 2 * clamp(v, 0, 1.2)), t, 0.06);
     this.h.g.gain.setTargetAtTime(on ? 0.006 + 0.012 * clamp(v, 0, 1) : 0, t, on ? 0.08 : 0.15);
   },
+  // Bonk's drum: a struck circular membrane rings at frequencies set by the zeros of the Bessel functions,
+  // f_nm / f_01 = j_nm / j_01: 1, 1.593, 2.136, 2.296, 2.653, 2.918 (not a harmonic series, hence the
+  // "bonk"). Each drum kind weights those partials and decays differently; the plate's own mode is the loudest.
+  bonk(kind, mode, when = 0) {
+    const D = DRUMS.find(q => q.id === kind) || DRUMS[0], R = [1, 1.593, 2.136, 2.296, 2.653, 2.918];
+    const f0 = D.f * Math.pow(2, ((mode || 0) % 3) / 12);
+    // the strike: a quick pitch drop on the fundamental
+    if (this.rec) { this.rec.list.push(['bonk', [kind, mode], this.rec.at + when]); return; }
+    if (!this.on || this.mute || !this.ctx) return;
+    const c = this.ctx, t = c.currentTime + when;
+    const o = c.createOscillator(), gn = c.createGain(); o.type = D.wave;
+    o.frequency.setValueAtTime(f0 * 1.9, t); o.frequency.exponentialRampToValueAtTime(f0, t + 0.045);
+    gn.gain.setValueAtTime(0, t); gn.gain.linearRampToValueAtTime(D.g, t + 0.004); gn.gain.exponentialRampToValueAtTime(0.0001, t + D.d);
+    o.connect(gn).connect(c.destination); o.start(t); o.stop(t + D.d + 0.05);
+    D.p.forEach((w, k) => { if (w) this.tone(f0 * R[k + 1], D.d * (k === (mode % 5) ? 0.9 : 0.55), 'sine', D.g * w * (k === (mode % 5) ? 1.4 : 1), when); });
+  },
+  // a quiet chord under each level: one sine per star, heavier stars lower, on a pentatonic scale so any mix agrees
+  ambient(L) {
+    this.stopAmbient();
+    if (!this.on || this.mute || !this.ctx || !L) return;
+    const c = this.ctx, t = c.currentTime, scale = [110, 130.81, 146.83, 164.81, 196, 220, 261.63], nodes = [];
+    for (const b of L.bodies) {
+      const k = clamp(Math.floor((0.42 - b.m) / 0.42 * scale.length), 0, scale.length - 1), o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.frequency.value = scale[k] * (b.bh ? 0.5 : 1); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.006, t + 2.5);
+      o.connect(g).connect(c.destination); o.start(t); nodes.push([o, g]);
+    }
+    this.amb = nodes;
+  },
+  stopAmbient() { if (!this.amb || !this.ctx) return; const t = this.ctx.currentTime; for (const [o, g] of this.amb) { g.gain.setTargetAtTime(0, t, 0.3); o.stop(t + 1.5); } this.amb = null; },
   fanfare() { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((f, i) => { this.tone(f, 1.5, 'sine', 0.06, i * 0.1); this.tone(f / 2, 1.5, 'triangle', 0.02, i * 0.1); }); },
 };
 let CLIP = false;
+// drums for Bonk, one per world, collected by clearing a level there (f: fundamental, p: partial weights, d: decay)
+const DRUMS = [
+  { id: 'wood', name: 'Wood block', world: 'w1', f: 330, wave: 'triangle', g: 0.09, d: 0.22, p: [0.3, 0.15, 0, 0, 0] },
+  { id: 'tom', name: 'Tom', world: 'w2', f: 147, wave: 'sine', g: 0.12, d: 0.45, p: [0.45, 0.3, 0.2, 0.1, 0.05] },
+  { id: 'glass', name: 'Glass', world: 'w7', f: 523, wave: 'sine', g: 0.06, d: 1.2, p: [0.5, 0.35, 0.3, 0.2, 0.15] },
+  { id: 'steel', name: 'Steel pan', world: 'w8', f: 392, wave: 'sine', g: 0.07, d: 0.8, p: [0.6, 0, 0.4, 0, 0.25] },
+  { id: 'gong', name: 'Gong', world: 'w6', f: 98, wave: 'sine', g: 0.1, d: 1.8, p: [0.5, 0.45, 0.4, 0.35, 0.3] },
+];
+const drumOK = d => d.world === 'w1' || Object.keys(store.best || {}).some(k => k.startsWith(d.world + '-'));
+function drum() { const pick = DRUMS.find(d => d.id === store.drum); if (pick && drumOK(pick)) return pick.id; const w = DRUMS.find(d => d.world === world().id); return w && drumOK(w) ? w.id : 'wood'; }
 const buzz = ms => { if (CLIP) return; try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} };
 
 /*PHYS*/
@@ -105,10 +144,28 @@ const isDaily = i => !!WORLDS[ALL[i].wi].daily;
 function unlocked(i) { return ALL[i].li === 0 || isDaily(i) || store.best[ALL[i - 1].gid] || store.best[ALL[i].gid] || (store.skipped || []).includes(ALL[i - 1].gid); }
 // one shared sky a day: everyone gets the same level on the same date, wherever they are
 const DAILY = WORLDS.find(w => w.daily), DAILY0 = ALL.findIndex(L => WORLDS[L.wi].daily);
-const dayNo = () => { const d = new Date(); return Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(2026, 9, 22)) / 864e5); };
+/* ---- Bonk: seasons, skies, trail paints, drums (all cosmetic, kept on this device) ---- */
+function season() { const d = new Date(), m = d.getMonth() + 1, day = d.getDate(); return (m === 10 && day >= 15) || (m === 11 && day <= 5) ? 'halloween' : m === 12 ? 'winter' : m === 1 && day <= 3 ? 'newyear' : null; }
+const SKIES = [
+  { id: 'day', name: 'Daylight', bg0: '#fff6e6', bg1: '#d7eeea', line: '#30907f' },
+  { id: 'sunset', name: 'Sunset', bg0: '#ffe2c4', bg1: '#f2a8a0', line: '#8a3f4a' },
+  { id: 'candy', name: 'Candy', bg0: '#fde9f2', bg1: '#d3ebff', line: '#7a5cc9' },
+  { id: 'blueprint', name: 'Blueprint', bg0: '#2c5a88', bg1: '#22466b', line: '#d5e6f6', dark: true },
+  { id: 'news', name: 'Newsprint', bg0: '#f3f0e9', bg1: '#e3dfd5', line: '#3a3a3a' },
+  { id: 'halloween', name: 'Halloween', bg0: '#f08a3c', bg1: '#3b2a4a', line: '#ffd9a0', dark: true, season: 'halloween' },
+  { id: 'winter', name: 'Snow', bg0: '#f6f9ff', bg1: '#cfe0f2', line: '#5a7fa6', season: 'winter' },
+];
+const skyOK = k => k && (!k.season || k.season === season());
+function SKY() { const k = SKIES.find(q => q.id === store.sky); return skyOK(k) ? k : SKIES.find(q => q.season && q.season === season()) || SKIES[0]; }
+const PAINTS = [{ id: 'ribbon', name: 'Ribbon' }, { id: 'chalk', name: 'Chalk' }, { id: 'glitter', name: 'Glitter' }, { id: 'sparkler', name: 'Sparkler' }];
+// Bonk's day turns at midnight UTC, so the whole world gets the new sky at the same moment
+const dayNo = () => { if (TOY) return Math.floor((Date.now() - Date.UTC(2026, 9, 22)) / 864e5); const d = new Date(); return Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(2026, 9, 22)) / 864e5); };
+const hardDay = () => TOY && new Date(Date.now()).getUTCDay() === 0;
 function todayIdx() {
   if (!DAILY) return -1;
   const n = dayNo(), k = DAILY.levels.length;
+  // Sundays bring a hard sky: one from the daily pool where under 3.5% of throws win
+  if (hardDay()) { const hard = DAILY.levels.map((L, i) => [L, i]).filter(([L]) => L.win && L.win < 0.035); if (hard.length) return DAILY0 + hard[Math.floor(n / 7) % hard.length][1]; }
   return DAILY0 + ((n % k) + k) % k;
 }
 function streak() {
@@ -288,7 +345,10 @@ uniform vec2 u_center; uniform float u_scale, u_time, u_flash; uniform int u_n; 
 uniform vec3 u_acc, u_neb; uniform vec4 u_gw; uniform vec2 u_gw2;
 uniform int u_tn; uniform vec4 u_tg[6]; uniform vec3 u_tcol[6]; uniform float u_tr;
 uniform vec4 u_dent; uniform float u_dentA; uniform float u_dpr;
+uniform float u_bw[10]; uniform vec2 u_td[6]; uniform vec3 u_bg0, u_bg1, u_line;
 out vec4 o;
+// a skimmed star wobbles like jelly: x and y squash out of phase (area kept), dying away as e^(-t / 0.32)
+vec2 jelly(vec2 d, float t){ if (t < 0.0) return d; float w = 0.16 * exp(-t / 0.32) * sin(t * 40.0); return vec2(d.x / (1.0 + w), d.y * (1.0 + w)); }
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float besselJ(float n, float x){ float s = 0.0; for (int i = 0; i < 20; i++) { float tau = (float(i) + 0.5) * 3.14159265 / 20.0; s += cos(n * tau - x * sin(tau)); } return s / 20.0; }
 vec2 chMode(float m){
@@ -308,7 +368,7 @@ vec3 ball(vec2 d, vec3 base, float facets){
 void main(){
   vec2 p = (gl_FragCoord.xy - u_center) / u_scale, sp = gl_FragCoord.xy / (u_dpr * 900.0);
   // the backdrop: cream at the bottom into a pale teal sky, with a faint paper grain that never moves
-  vec3 col = mix(vec3(1.0, 0.965, 0.9), vec3(0.84, 0.93, 0.92), smoothstep(0.0, 1.0, sp.y * 0.9 + 0.05));
+  vec3 col = mix(u_bg0, u_bg1, smoothstep(0.0, 1.0, sp.y * 0.9 + 0.05));
   col *= 0.985 + 0.03 * h21(floor(gl_FragCoord.xy / u_dpr));
   // field lines first, drawn as thin teal contours of the potential, in the space the launcher drags
   float phi = 0.0;
@@ -320,24 +380,24 @@ void main(){
   }
   float v = log(phi + 0.02) * 4.0, fw = max(fwidth(v), 1e-4);
   float line = (1.0 - smoothstep(0.3, 1.2, abs(fract(v + 0.5) - 0.5) / fw)) * clamp(0.18 / fw, 0.0, 1.0);
-  col = mix(col, vec3(0.19, 0.56, 0.5), line * 0.28);
+  col = mix(col, u_line, line * 0.28);
   // soft shadows of every body and plate, cast down and to the right
   vec2 so = vec2(0.035, -0.05);
   for (int i = 0; i < 10; i++) {
     if (i >= u_n) break;
     vec4 b = u_b[i]; if (u_kind[i] > 2.5) continue;
-    float r = length(p - b.xy - so) / max(b.w, 0.02);
+    float r = length(jelly(p - b.xy - so, u_bw[i])) / max(b.w, 0.02);
     col *= 1.0 - 0.16 * smoothstep(1.25, 0.6, r);
   }
   for (int i = 0; i < 6; i++) {
     if (i >= u_tn) break; vec4 T = u_tg[i]; if (T.z < 0.0) continue;
-    float gone = T.w < 0.0 ? 0.0 : clamp((T.w - 0.3) / 0.9, 0.0, 1.0);
+    float gone = T.w < 0.0 ? 0.0 : clamp((T.w - 0.3) / 0.9, 0.0, 1.0) * 0.5;
     col *= 1.0 - 0.13 * (1.0 - gone) * smoothstep(1.2, 0.7, length((p - T.xy - so * 0.7) / u_tr));
   }
   // bodies
   for (int i = 0; i < 10; i++) {
     if (i >= u_n) break;
-    vec4 b = u_b[i]; vec2 d = p - b.xy; float r = length(d);
+    vec4 b = u_b[i]; vec2 d = jelly(p - b.xy, u_bw[i]); float r = length(d);
     if (u_kind[i] > 2.5) {
       // a star cluster: a puff of confetti stars, Plummer-distributed (density (1 + R^2/a^2)^-2)
       float a = b.w, sig = 1.0 / pow(1.0 + r * r / (a * a), 2.0);
@@ -364,11 +424,11 @@ void main(){
   for (int i = 0; i < 6; i++) {
     if (i >= u_tn) break;
     vec4 T = u_tg[i]; if (T.z < 0.0) continue;
-    float hit = T.w, gone = hit < 0.0 ? 0.0 : clamp((hit - 0.3) / 0.9, 0.0, 1.0);
-    if (gone >= 1.0) continue;
+    // a rung drum stays, quieter, keeping a dent in its sand where it was struck
+    float hit = T.w, gone = hit < 0.0 ? 0.0 : clamp((hit - 0.3) / 0.9, 0.0, 1.0) * 0.5;
     // jelly: a damped wobble, x and y squashing out of phase (area kept), e^(-t / 0.3) sin(2 pi 7 t)
     float wob = hit < 0.0 ? 0.0 : 0.22 * exp(-hit / 0.3) * sin(hit * 44.0);
-    vec2 d = (p - T.xy) / (u_tr * (1.0 - 0.35 * gone)); d.x /= 1.0 + wob; d.y *= 1.0 + wob;
+    vec2 d = (p - T.xy) / u_tr; d.x /= 1.0 + wob; d.y *= 1.0 + wob;
     vec2 top = vec2(d.x, (d.y - 0.07) / 0.78), bot = vec2(d.x, (d.y + 0.09) / 0.78);
     float inTop = smoothstep(1.0, 0.95, length(top)), inBot = smoothstep(1.0, 0.95, length(bot)) * step(d.y, 0.07);
     vec3 hue = u_tcol[i];
@@ -377,10 +437,11 @@ void main(){
     float u = besselJ(nk.x, nk.y * rr) * cos(nk.x * th);
     vec2 cell = floor(gl_FragCoord.xy / (1.6 * u_dpr));
     float shake = hit < 0.0 ? 0.0 : clamp(hit / 0.3, 0.0, 1.0), jit = (h21(cell + floor(u_time * 24.0)) - 0.5) * shake * 0.5;
-    float sand = exp(-pow((u + jit) / (0.07 + 0.3 * shake), 2.0)) * step(0.35 + 0.35 * shake, h21(cell + float(i) * 13.1));
+    float sand = exp(-pow((u + jit) / (0.07 + 0.3 * shake), 2.0)) * step(0.35 + 0.35 * shake + 0.4 * gone, h21(cell + float(i) * 13.1));
     vec3 face = mix(hue * 1.08, vec3(1.0), 0.12) * (0.92 + 0.08 * top.y);
     face = mix(face, vec3(1.0, 0.98, 0.94), sand * 0.9);
-    col = mix(col, face, inTop * (1.0 - gone));
+    if (hit >= 0.0) { float dd = length(top - u_td[i]); face *= 1.0 - 0.28 * smoothstep(0.3, 0.12, dd) + 0.12 * smoothstep(0.34, 0.3, dd) * smoothstep(0.26, 0.3, dd); }
+    col = mix(col, mix(face, col, gone), inTop);
     col = mix(col, hue * 0.72, smoothstep(0.07, 0.0, abs(length(top) - 0.965)) * (1.0 - gone));
   }
   // the launcher's dent: teal rings of a small well, stretched toward the pull
@@ -399,7 +460,7 @@ if (gl) {
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
   void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`));
   gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, TOY ? FS_TOY : FS)); gl.linkProgram(prog);
-  for (const n of ['u_center', 'u_scale', 'u_time', 'u_flash', 'u_n', 'u_b', 'u_kind', 'u_sc', 'u_acc', 'u_neb', 'u_gw', 'u_gw2', 'u_tn', 'u_tg', 'u_tcol', 'u_tr', 'u_dent', 'u_dentA', 'u_dpr']) U[n] = gl.getUniformLocation(prog, n);
+  for (const n of ['u_center', 'u_scale', 'u_time', 'u_flash', 'u_n', 'u_b', 'u_kind', 'u_sc', 'u_acc', 'u_neb', 'u_gw', 'u_gw2', 'u_tn', 'u_tg', 'u_tcol', 'u_tr', 'u_dent', 'u_dentA', 'u_dpr', 'u_bw', 'u_td', 'u_bg0', 'u_bg1', 'u_line']) U[n] = gl.getUniformLocation(prog, n);
   gl.bindVertexArray(gl.createVertexArray());
 }
 function geom() {
@@ -433,7 +494,7 @@ function stepCamera(dt) {
     const need = Math.max((x1 - x0) / (2 * hw), (y1 - y0) / (ht + hb), Math.max(-x0, x1) / hw, y1 / ht, -y0 / hb);
     if (need > 1) { out = true; zt = Math.max(0.22, 1 / need); xt = (x0 + x1) / 2 * (1 - zt); yt = ((y0 + y1) / 2 - (ht - hb) / 2) * (1 - zt); }
     // a close pass: lean in a little toward it, briefly
-    if (S.near && S.time - S.near.t < 0.9 && !S.ff) { const e = Math.sin(Math.PI * (S.time - S.near.t) / 0.9); zt *= 1 + 0.16 * e; xt += (S.near.x - xt) * 0.25 * e; yt += (S.near.y - yt) * 0.25 * e; }
+    if (S.near && S.time - S.near.t < 0.9 && !S.ff) { const e = Math.sin(Math.PI * (S.time - S.near.t) / 0.9); zt *= 1 + (S.near.k || 0.16) * e; xt += (S.near.x - xt) * 0.25 * e; yt += (S.near.y - yt) * 0.25 * e; }
   }
   const kz = 1 - Math.exp(-dt * (zt < c.z ? 3.2 : 1.4)), kp = 1 - Math.exp(-dt * 2.4);
   c.z += (zt - c.z) * kz; c.x += (xt - c.x) * kp; c.y += (yt - c.y) * kp;
@@ -464,6 +525,12 @@ function renderGL() {
     tc.set(hex(o.hue || '#ffffff'), i * 3);
   }
   gl.uniform1i(U.u_tn, nt); gl.uniform4fv(U.u_tg, tg); gl.uniform3fv(U.u_tcol, tc); gl.uniform1f(U.u_tr, TR);
+  if (TOY) {
+    const bw = new Float32Array(10), td = new Float32Array(12), sky = SKY();
+    for (let i = 0; i < n; i++) bw[i] = S.skim && S.skim[i] > -9 ? S.time - S.skim[i] : -1;
+    for (let i = 0; i < nt; i++) { const o = S.tg[i]; if (o && o.dent) td.set(o.dent, i * 2); }
+    gl.uniform1fv(U.u_bw, bw); gl.uniform2fv(U.u_td, td); gl.uniform3fv(U.u_bg0, hex(sky.bg0)); gl.uniform3fv(U.u_bg1, hex(sky.bg1)); gl.uniform3fv(U.u_line, hex(sky.line));
+  }
   // the launcher's dent: where it sits, how far it is pulled (in world units), and how strongly it shows
   const off = dentOffset(), ready = !S.won && !S.replay && (S.aim || !S.comets.length);
   gl.uniform4f(U.u_dent, L.launch[0], L.launch[1], off[0] / V.s, -off[1] / V.s); gl.uniform1f(U.u_dentA, CLIP && !ready ? 0.3 : ready ? 1 : 0.35);
@@ -478,17 +545,22 @@ function load(i, replay) {
   const W = makeWorld(L);
   Object.assign(S, { W, tick: 0, acc: 0, ffK: 1, ff: false, comets: W.comets, ghosts: [], dust: [], sparks: [], waves: [], labels: [],
     got: W.got, order: [], shots: 0, score: 0, tricks: [], won: false, gold: null, aim: null, throws: [], replay: replay || null, flash: 0, hitStop: 0,
-    P: W.P, Q: W.Q, band: null, rewind: null, tg: makeTargets(L), cam: { z: 1, x: 0, y: 0 }, camShot: null, near: null, puffs: [] });
+    P: W.P, Q: W.Q, band: null, rewind: null, tg: makeTargets(L), cam: { z: 1, x: 0, y: 0 }, camShot: null, near: null, puffs: [], splats: [], skim: L.bodies.map(() => -9), impossible: false });
+  if (S.ghostRun && S.ghostRun.lvl !== S.idx) { if (S.ghostRun.lvl == null) S.ghostRun.lvl = S.idx; else S.ghostRun = null; }
+  if (S.ghostRun) S.ghostRun.W = null;
   setView();
   if (!CLIP) {
     document.documentElement.style.setProperty('--accent', world().theme.acc);
+    if (TOY) { const k = SKY(), r = document.documentElement.style; r.setProperty('--paper', k.dark ? '#fff6e6' : '#1f2a33'); r.setProperty('--accent', k.dark ? '#ffd9a0' : world().theme.acc);
+      if (season() === 'halloween' && !(store.kept || []).includes('pumpkin')) { store.kept = [...(store.kept || []), 'pumpkin']; } }
     $('#lvname').textContent = `${L.li + 1}. ${L.name}`;
     $('#winbar').hidden = true; $('#toast').hidden = true; $('#menu').hidden = true;
     $('#replayTag').hidden = !replay; $('#replayTag').textContent = replay && replay.hint ? 'Hint' : 'Replay';
-    if (!world().daily) store.last = S.idx;
+    if (!world().daily && !world().custom) store.last = S.idx;
     save(); hudPips();
   }
   const glide = S.glideFor === S.idx && S.glide ? S.glide : null; S.glide = null; S.glideFor = -1;
+  if (TOY && !CLIP) Sound.ambient(L);
   titleCard(glide);
 }
 function hudPips() {
@@ -519,7 +591,7 @@ function titleCard(from) {
   // a win in the toy game hands its drifting sand straight to the next title, so the name is already there
   const parts = from ? from.map(q => ({ x: q.tx, y: q.ty, hx: q.tx, hy: q.ty, vx: 0, vy: 0, ox: 0, oy: 0, tw: Math.random() * 6.28, sc: Math.random(), col: q.col, alive: true }))
     : titlePoints(L.name).map(([ax, ay]) => ({ x: ax, y: ay, hx: ax, hy: ay, vx: 0, vy: 0, ox: (Math.random() - 0.5) * 0.5, oy: (Math.random() - 0.5) * 0.5, tw: Math.random() * 6.28, sc: Math.random(), alive: true }));
-  S.title = { parts, t0: S.time - (from ? 0.7 : 0), released: false, eyebrow: `${S.replay && !CLIP ? (S.replay.hint ? 'Hint' : 'Replay') : world().daily ? 'Today' : world().name} · ${L.li + 1}`, tint };
+  S.title = { parts, t0: S.time - (from ? 0.7 : 0), released: false, eyebrow: `${S.replay && !CLIP ? (S.replay.hint ? 'Hint' : 'Replay') : S.duel ? (S.duel.turn ? "Teal's turn" : "Coral's turn") : S.ghostRun ? 'Challenge' : world().custom ? 'Your sky' : world().daily ? (hardDay() && S.idx === todayIdx() ? 'Sunday · hard' : 'Today') : world().name} · ${L.li + 1}`, tint };
   if (!CLIP) document.body.classList.add('titling');
   // the face may still be loading on the very first level
   if (!from && !CLIP && document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (S.title && !S.title.released && S.time - S.title.t0 < 0.6) titleCard(); });
@@ -556,11 +628,14 @@ function fire(vx, vy, kind = 'n') {
   vx = Math.round(vx * 1e5) / 1e5; vy = Math.round(vy * 1e5) / 1e5;
   releaseTitle();
   for (const c of S.comets) if (c.alive) { c.alive = false; retire(c); }
+  // Bonk keeps only your last finished throw on screen; a new throw clears it
+  if (TOY) S.ghosts = [];
   const L = level(), [x, y] = L.launch, c = newComet(S.W, vx, vy, kind);
   Object.assign(c, { trail: [[x, y]], winds: L.bodies.map(() => 0), angs: L.bodies.map(() => null), close: false, moon: false, hits: 0,
     moving: L.bodies.some(b => b.orbit), E0: energy(L.bodies, S.P, x, y, vx, vy) });
   c.born = S.time;
   S.comets.push(c);
+  if (S.ghostRun && !S.replay) { const G2 = makeWorld(L), q = S.ghostRun.throw, gc = newComet(G2, q[1], q[2], 'n'); G2.comets.push(gc); S.ghostRun.W = G2; S.ghostRun.trail = []; S.ghostRun.c = gc; S.ghostRun.done = false; }
   if (!S.replay) S.throws.push(kind === 'n' ? [S.tick, vx, vy] : [S.tick, vx, vy, kind, -1]);
   S.shots++; S.ff = false; S.ffK = 1;
   S.waves.push({ x, y, age: 0, r0: 0.02, col: '239,232,218' });
@@ -569,7 +644,7 @@ function fire(vx, vy, kind = 'n') {
   hudPips();
 }
 const HOOKS = {
-  hit: (c, i) => onHit(c, i),
+  hit: (c, i) => c.grain ? onHit(c.by.grain ? c.by.by : c.by, i, c) : onHit(c, i),
   track: c => tricks(c),
   dead: c => retire(c),
 };
@@ -577,10 +652,15 @@ function retire(c) {
   if (c.fate === 'crash') {
     Sound.thud(); buzz(20);
     // the toy game ends a crash in a little puff of cartoon smoke: a few round clouds that swell and thin out
-    if (TOY) { Sound.tone(220, 0.25, 'triangle', 0.05); Sound.tone(165, 0.3, 'sine', 0.05, 0.05); for (let k = 0; k < 7; k++) { const a = k / 7 * 6.283 + Math.random(), v = 0.12 + Math.random() * 0.18; S.puffs.push({ x: c.x, y: c.y, vx: Math.cos(a) * v + c.vx * 0.08, vy: Math.sin(a) * v + c.vy * 0.08, r: 0.02 + Math.random() * 0.02, age: 0, life: 0.7 + Math.random() * 0.4 }); } }
+    if (TOY) {
+      // the ball goes flat against what it hit, x-eyed, then boings back up and fades
+      const B = level().bodies; let nx = 0, ny = 1, bd = 1e9;
+      B.forEach((b, k) => { const d = Math.hypot(c.x - S.P[k][0], c.y - S.P[k][1]); if (d < bd) { bd = d; nx = (c.x - S.P[k][0]) / (d || 1); ny = (c.y - S.P[k][1]) / (d || 1); } });
+      S.splats.push({ x: c.x, y: c.y, nx, ny, t0: S.time, spin: c.spin || 0 });
+      Sound.tone(220, 0.25, 'triangle', 0.05); Sound.tone(165, 0.3, 'sine', 0.05, 0.05); for (let k = 0; k < 7; k++) { const a = k / 7 * 6.283 + Math.random(), v = 0.12 + Math.random() * 0.18; S.puffs.push({ x: c.x, y: c.y, vx: Math.cos(a) * v + c.vx * 0.08, vy: Math.sin(a) * v + c.vy * 0.08, r: 0.02 + Math.random() * 0.02, age: 0, life: 0.7 + Math.random() * 0.4 }); } }
     else { burst(c.x, c.y, '#ffb47a', 30, 1.4); S.waves.push({ x: c.x, y: c.y, age: 0, r0: 0.04, col: '255,180,122' }); }
   }
-  if (c.trail !== S.gold) { S.ghosts.push(c.trail); if (S.ghosts.length > 3) S.ghosts.shift(); }
+  if (c.trail !== S.gold) { S.ghosts.push(c.trail); if (S.ghosts.length > (TOY ? 1 : 3)) S.ghosts.shift(); }
 }
 function burst(x, y, col, n, life = 0.6) {
   for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 0.2 + Math.random() * 0.7; S.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: life + Math.random() * life, age: 0, col }); }
@@ -597,6 +677,17 @@ function win(c) {
   const L = level(), parBonus = Math.max(0, L.par - S.shots + 1) * 300;
   S.score += parBonus; if (parBonus) S.tricks.push([S.shots < L.par ? 'Under par' : 'On par', parBonus]);
   L.targets.forEach(([x, y], i) => { burst(x, y, S.tg[i] ? S.tg[i].hue : TH[i % TH.length], 40); S.waves.push({ x, y, age: 0, r0: TR, col: hex(S.tg[i] ? S.tg[i].hue : TH[i % TH.length]).map(v => v * 255 | 0).join(',') }); });
+  // a level where under 1% of throws win earns a badge
+  S.impossible = TOY && L.win != null && L.win < 0.01 && !S.replay;
+  if (S.impossible && !CLIP) { store.imp = { ...(store.imp || {}), [L.gid]: 1 }; save(); }
+  // New Year: the win goes up in fireworks
+  if (TOY && season() === 'newyear') for (let k = 0; k < 6; k++) { const x = (Math.random() - 0.5) * 1.4, y = 0.2 + Math.random() * 1.1; burst(x, y, TH[k % 3], 36, 1.2); }
+  // pass and play: Coral throws, then Teal plays the same sky; fewer throws takes it
+  if (S.duel && !S.replay && !CLIP) {
+    const d = S.duel; d.n[d.turn] = S.throws.length;
+    if (d.turn === 0) { d.turn = 1; setTimeout(() => toast('Pass it to Teal', 2500), 900); }
+    else { const [a, b] = d.n; d.turn = 0; d.n = []; setTimeout(() => toast(`Coral ${a} · Teal ${b}${a === b ? ' · tie' : a < b ? ' · Coral takes it' : ' · Teal takes it'}`, 4500), 900); }
+  }
   // the toy game: every plate's sand lifts and drifts into the next level's name, waiting to begin
   if (TOY && !S.replay && !CLIP) {
     const ni = nextIdx(), pts = titlePoints(ALL[ni].name);
@@ -608,7 +699,7 @@ function win(c) {
     const prev = store.best[L.gid], rec = { shots: S.shots, score: S.score, stars: stars() };
     if (!prev || rec.score > prev.score) store.best[L.gid] = rec;
     store.throws = store.throws || {}; store.throws[L.gid] = S.throws;
-    if (S.idx === todayIdx()) { store.days = store.days || {}; store.days[dayNo()] = Math.max(store.days[dayNo()] || 0, rec.stars); }
+    if (S.idx === todayIdx()) { store.days = store.days || {}; store.days[dayNo()] = Math.max(store.days[dayNo()] || 0, rec.stars); if (TOY && !S.duel) postToday(S.throws.length); }
     save();
   }
 }
@@ -628,6 +719,7 @@ function tricks(c) {
       if (c.angs[k] != null) { let da = ang - c.angs[k]; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI; c.winds[k] += da; }
       c.angs[k] = ang;
       if (d < b.r * 1.45) c.close = true;
+      if (TOY && d < b.r * 1.9 && S.time - S.skim[k] > 0.6) S.skim[k] = S.time;
       // a fast, close pass: the camera leans in and time breathes out for a moment
       if (d < b.r * 1.7 && !S.ff && Math.hypot(c.vx, c.vy) > 0.7 && (!S.near || S.time - S.near.t > 2.5)) { S.near = { t: S.time, x: (c.x + p[0]) / 2, y: (c.y + p[1]) / 2 }; S.slow = 0.45; }
     }
@@ -637,12 +729,14 @@ function tricks(c) {
   // Measured away from the moving bodies, where their own pull is not mid-swing.
   if (c.moving && far && energy(B, S.P, c.x, c.y, c.vx, c.vy) - c.E0 > 0.1) c.moon = true;
 }
-function onHit(c, i) {
+function onHit(c, i, grain) {
   c.hits++; S.order.push(i);
   const L = level(), [tx, ty] = L.targets[i];
-  targetHit(i, c); S.waves.push({ x: tx, y: ty, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') });
+  if (grain) award(c, 'Chain bonk', 400);
+  targetHit(i, grain || c); S.waves.push({ x: tx, y: ty, age: 0, r0: TR, col: hex(TH[i % TH.length]).map(v => v * 255 | 0).join(',') });
   S.hitStop = 0.45; S.flash = 1; S.score += 500;
-  Sound.chime(S.order.length - 1); buzz(14);
+  if (TOY) Sound.bonk(drum(), S.tg[i] ? S.tg[i].mode : 0); else Sound.chime(S.order.length - 1);
+  buzz(14);
   const B = L.bodies, TAU = Math.PI * 2;
   let wk = 0; c.winds.forEach((w, k) => { if (Math.abs(w) > Math.abs(c.winds[wk])) wk = k; });
   const loops = Math.floor(Math.abs(c.winds[wk]) / TAU), lp = B[wk].bh ? 'Zoom-whirl' : 'Orbit';
@@ -671,6 +765,8 @@ function simulate(dt) {
     if (S.replay) { const r = S.replay.throws.find(q => q[0] === W.tick && !q.done); if (r) { r.done = true; fire(r[1], r[2]); } }
     step(W, HOOKS);
     S.P = W.P; S.Q = W.Q; S.tick = W.tick;
+    const gr = S.ghostRun;
+    if (gr && gr.W && !gr.done) { step(gr.W, { hit() {} }); if (gr.W.tick % 6 === 0) gr.trail.push([gr.c.x, gr.c.y]); if (gr.W.won || !gr.c.alive) gr.done = true; }
   }
   S.comets = W.comets = W.comets.filter(c => c.alive);
   tails(dt, B);
@@ -684,7 +780,7 @@ function simulate(dt) {
   S.waves = S.waves.filter(w => w.age < 1); S.labels = S.labels.filter(l => l.age < 1.8);
   stepTitle(dt); stepTargets(dt); stepBand(dt); if (!CLIP) stepCamera(dt);
   for (const q of S.puffs) { q.age += dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 0.95; q.vy *= 0.95; }
-  S.puffs = S.puffs.filter(q => q.age < q.life);
+  S.puffs = S.puffs.filter(q => q.age < q.life); S.splats = S.splats.filter(q => S.time - q.t0 < 1.3);
   // time speeds up once every comet still flying has gone stale (decided per step inside the physics)
   S.ff = !S.won && S.comets.length > 0 && S.comets.every(c => c.ff);
   if (!CLIP) { const show = S.ffK > 1.6 || !!S.hold; if ($('#ff').hidden === show) $('#ff').hidden = !show; }
@@ -732,6 +828,10 @@ function makeTargets(L) { return L.targets.map((t, i) => ({ hue: TH[(i + L.li) %
 function targetHit(i, c) {
   const L = level(), o = S.tg[i], [tx, ty] = L.targets[i];
   o.hit = 0;
+  // where it struck, for the dent it leaves in the sand; and a quick lean of the camera toward it
+  let dx = (c.x - tx) / TR, dy = (c.y - ty) / TR; const dl = Math.hypot(dx, dy); if (dl > 0.7) { dx *= 0.7 / dl; dy *= 0.7 / dl; }
+  o.dent = [dx, dy];
+  if (TOY && !CLIP) S.near = { t: S.time, x: tx, y: ty, k: 0.26 };
   // the sand is thrown off the plate: grains of its color, falling in the level's real field
   for (let k = 0; k < 54; k++) {
     const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * TR * 0.85, v = 0.12 + Math.random() * 0.45;
@@ -744,6 +844,7 @@ function drawTargets(g, t) {
   L.targets.forEach(([x, y], i) => {
     const o = S.tg[i]; if (!o) return;
     const [sx, sy] = toScr(x, y), R = TR * V.s;
+    if (TOY && o.hit >= 0) return;
     if (o.hit > 1.2 || S.got[i] && o.hit < 0) {
       // where it was: a faint ring in its color
       g.strokeStyle = rgba(o.hue, 0.3); g.lineWidth = 1; g.setLineDash([2, 4]); g.beginPath(); g.arc(sx, sy, R * 0.95, 0, 7); g.stroke(); g.setLineDash([]);
@@ -772,7 +873,7 @@ function drawLauncher(g) {
   if (S.won || S.replay || CLIP || !(S.aim || !S.comets.length)) return;
   // the next comet, resting where the sheet is pulled to
   const L = level(), [lx, ly] = toScr(L.launch[0], L.launch[1]), off = dentOffset(), px = lx + off[0], py = ly + off[1];
-  if (TOY) { toyBall(g, px, py, -off[0], -off[1], Math.hypot(off[0], off[1]) / 40, 9); return; }
+  if (TOY) { const pull = Math.hypot(off[0], off[1]) / 56; toyBall(g, px, py, -off[0], -off[1], pull, 9, { look: pull > 0.1 ? [-off[0] / (56 * pull), -off[1] / (56 * pull)] : lookAt(L.launch[0], L.launch[1]), wide: pull > 0.7 ? (pull - 0.7) * 2 : 0 }); return; }
   const gp = g.createRadialGradient(px, py, 0, px, py, 12);
   gp.addColorStop(0, '#ffffff'); gp.addColorStop(0.3, 'rgba(200,230,255,.55)'); gp.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = gp; g.beginPath(); g.arc(px, py, 12, 0, 7); g.fill();
@@ -809,8 +910,26 @@ function ribbon(tr, gold, fade) {
   const g = g2, n = tr.length; if (n < 2) return;
   const seg = Math.max(1, Math.floor(n / 36));
   if (TOY) {
+    const paint = gold ? 'ribbon' : (PAINTS.find(q => q.id === store.paint) || PAINTS[0]).id;
+    if (paint === 'glitter') {
+      // glitter: dots of the palette scattered along the path, catching the light in turn
+      for (let k = 0; k < n; k += 2) { const age = k / n, [sx, sy] = toScr(tr[k][0], tr[k][1]), tw = 0.5 + 0.5 * Math.sin(S.time * 9 + k * 1.7);
+        g.fillStyle = rgba(TH[k % 3], Math.pow(age, 1.1) * (0.4 + 0.6 * tw) * fade); g.fillRect(sx - 1.4, sy - 1.4, 2.8, 2.8); }
+      return;
+    }
+    if (paint === 'chalk') { g.setLineDash([5, 4]); g.lineCap = 'butt'; }
     // one clean tail, thickening toward the comet
-    for (let k = 0; k < n - 1; k += seg) { const e = Math.min(n - 1, k + seg), age = k / n; g.strokeStyle = gold ? `rgba(214,160,60,${0.9 * fade})` : `rgba(239,125,98,${Math.pow(age, 1.2) * 0.85 * fade})`; g.lineWidth = (gold ? 3 : 1 + 3.2 * age); path(tr, k, e + 1); g.stroke(); }
+    for (let k = 0; k < n - 1; k += seg) {
+      const e = Math.min(n - 1, k + seg), age = k / n;
+      g.strokeStyle = gold ? `rgba(214,160,60,${0.9 * fade})` : paint === 'chalk' ? `rgba(${SKY().dark ? '255,246,230' : '90,96,104'},${(0.3 + 0.5 * age) * fade})` : `rgba(239,125,98,${Math.pow(age, 1.2) * 0.85 * fade})`;
+      g.lineWidth = gold ? 3 : paint === 'chalk' ? 2.4 : 1 + 3.2 * age; path(tr, k, e + 1); g.stroke();
+    }
+    g.setLineDash([]); g.lineCap = 'round';
+    if (paint === 'sparkler' && n > 3) {
+      // a sparkler: short bright sparks flicking out from the last stretch of the path
+      for (let k = 0; k < 14; k++) { const q = tr[n - 1 - Math.floor(Math.random() * Math.min(n - 1, 40))], [sx, sy] = toScr(q[0], q[1]), a = Math.random() * 6.283, l = 3 + Math.random() * 6;
+        g.strokeStyle = `rgba(255,${190 + Math.random() * 60 | 0},90,${0.8 * fade})`; g.lineWidth = 1; g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + Math.cos(a) * l, sy + Math.sin(a) * l); g.stroke(); }
+    }
     return;
   }
   for (const [wm, am] of [[5.5, 0.05], [2.4, 0.16], [1, 0.85]]) {
@@ -823,15 +942,67 @@ function ribbon(tr, gold, fade) {
     }
   }
 }
-// the toy comet: a shiny ball that stretches along its motion and squashes on launch.
-// Its area is kept (length * width = 1), so it reads as squishy rather than growing.
-function toyBall(g, x, y, vx, vy, sp, age) {
-  const R = 7.5, squash = 1 - 0.35 * Math.exp(-age * 16) * Math.min(1, age * 40 + 0.2), along = (1 + 0.45 * clamp(sp, 0, 1.3)) * squash, across = 1 / along;
-  const a = Math.atan2(vy, vx);
+/* ---- the Bonk ball ---- */
+// A shiny ball that stretches along its motion and squashes on launch, keeping its area (length x width = 1)
+// so it reads as squishy rather than growing. It spins as it rolls through space (angle += speed / radius),
+// and it has a face: eyes that look toward the nearest star, blink now and then, and go wide on a near miss.
+const SKINS = [
+  { id: 'coral', name: 'Coral', need: 0 }, { id: 'marble', name: 'Marble', need: 2 }, { id: 'jelly', name: 'Jelly', need: 5 },
+  { id: 'planet', name: 'Planet', need: 9 }, { id: 'cat', name: 'Cat', need: 14 }, { id: 'disco', name: 'Disco', need: 20 },
+  { id: 'pumpkin', name: 'Pumpkin', need: 0, season: 'halloween' },
+];
+const cleared = () => Object.keys(store.best || {}).length;
+const skinOK = k => k && (k.season ? season() === k.season || (store.kept || []).includes(k.id) : cleared() >= k.need);
+const skin = () => { if (S.duel) return S.duel.turn ? 'jelly' : 'coral'; const k = SKINS.find(q => q.id === store.skin); return skinOK(k) ? k.id : (season() === 'halloween' ? 'pumpkin' : 'coral'); };
+function toyBall(g, x, y, vx, vy, sp, age, o = {}) {
+  const R = 7.5 * (o.scale || 1), squash = 1 - 0.35 * Math.exp(-age * 16) * Math.min(1, age * 40 + 0.2), along = (1 + 0.45 * clamp(sp, 0, 1.3)) * squash * (o.flat ? 1 / o.flat : 1), across = 1 / along;
+  const a = o.dir != null ? o.dir : Math.atan2(vy, vx), sk = o.skin || skin(), spin = o.spin || 0, al = o.alpha == null ? 1 : o.alpha;
+  g.save(); g.globalAlpha = al;
   g.save(); g.translate(x + 2.5, y + 3.5); g.rotate(a); g.fillStyle = 'rgba(31,42,51,.15)'; g.beginPath(); g.ellipse(0, 0, R * along, R * across, 0, 0, 7); g.fill(); g.restore();
-  g.save(); g.translate(x, y); g.rotate(a);
-  const gr = g.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.1, 0, 0, R * 1.1); gr.addColorStop(0, '#fffaf2'); gr.addColorStop(0.45, PAL.coral); gr.addColorStop(1, '#b8513c');
-  g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, R * along, R * across, 0, 0, 7); g.fill(); g.restore();
+  g.save(); g.translate(x, y); g.rotate(a); g.scale(along, across);
+  const col = { coral: [PAL.coral, '#b8513c'], marble: ['#f4ecdf', '#b9ad99'], jelly: ['#7fd9c9', '#2f8f80'], planet: [PAL.sand, '#a9792a'], cat: ['#f19a6f', '#b85c3c'], disco: ['#c9cfd6', '#6b7580'], pumpkin: ['#f08a3c', '#b4521b'] }[sk];
+  const gr = g.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.1, 0, 0, R * 1.1); gr.addColorStop(0, '#fffaf2'); gr.addColorStop(0.45, col[0]); gr.addColorStop(1, col[1]);
+  if (sk === 'jelly') g.globalAlpha = al * 0.82;
+  g.fillStyle = gr; g.beginPath(); g.arc(0, 0, R, 0, 7); g.fill();
+  g.globalAlpha = al;
+  // the pattern turns with the spin, so you can see it roll
+  g.save(); g.beginPath(); g.arc(0, 0, R, 0, 7); g.clip(); g.rotate(spin);
+  if (sk === 'coral' || sk === 'cat') { g.strokeStyle = 'rgba(255,250,242,.55)'; g.lineWidth = 1.4; g.beginPath(); g.ellipse(0, 0, R * 0.98, R * 0.32, 0, 0, 7); g.stroke(); }
+  if (sk === 'marble') { g.strokeStyle = 'rgba(47,143,128,.7)'; g.lineWidth = 1.6; for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(R * 0.3 * Math.cos(k * 2.1), R * 0.3 * Math.sin(k * 2.1), R * (0.5 + k * 0.15), k, k + 2.2); g.stroke(); } }
+  if (sk === 'jelly') { g.fillStyle = 'rgba(255,255,255,.55)'; for (let k = 0; k < 3; k++) { g.beginPath(); g.arc(R * (k - 1) * 0.42, R * 0.25 * Math.sin(k * 3), R * 0.12, 0, 7); g.fill(); } }
+  if (sk === 'disco') { g.strokeStyle = 'rgba(60,66,74,.55)'; g.lineWidth = 0.7; for (let k = -3; k <= 3; k++) { g.beginPath(); g.moveTo(k * R * 0.3, -R); g.lineTo(k * R * 0.3, R); g.moveTo(-R, k * R * 0.3); g.lineTo(R, k * R * 0.3); g.stroke(); } }
+  if (sk === 'pumpkin') { g.strokeStyle = 'rgba(140,60,20,.55)'; g.lineWidth = 1.1; for (const k of [-0.5, 0, 0.5]) { g.beginPath(); g.ellipse(k * R * 0.6, 0, R * 0.28, R * 0.98, 0, 0, 7); g.stroke(); } }
+  g.restore();
+  g.restore();
+  // extras that stay upright: a ring, ears, a stem
+  if (sk === 'planet') { g.strokeStyle = '#2f8f80'; g.lineWidth = 1.6; g.beginPath(); g.ellipse(x, y, R * 1.7, R * 0.5, -0.35, 0.1, Math.PI - 0.1); g.stroke(); }
+  if (sk === 'cat') { g.fillStyle = col[0]; for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(x + sx * R * 0.25, y - R * 0.75); g.lineTo(x + sx * R * 0.85, y - R * 1.25); g.lineTo(x + sx * R * 0.85, y - R * 0.35); g.closePath(); g.fill(); } }
+  if (sk === 'pumpkin') { g.fillStyle = '#4f7a3a'; g.fillRect(x - 1, y - R * 1.25, 2.2, R * 0.45); }
+  if (o.face !== false) toyFace(g, x, y, R, o);
+  if (sk === 'disco' && Math.sin(S.time * 7 + x) > 0.85) { g.fillStyle = '#fff'; g.beginPath(); g.arc(x + R * 0.5, y - R * 0.5, 1.4, 0, 7); g.fill(); }
+  g.restore();
+}
+function toyFace(g, x, y, R, o) {
+  const [lx, ly] = o.look || [0, 0], wide = o.wide || 0, ex = R * 0.34, ey = -R * 0.1, er = R * (0.24 + 0.12 * wide);
+  const blink = !o.dead && (S.time * 0.37 + x * 0.013) % 1 > 0.965 ? 0.12 : 1;
+  for (const s of [-1, 1]) {
+    const cx = x + s * ex, cy = y + ey;
+    if (o.dead) { g.strokeStyle = '#1f2a33'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(cx - er * 0.7, cy - er * 0.7); g.lineTo(cx + er * 0.7, cy + er * 0.7); g.moveTo(cx + er * 0.7, cy - er * 0.7); g.lineTo(cx - er * 0.7, cy + er * 0.7); g.stroke(); continue; }
+    g.fillStyle = '#fffdf8'; g.beginPath(); g.ellipse(cx, cy, er, er * blink * 1.1, 0, 0, 7); g.fill();
+    if (blink > 0.5) { g.fillStyle = '#1f2a33'; g.beginPath(); g.arc(cx + lx * er * 0.45, cy + ly * er * 0.45, er * (0.5 - 0.12 * wide), 0, 7); g.fill(); }
+  }
+  // a mouth: a small smile, an "o" on a near miss
+  g.strokeStyle = '#1f2a33'; g.lineWidth = 1; g.beginPath();
+  if (wide > 0.3 || o.dead) g.arc(x, y + R * 0.42, R * 0.14 * (o.dead ? 1 : 0.6 + wide * 0.5), 0, 7); else g.arc(x, y + R * 0.22, R * 0.26, 0.25 * Math.PI, 0.75 * Math.PI);
+  g.stroke();
+}
+function roundRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+// where the ball looks: toward the nearest star, in screen terms
+function lookAt(x, y) {
+  const L = level(); let best = null, bd = 1e9;
+  L.bodies.forEach((b, k) => { const d = Math.hypot(S.P[k][0] - x, S.P[k][1] - y); if (d < bd) { bd = d; best = S.P[k]; } });
+  if (!best) return [0, 0];
+  const dx = best[0] - x, dy = -(best[1] - y), l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l];
 }
 function starShape(g, x, y, R, fill) {
   // a five-pointed star: vertices alternate between radius R and R * 0.42 every 36 degrees
@@ -842,11 +1013,13 @@ function starShape(g, x, y, R, fill) {
 function draw() {
   const g = g2, t = S.time, L = level(), acc = world().theme.acc;
   // light adds up on the night sky; the toy sky is daylight, where colors simply paint over one another
-  const ADD = TOY ? 'source-over' : 'lighter', INK = TOY ? '31,42,51' : '239,232,218';
+  const ADD = TOY ? 'source-over' : 'lighter', INK = TOY && !SKY().dark ? '31,42,51' : '239,232,218';
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); g.setTransform(DPR, 0, 0, DPR, 0, 0);
   g.lineCap = 'round'; g.lineJoin = 'round';
   g.lineWidth = 1; g.strokeStyle = `rgba(${INK},.14)`;
+  if (TOY) { g.setLineDash([3, 5]); g.strokeStyle = 'rgba(31,42,51,.28)'; g.lineWidth = 1.4; }
   for (const tr of S.ghosts) { path(tr, 0, tr.length); g.stroke(); }
+  g.setLineDash([]);
   // every moving body keeps to a circle; a faint trace of it lets you read the timing
   g.setLineDash([2, 7]); g.strokeStyle = `rgba(${INK},.13)`;
   for (const b of L.bodies) if (b.orbit) { const [ox, oy] = toScr(b.orbit.cx, b.orbit.cy); g.beginPath(); g.arc(ox, oy, b.orbit.R * V.s, 0, 7); g.stroke(); }
@@ -874,8 +1047,8 @@ function draw() {
     const ta = T.released ? clamp(1 - rel / 0.6, 0, 1) : clamp(age / 0.5, 0, 1);
     if (ta > 0) {
       g.globalCompositeOperation = 'source-over'; g.textAlign = 'center';
-      g.font = '500 10px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = rgba(acc, 0.9 * ta);
-      g.fillText(T.eyebrow.toUpperCase().split('').join(' '), cssW / 2, cssH * 0.4 - 52);
+      g.font = TOY ? '600 13px Fredoka, system-ui, sans-serif' : '500 10px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = rgba(acc, 0.9 * ta);
+      g.fillText(TOY ? T.eyebrow : T.eyebrow.toUpperCase().split('').join(' '), cssW / 2, cssH * 0.4 - 52);
       g.textAlign = 'start'; g.globalCompositeOperation = ADD;
     }
   }
@@ -891,7 +1064,12 @@ function draw() {
   for (const c of S.rewind ? [] : S.comets) {
     if (c.trail !== S.gold) ribbon(c.trail, false, 1);
     const [sx, sy] = toScr(c.x, c.y), sp = Math.hypot(c.vx, c.vy);
-    if (TOY) { toyBall(g, sx, sy, c.vx, -c.vy, sp, t - (c.born || 0)); continue; }
+    if (TOY) {
+      c.spin = (c.spin || 0) + sp * V.s / 7.5 * (S.frameDt || 0.016) * 0.6;
+      const wide = S.near && t - S.near.t < 0.9 ? Math.sin(Math.PI * (t - S.near.t) / 0.9) : 0;
+      toyBall(g, sx, sy, c.vx, -c.vy, sp, t - (c.born || 0), { spin: c.spin, look: lookAt(c.x, c.y), wide });
+      continue;
+    }
     const R = 16 + 10 * clamp(sp, 0, 1), grd = g.createRadialGradient(sx, sy, 0, sx, sy, R);
     grd.addColorStop(0, '#ffffff'); grd.addColorStop(0.18, spCol(sp, 0.65)); grd.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = grd; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
@@ -902,11 +1080,28 @@ function draw() {
   for (const p of S.dust) if (p.ion) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = (1 - p.age / p.life) * 0.55; g.fillRect(sx - 0.8, sy - 0.8, 1.6, 1.6); }
   for (const p of S.sparks) { const [sx, sy] = toScr(p.x, p.y); g.globalAlpha = 1 - p.age / p.life; g.fillStyle = p.col; g.beginPath(); g.arc(sx, sy, TOY ? 2.2 : 1.8, 0, 7); g.fill(); }
   g.globalAlpha = 1;
+  if (TOY) for (const q of S.W.grains) if (q.alive) { const [sx, sy] = toScr(q.x, q.y); g.fillStyle = rgba(S.tg[q.from] ? S.tg[q.from].hue : PAL.sand, 0.9); g.fillRect(sx - 1.6, sy - 1.6, 3.2, 3.2); }
+  // the friend's ghost: their winning throw, flying beside yours
+  if (S.ghostRun && S.ghostRun.W) {
+    const gr = S.ghostRun; g.setLineDash([2, 4]); g.strokeStyle = 'rgba(31,42,51,.25)'; g.lineWidth = 1.4; path(gr.trail, 0, gr.trail.length); g.stroke(); g.setLineDash([]);
+    if (!gr.done) { const [sx, sy] = toScr(gr.c.x, gr.c.y); toyBall(g, sx, sy, gr.c.vx, -gr.c.vy, Math.hypot(gr.c.vx, gr.c.vy), 9 + S.time, { alpha: 0.42, skin: 'jelly', look: lookAt(gr.c.x, gr.c.y) }); }
+  }
   // cartoon puffs: round clouds that swell and thin out, each with a soft shadow below
   for (const q of S.puffs) {
     const [sx, sy] = toScr(q.x, q.y), e = q.age / q.life, R = (q.r + 0.05 * Math.sqrt(e)) * V.s, a = 1 - e * e;
     g.fillStyle = `rgba(31,42,51,${0.08 * a})`; g.beginPath(); g.arc(sx + 3, sy + 4, R, 0, 7); g.fill();
     g.fillStyle = `rgba(255,250,242,${0.95 * a})`; g.beginPath(); g.arc(sx, sy, R, 0, 7); g.fill();
+  }
+  // the badge for an impossible clear: a tilted sticker that pops in
+  if (S.won && S.impossible) {
+    const k = t - S.wonAt, pop = clamp((k - 0.6) / 0.25, 0, 1), sc = pop < 1 ? 0.6 + 0.6 * pop : 1 + 0.03 * Math.sin(k * 3);
+    if (pop > 0) { g.save(); g.translate(cssW / 2, 132); g.rotate(-0.12); g.scale(sc, sc); g.globalAlpha = pop;
+      g.fillStyle = '#a94a33'; roundRect(g, -78, -16, 156, 38, 19); g.fill(); g.fillStyle = PAL.coral; roundRect(g, -78, -20, 156, 38, 19); g.fill();
+      g.fillStyle = '#fff'; g.font = '600 17px Fredoka, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('Impossible!', 0, -1); g.restore(); g.textBaseline = 'alphabetic'; g.textAlign = 'start'; }
+  }
+  for (const q of S.splats) {
+    const e = S.time - q.t0, [sx, sy] = toScr(q.x, q.y), flat = e < 0.12 ? 1 + e * 14 : 1 + 0.7 * Math.exp(-(e - 0.12) * 5) * Math.cos((e - 0.12) * 22);
+    toyBall(g, sx, sy, 0, 0, 0, 9, { dir: Math.atan2(-q.ny, q.nx), flat: Math.max(0.5, flat), dead: true, spin: q.spin, alpha: clamp(1 - (e - 0.8) / 0.5, 0, 1) });
   }
   // the toy win: sand drifting from the plates into the next level's name (eased, each grain on its own clock)
   if (S.glide && S.won) {
@@ -962,7 +1157,7 @@ function draw() {
     g.strokeStyle = `rgba(${INK},.45)`; g.beginPath(); g.arc(A.cx, A.cy, 14, 0, 7); g.stroke();
     }
   }
-  if (CLIP) { g.font = '400 12px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = `rgba(${INK},.6)`; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
+  if (CLIP && !TOY) { g.font = '400 12px "IBM Plex Mono", ui-monospace, monospace'; g.fillStyle = `rgba(${INK},.6)`; g.fillText('areabake.com/phone', cssW / 2, cssH - 26); }
   g.textAlign = 'start';
 }
 
@@ -976,8 +1171,10 @@ const EDGE = 22;
 const nearEdge = e => e.clientX < EDGE || e.clientX > innerWidth - EDGE || e.clientY > innerHeight - 34;
 let lastTap = { t: -9, x: 0, y: 0 }, holdTimer = 0;
 cvs.addEventListener('pointerdown', e => {
-  Sound.wake();
+  Sound.wake(); if (TOY && !Sound.amb) Sound.ambient(level());
   if (nearEdge(e)) return;
+  if (S.photo) { cvs.setPointerCapture(e.pointerId); S.photo.pts.set(e.pointerId, [e.clientX, e.clientY]); return; }
+  if (S.edit) { editTap(e); return; }
   if (S.won) { if (S.time - S.wonAt > 1.2 && !S.replay) next(); return; }
   // a second finger while aiming cancels the throw
   if (pointer !== null) { if (S.aim) S.band = { x: pullOffset(S.aim)[0], y: pullOffset(S.aim)[1], vx: 0, vy: 0 }; S.aim = null; pointer = null; buzz(6); return; }
@@ -991,6 +1188,7 @@ cvs.addEventListener('pointerdown', e => {
   if (S.comets.length) holdTimer = setTimeout(() => { if (S.aim && !S.aim.moved) { S.hold = true; buzz(6); } }, 220);
 });
 cvs.addEventListener('pointermove', e => {
+  if (S.photo) { photoMove(e); return; }
   if (e.pointerId !== pointer || !S.aim) return;
   const A = S.aim; A.cx = e.clientX; A.cy = e.clientY;
   const was = A.cancel; A.cancel = Math.hypot(A.cx - A.sx, A.cy - A.sy) < CANCEL_R;
@@ -1003,6 +1201,7 @@ cvs.addEventListener('pointermove', e => {
   A.v = [px * SPEED, py * SPEED]; A.path = preview(A.v[0], A.v[1]);
 });
 const release = e => {
+  if (S.photo) { S.photo.pts.delete(e.pointerId); return; }
   if (e.pointerId !== pointer) return;
   pointer = null; const A = S.aim; S.aim = null; clearTimeout(holdTimer);
   if (S.hold) { S.hold = false; return; }
@@ -1020,6 +1219,8 @@ document.addEventListener('gesturestart', e => e.preventDefault());
 window.addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R') restart();
   if (e.key === 'n' || e.key === 'N') next();
+  if (TOY && (e.key === 'p' || e.key === 'P')) S.photo ? photoEnd() : photo();
+  if (S.photo && e.key === 'Escape') photoEnd();
   if (e.key === ' ') { e.preventDefault(); if (!e.repeat) S.hold = true; }
 });
 window.addEventListener('keyup', e => { if (e.key === ' ') S.hold = false; });
@@ -1027,7 +1228,8 @@ window.addEventListener('keyup', e => { if (e.key === ' ') S.hold = false; });
 /* ======================= buttons and sheets ======================= */
 function nextIdx() {
   if (S.replay) return S.idx;
-  if (world().daily) return Math.min(store.last || 0, DAILY0 - 1);
+  if (S.duel && S.duel.turn === 1) return S.idx;
+  if (world().daily || world().custom) return Math.min(store.last || 0, DAILY0 - 1);
   return S.idx + 1 >= ALL.length || isDaily(S.idx + 1) ? 0 : S.idx + 1;
 }
 const next = () => load(nextIdx());
@@ -1041,6 +1243,39 @@ function restart() {
 $('#skipBtn').onclick = () => { store.skipped = [...new Set([...(store.skipped || []), level().gid])]; save(); $('#menu').hidden = true; next(); };
 $('#menuBtn').onclick = () => { buildMenu(); $('#menu').hidden = false; };
 $('#retryBtn').onclick = () => load(S.idx);
+// Photo mode stops time where it is. One finger pans, two pinch (or the wheel zooms), and Save keeps the frame.
+function photo() {
+  if (!TOY || S.photo) return;
+  S.photo = { pts: new Map(), cam: { ...S.cam } }; S.aim = null; S.hold = false;
+  $('#menu').hidden = true; $('#toast').hidden = true; $('#winbar').dataset.was = $('#winbar').hidden ? '' : '1'; $('#winbar').hidden = true;
+  const b = document.createElement('div'); b.id = 'photoBar';
+  b.innerHTML = '<button type="button" class="pill" data-a="save">Save photo</button><button type="button" class="pill" data-a="done">Done</button>';
+  b.onclick = e => { const a = e.target.dataset.a; if (a === 'save') photoSave(); if (a === 'done') photoEnd(); };
+  document.body.append(b);
+}
+function photoEnd() {
+  if (!S.photo) return; Object.assign(S.cam, S.photo.cam); S.photo = null; setView();
+  const b = $('#photoBar'); if (b) b.remove(); if ($('#winbar').dataset.was) $('#winbar').hidden = false;
+}
+function photoMove(e) {
+  const P = S.photo, p0 = P.pts.get(e.pointerId); if (!p0) return;
+  const c = S.cam, pts = [...P.pts.values()];
+  if (pts.length === 1) { c.x -= (e.clientX - p0[0]) / (G.s * c.z); c.y += (e.clientY - p0[1]) / (G.s * c.z); }
+  else { const o = pts.find(q => q !== p0), d0 = Math.hypot(p0[0] - o[0], p0[1] - o[1]), d1 = Math.hypot(e.clientX - o[0], e.clientY - o[1]); if (d0 > 8) photoZoom(d1 / d0, (o[0] + e.clientX) / 2, (o[1] + e.clientY) / 2); }
+  P.pts.set(e.pointerId, [e.clientX, e.clientY]);
+}
+// zoom about a screen point, so whatever sits under the fingers stays there
+function photoZoom(f, px, py) {
+  const c = S.cam, z = clamp(c.z * f, 0.2, 5), wx = (px - V.cx) / V.s, wy = (V.cy - py) / V.s;
+  c.z = z; setView(); const [nx, ny] = toScr(wx, wy); c.x += (nx - px) / (G.s * z); c.y -= (ny - py) / (G.s * z); setView();
+}
+cvs.addEventListener('wheel', e => { if (!S.photo) return; e.preventDefault(); photoZoom(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, { passive: false });
+function photoSave() {
+  renderGL(); draw();
+  const out = document.createElement('canvas'); out.width = W; out.height = H; const oc = out.getContext('2d');
+  oc.drawImage(cvs, 0, 0); oc.drawImage(fx, 0, 0);
+  out.toBlob(blob => { if (!blob) return; const name = `bonk-${world().id}-${level().li + 1}-photo.png`; shareFile(new File([blob], name, { type: 'image/png' }), blob, name); }, 'image/png');
+}
 $('#nextBtn').onclick = () => next();
 $('#closeMenu').onclick = () => $('#menu').hidden = true;
 function toast(html, ms) {
@@ -1055,12 +1290,15 @@ function buildMenu() {
     const L = ALL[ti], b = document.createElement('button');
     b.type = 'button'; b.className = 'today'; b.style.setProperty('--dc', DAILY.theme.acc);
     b.innerHTML = '<span></span><small></small>'; b.firstChild.textContent = "Today's sky"; const sk = streak(), done = (store.days || {})[dayNo()];
-    b.lastChild.textContent = (done ? '●' : `No. ${L.li + 1}`) + (sk > 1 ? ` · ${sk} days` : '');
+    b.lastChild.textContent = (done ? '●' : `No. ${L.li + 1}`) + (sk > 1 && !TOY ? ` · ${sk} days` : '');
+    // Bonk: the streak is a row of little drums, one per day in a row
+    if (TOY && sk > 0) { const row = document.createElement('span'); row.className = 'drums'; row.setAttribute('aria-label', `${sk} day streak`); for (let k = 0; k < Math.min(sk, 14); k++) row.append(document.createElement('i')); b.lastChild.prepend(row); }
     b.onclick = () => { $('#menu').hidden = true; load(ti); };
     box.append(b);
   }
   let gi = 0;
-  WORLDS.forEach(w => {
+  if (TOY) { buildStarMap(box); buildToyOpts(); }
+  else WORLDS.forEach(w => {
     if (w.daily) return;
     const sec = document.createElement('div'), h = document.createElement('h2'), grid = document.createElement('div');
     const got = w.levels.filter((_, i) => store.best[`${w.id}-${i}`]).length;
@@ -1080,7 +1318,241 @@ function buildMenu() {
   [[true, 'On'], [false, 'Off']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === (store.hints !== false))); b.onclick = () => { store.hints = id; save(); buildMenu(); }; hr.append(b); });
   $('#skipBtn').disabled = S.won || !!S.replay;
   const r = $('#soundRow'); r.replaceChildren();
-  [[true, 'On'], [false, 'Off']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === Sound.on)); b.onclick = () => { Sound.on = store.sound = id; save(); if (id) Sound.wake(); buildMenu(); }; r.append(b); });
+  [[true, 'On'], [false, 'Off']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === Sound.on)); b.onclick = () => { Sound.on = store.sound = id; save(); if (id) Sound.wake(); else Sound.stopAmbient(); buildMenu(); }; r.append(b); });
+}
+
+/* ---- Bonk: today's sky, among the people this page is shared with ---- */
+// Each person keeps one row at runs/<their id>: the day and their fewest throws on it. Everyone who can open the
+// page reads the rows; each person writes only their own (the owner can tidy). Names are looked up when drawn.
+const Board = { db: null, user: null, ready: null };
+function boardInit() {
+  if (Board.ready || !window.claude) return Board.ready || Promise.resolve();
+  return Board.ready = Promise.all([claude.use('db'), claude.use('user')]).then(([db, user]) => { Board.db = db; Board.user = user; }).catch(() => {});
+}
+async function postToday(n) {
+  await boardInit(); if (!Board.db || !Board.user) return;
+  const id = await Board.user.id(); if (!id) return;
+  const ref = Board.db.collection('runs').doc(id), day = dayNo();
+  try { const cur = (await ref.get()).data(); if (cur && cur.day === day && cur.throws <= n) return; await ref.set({ day, throws: n, at: Date.now() }); } catch (e) {}
+}
+function boardInto(box) {
+  if (todayIdx() < 0) return;
+  const sec = document.createElement('div'), h = document.createElement('h2'), list = document.createElement('ol');
+  h.textContent = "Today's sky, among friends"; list.className = 'board'; sec.append(h, list); box.append(sec); sec.hidden = true;
+  (async () => {
+    await boardInit(); if (!Board.db) return;
+    let rows; try { rows = (await Board.db.collection('runs').where('day', '==', dayNo()).limit(200).get()).docs.map(d => ({ id: d.id, ...d.data() })); } catch (e) { return; }
+    rows = rows.filter(r => typeof r.throws === 'number').sort((a, b) => a.throws - b.throws || a.at - b.at).slice(0, 12);
+    const me = Board.user ? await Board.user.id() : null;
+    if (!rows.length) { if (me) { sec.hidden = false; const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'Nobody yet. Clear it first.'; list.append(li); } return; }
+    const ps = Board.user ? await Board.user.profiles(rows.map(r => r.id)) : {};
+    for (const r of rows) {
+      const li = document.createElement('li'), a = document.createElement('span'), b = document.createElement('span');
+      a.textContent = r.id === me ? 'You' : (ps[r.id] && ps[r.id].name) || 'Someone'; b.textContent = `${r.throws} throw${r.throws === 1 ? '' : 's'}`;
+      if (r.id === me) li.className = 'me'; li.append(a, b); list.append(li);
+    }
+    sec.hidden = false;
+  })();
+}
+
+/* ---- Bonk: skies you make, by hand or from a name ---- */
+// Two players on one phone: Coral, then Teal, on the same sky.
+function toggleDuel() { S.duel = S.duel ? null : { turn: 0, n: [] }; $('#menu').hidden = true; load(S.idx); }
+// Made skies live in a world of their own that the star map leaves out.
+function addCustom(L) {
+  let wi = WORLDS.findIndex(w => w.custom);
+  if (wi < 0) { WORLDS.push({ id: 'mine', name: 'Your sky', levels: [], custom: true, theme: { acc: '#2f8f80', neb: PAL.coral } }); wi = WORLDS.length - 1; }
+  const w = WORLDS[wi], code = skyCode(L), old = ALL.findIndex(q => q.wi === wi && q.code === code);
+  if (old >= 0) return old;
+  w.levels.push(L);
+  ALL.push({ chain: true, par: 1, ...L, wi, li: w.levels.length - 1, code, gid: `mine-${hashStr(code).toString(36)}`, cols: L.bodies.map(b => starCol(b.m)) });
+  return ALL.length - 1;
+}
+function hashStr(t) { let h = 2166136261; for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619); return h >>> 0; }
+// A sky fits in a link of letters and digits: l (the ball), s and b (small and big stars) and t (drums), each with
+// x and y in two base-36 digits on a grid of 1/250; v is the winning throw on a grid of 1/10000; the name follows a '~'.
+// Every number is an integer over its grid, so a sky read back from a link is bit for bit the one that was checked.
+const SK = { s: { m: 0.16, r: 0.06 }, b: { m: 0.3, r: 0.08 } }, GP = 250, GV = 1e4;
+const snap = x => Math.round(x * GP) / GP, snapV = v => Math.round(v * GV) / GV;
+const qn = (n, w) => clamp(n, 0, 36 ** w - 1).toString(36).padStart(w, '0');
+function skyCode(L) {
+  const xy = ([x, y]) => qn(Math.round(x * GP) + 300, 2) + qn(Math.round(y * GP) + 500, 2);
+  let c = 'l' + xy(L.launch);
+  for (const b of L.bodies) c += (b.m > 0.2 ? 'b' : 's') + xy([b.x, b.y]);
+  for (const t of L.targets) c += 't' + xy(t);
+  if (L.sol) c += 'v' + qn(Math.round(L.sol[0] * GV) + 20000, 3) + qn(Math.round(L.sol[1] * GV) + 20000, 3);
+  return c + '~' + L.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
+}
+function readSky(code) {
+  const [body, nm = ''] = code.split('~'), L = { launch: [0, -1.25], bodies: [], targets: [], name: nm ? nm.replace(/-/g, ' ').replace(/^./, ch => ch.toUpperCase()) : 'A sky' };
+  for (let i = 0; i < body.length;) {
+    const k = body[i], w = k === 'v' ? 6 : 4, a = body.slice(i + 1, i + 1 + w); i += 1 + w;
+    if (a.length < w || !'lsbtv'.includes(k)) return null;
+    if (k === 'v') { L.sol = [(parseInt(a.slice(0, 3), 36) - 20000) / GV, (parseInt(a.slice(3), 36) - 20000) / GV]; continue; }
+    const x = (parseInt(a.slice(0, 2), 36) - 300) / GP, y = (parseInt(a.slice(2, 4), 36) - 500) / GP;
+    if (k === 'l') L.launch = [x, y]; else if (k === 't') L.targets.push([x, y]); else L.bodies.push({ x, y, ...SK[k] });
+  }
+  return L.targets.length && L.bodies.length <= 10 ? L : null;
+}
+// one throw in a fresh sky, start to finish, with its path sampled every 12 steps
+function flyOne(L, vx, vy, maxT, trail) {
+  const W = makeWorld(L), c = newComet(W, vx, vy, 'n'); W.comets.push(c);
+  while (c.alive && !W.won && W.tick < maxT) { step(W, {}); if (trail && W.tick % 12 === 0) trail.push([c.x, c.y]); }
+  return { won: W.won, got: W.got.filter(Boolean).length, c, ticks: W.tick };
+}
+// a fan of throws, aimed with the rational form of the circle so every device draws the same fan:
+// direction (-2t, 1 - t^2) / (1 + t^2) sweeps from straight up to well past sideways
+function fan(na, np) {
+  const out = [];
+  for (let i = 0; i < na; i++) { const t = -3 + 6 * i / (na - 1), d = 1 + t * t, dx = -2 * t / d, dy = (1 - t * t) / d;
+    for (let j = 0; j < np; j++) { const p = 0.3 + 0.675 * (j + 1) / np; out.push([snapV(dx * p), snapV(dy * p)]); } }
+  return out;
+}
+const breathe = () => new Promise(r => setTimeout(r, 0));
+// fairness: some single throw has to bonk every drum
+async function fairThrow(L) {
+  if (L.sol && flyOne(L, L.sol[0], L.sol[1], 600 * 40).won) return L.sol;
+  let best = [];
+  const tryAll = async list => { for (let k = 0; k < list.length; k++) { const [vx, vy] = list[k], r = flyOne(L, vx, vy, 600 * 30); if (r.won) return [vx, vy]; best.push([r.got, vx, vy]); if (k % 16 === 15) await breathe(); } return null; };
+  let hit = await tryAll(fan(49, 8)); if (hit) return hit;
+  // then a finer fan around the throws that came closest
+  best.sort((a, b) => b[0] - a[0]);
+  for (const [, vx, vy] of best.slice(0, 4)) {
+    const near = []; for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) near.push([snapV(vx + i * 0.004), snapV(vy + j * 0.004)]);
+    best = []; hit = await tryAll(near); if (hit) return hit;
+  }
+  return null;
+}
+// A sky from a name: the name seeds where the stars go; then the drums go on the path of a throw that loops,
+// so the sky is fair by construction. The same name builds the same sky on every phone.
+async function skyFromName(name) {
+  const rnd = seeded(hashStr(name.trim().toLowerCase()));
+  for (let tries = 0; tries < 30; tries++) {
+    const L = { name: name.trim().slice(0, 24), launch: [snap(rnd() * 0.6 - 0.3), -1.252], bodies: [], targets: [] };
+    const nb = 1 + (rnd() < 0.55 ? 1 : 0);
+    for (let k = 0; k < nb; k++) { const big = rnd() < 0.5; L.bodies.push({ x: snap(rnd() * 1.2 - 0.6), y: snap(rnd() * 1.3 - 0.35), ...SK[big ? 'b' : 's'] }); }
+    if (nb === 2 && Math.hypot(L.bodies[0].x - L.bodies[1].x, L.bodies[0].y - L.bodies[1].y) < 0.45) continue;
+    const list = fan(25, 5), off = Math.floor(rnd() * list.length);
+    for (let k = 0; k < list.length; k++) {
+      const [vx, vy] = list[(k + off) % list.length], tr = [], r = flyOne({ ...L, targets: [[9, 9]] }, vx, vy, 600 * 22, tr);
+      if (k % 16 === 15) await breathe();
+      // keep only throws that swing all the way round a star before they end
+      let turns = 0; for (const b of L.bodies) { let sum = 0, a0 = null; for (const [x, y] of tr) { const a = Math.atan2(y - b.y, x - b.x); if (a0 != null) { let d = a - a0; d -= 2 * Math.PI * Math.round(d / (2 * Math.PI)); sum += d; } a0 = a; } turns = Math.max(turns, Math.abs(sum) / (2 * Math.PI)); }
+      if (turns < 1 || tr.length < 60) continue;
+      const ok = ([x, y]) => Math.abs(x) < 0.95 && y > -0.95 && y < 1.55 && Math.hypot(x - L.launch[0], y - L.launch[1]) > 0.35 && L.bodies.every(b => Math.hypot(x - b.x, y - b.y) > b.r + TR + 0.06);
+      const picks = [];
+      for (const f of [0.3, 0.55, 0.85]) { for (let i = Math.floor(tr.length * f); i < tr.length; i++) { const q = tr[i]; if (ok(q) && picks.every(p => Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.35)) { picks.push([snap(q[0]), snap(q[1])]); break; } } }
+      if (picks.length < 3) continue;
+      L.targets = picks; L.sol = [vx, vy];
+      if (flyOne(L, vx, vy, 600 * 30).won) return L;
+    }
+  }
+  return null;
+}
+async function nameSky(name) {
+  if (!name.trim()) return;
+  $('#menu').hidden = true; toast('Building a sky from that name');
+  const L = await skyFromName(name);
+  if (!L) { toast('That name would not make a fair sky. Try another.', 3000); return; }
+  load(addCustom(L)); toast('', 1);
+}
+// The sky editor: tap to place, tap a thing again to take it away. Try it checks that one throw can win.
+function openEditor() {
+  $('#menu').hidden = true;
+  const L0 = world().custom ? level() : null;
+  S.edit = { tool: 's', L: L0 ? { name: L0.name, launch: [...L0.launch], bodies: L0.bodies.map(b => ({ ...b })), targets: L0.targets.map(t => [...t]) } : { name: 'My sky', launch: [0, -1.252], bodies: [{ x: 0, y: 0.2, ...SK.b }], targets: [] } };
+  editShow();
+  const bar = document.createElement('div'); bar.id = 'editBar';
+  const tools = [['s', 'Star'], ['b', 'Big star'], ['t', 'Drum'], ['l', 'Ball']];
+  bar.innerHTML = tools.map(([k, n]) => `<button type="button" class="pill" data-t="${k}" aria-pressed="${k === 's'}">${n}</button>`).join('') + '<button type="button" class="pill go" data-a="try">Try it</button><button type="button" class="pill" data-a="done">Close</button>';
+  bar.onclick = async e => {
+    const t = e.target.dataset.t, a = e.target.dataset.a;
+    if (t) { S.edit.tool = t; bar.querySelectorAll('[data-t]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === t))); }
+    if (a === 'done') editClose();
+    if (a === 'try') {
+      const L = S.edit.L; if (!L.targets.length) { toast('Add a drum or two first.', 2500); return; }
+      e.target.disabled = true; toast('Checking that one throw can win');
+      L.sol = null; const sol = await fairThrow(L); e.target.disabled = false;
+      if (!sol) { toast('No single throw gets every drum yet. Move something.', 3500); return; }
+      L.sol = sol; const i = addCustom({ ...L }); editClose(); load(i);
+      const base = ON_SITE ? location.origin + '/bonk' : BONK_URL;
+      const url = `${base}#s.${skyCode(ALL[i])}`;
+      copyText(`Bonk: I made a sky. Can you clear it? ${url}`, () => toast('It is fair. Link copied.', 3000), () => { toast('It is fair. <span class="link"></span>').querySelector('.link').textContent = url; });
+    }
+  };
+  document.body.append(bar);
+}
+// the draft plays as a level while it is edited, so it looks exactly like the real thing
+function editShow() {
+  const E = S.edit, L = E.L;
+  if (E.di == null) E.di = addCustom({ name: 'draft', launch: [0, -1.252], bodies: [], targets: [[9, 9]] });
+  ALL[E.di] = { ...ALL[E.di], ...L, draft: true, sol: null, cols: L.bodies.map(b => starCol(b.m)) };
+  load(E.di); S.title = null; document.body.classList.remove('titling'); $('#lvname').textContent = 'Make a sky';
+}
+function editTap(e) {
+  const E = S.edit, L = E.L, x = (e.clientX - V.cx) / V.s, y = (V.cy - e.clientY) / V.s;
+  if (Math.abs(x) > 1.2 || Math.abs(y) > 2) return;
+  const ti = L.targets.findIndex(t => Math.hypot(t[0] - x, t[1] - y) < TR * 1.4), bi = L.bodies.findIndex(b => Math.hypot(b.x - x, b.y - y) < b.r * 1.5);
+  if (ti >= 0) L.targets.splice(ti, 1);
+  else if (bi >= 0) L.bodies.splice(bi, 1);
+  else if (E.tool === 'l') L.launch = [snap(x), snap(y)];
+  else if (E.tool === 't') { if (L.targets.length >= 6) return toast('Six drums at most.', 2000); L.targets.push([snap(x), snap(y)]); }
+  else { if (L.bodies.length >= 4) return toast('Four stars at most.', 2000); L.bodies.push({ x: snap(x), y: snap(y), ...SK[E.tool] }); }
+  Sound.wake(); Sound.bonk(drum(), L.targets.length % 6);
+  editShow();
+}
+function editClose() { const b = $('#editBar'); if (b) b.remove(); S.edit = null; load(level().draft ? Math.min(store.last || 0, DAILY0 - 1) : S.idx); }
+
+/* ---- Bonk's menu: each world is a constellation; its levels are the stars, joined in order ---- */
+function buildStarMap(box) {
+  let gi = 0;
+  WORLDS.forEach((w, wi) => {
+    if (w.daily || w.custom) return;
+    const sec = document.createElement('div'), h = document.createElement('h2'), map = document.createElement('div'), n = w.levels.length;
+    const got = w.levels.filter((_, i) => store.best[`${w.id}-${i}`]).length;
+    h.innerHTML = '<span></span><span></span>'; h.firstChild.textContent = w.name; h.lastChild.textContent = `${got} / ${n}`;
+    map.className = 'starmap';
+    // star positions: spread left to right, lifted and dropped by a seeded wave, so each world gets its own shape
+    const rnd = seeded(wi * 977 + 13), pts = w.levels.map((_, i) => [7 + 86 * i / Math.max(1, n - 1), 50 + 34 * Math.sin(i * 1.7 + wi * 2.3) * (0.6 + 0.4 * rnd())]);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 100 100'); svg.setAttribute('preserveAspectRatio', 'none');
+    const pl = document.createElementNS(svg.namespaceURI, 'polyline'); pl.setAttribute('points', pts.map(p => p.join(',')).join(' ')); svg.append(pl); map.append(svg);
+    w.levels.forEach((L, i) => {
+      const idx = gi++, b = document.createElement('button'), best = store.best[`${w.id}-${i}`];
+      b.type = 'button'; b.className = 'star' + (best ? ' done' : '') + (idx === S.idx ? ' cur' : '') + (best && L.win < 0.01 ? ' imp' : '');
+      b.disabled = !unlocked(idx); b.style.left = pts[i][0] + '%'; b.style.top = pts[i][1] + '%'; b.textContent = i + 1;
+      b.setAttribute('aria-label', `${w.name} level ${i + 1}, ${L.name}${best ? ', cleared' : ''}${best && L.win < 0.01 ? ', impossible' : ''}`);
+      b.onclick = () => { $('#menu').hidden = true; load(idx); };
+      map.append(b);
+    });
+    sec.append(h, map); box.append(sec);
+  });
+}
+function seeded(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function pills(title, items, cur, pick, note) {
+  const sec = document.createElement('div'), h = document.createElement('h2'), row = document.createElement('div');
+  h.textContent = title; row.className = 'row';
+  for (const it of items) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = it.name;
+    b.disabled = it.ok === false; if (it.ok === false && note) b.title = note(it);
+    b.setAttribute('aria-pressed', String(it.id === cur)); b.onclick = () => { pick(it.id); buildMenu(); };
+    row.append(b);
+  }
+  sec.append(h, row); return sec;
+}
+function buildToyOpts() {
+  const box = $('#toyOpts'); box.hidden = false; box.replaceChildren();
+  const play = document.createElement('div'); play.className = 'row';
+  for (const [label, fn] of [['Make a sky', () => openEditor()], [S.duel ? 'Back to one player' : 'Two players', () => toggleDuel()], ['Photo', () => photo()], ['Oops reel', () => { $('#menu').hidden = true; makeClip('oops'); }]]) { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = label; b.onclick = fn; play.append(b); }
+  box.append(play);
+  const nm = document.createElement('form'); nm.className = 'row namesky';
+  nm.innerHTML = '<input type="text" maxlength="24" placeholder="Type a name, get a sky" aria-label="Name for a new sky"><button type="submit" class="pill">Make</button>';
+  nm.onsubmit = e => { e.preventDefault(); nameSky(nm.querySelector('input').value); };
+  box.append(nm);
+  box.append(pills('Ball', SKINS.filter(k => !k.season || skinOK(k)).map(k => ({ ...k, ok: skinOK(k) })), skin(), id => { store.skin = id; save(); }, k => `Clear ${k.need} levels`));
+  box.append(pills('Drum', DRUMS.map(d => ({ ...d, ok: drumOK(d) })), drum(), id => { store.drum = id; save(); Sound.wake(); Sound.bonk(id, 0); }, () => 'Clear a level in its world'));
+  box.append(pills('Sky', SKIES.filter(k => skyOK(k)), SKY().id, id => { store.sky = id; save(); load(S.idx); }));
+  box.append(pills('Trail', PAINTS, (PAINTS.find(q => q.id === store.paint) || PAINTS[0]).id, id => { store.paint = id; save(); }));
+  if (store.board !== false) boardInto(box);
 }
 
 /* ======================= replays ======================= */
@@ -1108,10 +1580,30 @@ function parseReplay(code) {
     .map(([t, x, y, k, act]) => k == null ? [t, x / 1e5, y / 1e5] : [t, x / 1e5, y / 1e5, KCODE[k] || 'n', act]);
   return { idx, throws };
 }
+// Bonk lives at its artifact link (or areabake.com/bonk once it is on the site). Its links use only the
+// characters an artifact keeps in its address: '#c.' challenges you to beat a throw, '#r.' just plays it back.
+const BONK_URL = 'https://claude.ai/artifact/9d6V9nGLmcLCuzgeHDEhSf';
+// copying can be refused, or left hanging, inside a framed page; show the toast either way and never wait on it
+function copyText(text, ok, fail) {
+  let done = false; const fin = f => { if (!done) { done = true; f(); } };
+  try { navigator.clipboard.writeText(text).then(() => fin(ok), () => fin(fail)); } catch (e) { fin(fail); }
+  setTimeout(() => fin(fail), 1500);
+}
 $('#shareBtn').onclick = async () => {
+  const L = level();
+  if (TOY) {
+    const base = ON_SITE ? location.origin + '/bonk' : BONK_URL, n = S.throws.length;
+    const url = world().custom ? `${base}#s.${skyCode(L)}` : `${base}#c.${replayCode()}`;
+    const where = world().custom ? `a sky called ${L.name}` : world().daily ? `today's sky, No. ${L.li + 1}` : `${world().name} ${L.li + 1}`;
+    const text = `Bonk, ${where}: ${n} throw${n === 1 ? '' : 's'}. Beat it:`;
+    const extras = () => { const [b1, b2] = $('#toast').querySelectorAll('button'); b1.onclick = () => shareCard(); b2.onclick = () => photo(); };
+    const more = ' <button type="button">Save a card</button> <button type="button">Photo</button>';
+    copyText(`${text} ${url}`, () => { toast('Challenge link copied.' + more); extras(); }, () => { toast(`<span class="link"></span>${more}`).querySelector('.link').textContent = url; extras(); });
+    return;
+  }
   const base = ON_SITE ? location.origin + '/phone' : 'https://areabake.com/phone';
-  const url = `${base}#r=${replayCode()}`, L = level();
-  const text = `${TOY ? 'Bonk' : 'Slingshot'}, ${world().daily ? "today's sky" : world().name} ${L.li + 1}. Watch my throw:`;
+  const url = `${base}#r=${replayCode()}`;
+  const text = `Slingshot, ${world().daily ? "today's sky" : world().name} ${L.li + 1}. Watch my throw:`;
   try { if (navigator.share) { await navigator.share({ title: 'Slingshot', text, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
   try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link copied', 2500); } catch (e) { toast(url); }
 };
@@ -1133,13 +1625,16 @@ function loadMuxer() {
 }
 // the silent pass: where are the moments, in physics steps?
 function scanRun(L, throws) {
-  const W = makeWorld(L), ev = { hits: [], passes: [], tf: throws.length ? throws[throws.length - 1][0] : 0, tw: -1 }, last = { t: -1e9 };
+  const W = makeWorld(L), ev = { hits: [], passes: [], tf: throws.length ? throws[throws.length - 1][0] : 0, tw: -1, loops: 0 }, last = { t: -1e9 };
+  // full turns of the winning throw around each star: the angle it sweeps, summed step by step
+  const wind = L.bodies.map(() => 0), ang = L.bodies.map(() => null);
   const H = {
     hit: (c, i) => ev.hits.push({ tick: W.tick, i }),
     track: c => {
       for (let k = 0; k < L.bodies.length; k++) {
         const b = L.bodies[k]; if (isMoon(b)) continue;
         const dx = W.P[k][0] - c.x, dy = W.P[k][1] - c.y;
+        if (W.tick >= ev.tf) { const a = Math.atan2(dy, dx); if (ang[k] != null) { let d = a - ang[k]; d -= 2 * Math.PI * Math.round(d / (2 * Math.PI)); wind[k] += d; } ang[k] = a; }
         if (dx * dx + dy * dy < (b.r * 1.7) ** 2 && Math.hypot(c.vx, c.vy) > 0.7 && W.tick - last.t > 900) { last.t = W.tick; ev.passes.push({ tick: W.tick, x: (c.x + W.P[k][0]) / 2, y: (c.y + W.P[k][1]) / 2 }); }
       }
     },
@@ -1151,12 +1646,22 @@ function scanRun(L, throws) {
     if (W.tick > ev.tf && !W.comets.some(c => c.alive)) break;
   }
   if (W.won) ev.tw = W.tick;
+  ev.loops = Math.floor(Math.max(0, ...wind.map(Math.abs)) / (2 * Math.PI) + 0.02);
   ev.hits = ev.hits.filter(h => h.tick >= ev.tf); ev.passes = ev.passes.filter(p => p.tick >= ev.tf);
   return ev;
 }
 const P_step = step;
-async function makeClip() {
+// one throw on its own from a fresh sky: where it crashed, if it did (the stars never move, so it flies the same)
+function scanCrash(L, q) {
+  const W = makeWorld(L), c = newComet(W, q[1], q[2], 'n'); W.comets.push(c);
+  while (c.alive && W.tick < 600 * 40) P_step(W, {});
+  return c.fate === 'crash' ? { tick: W.tick, x: c.x, y: c.y } : null;
+}
+async function makeClip(mode) {
   if (CLIP) return;
+  const oops = TOY && mode === 'oops';
+  const bloopers = oops ? S.throws.map(q => [q, scanCrash(level(), q)]).filter(b => b[1]).slice(-5) : [];
+  if (oops && !bloopers.length) { toast('No crashes on this level yet.', 2500); return; }
   if (!('VideoEncoder' in window)) { stillShot(); return; }
   const vw = 1080, vh = 1920, fps = 60;
   // H.264 plays everywhere; VP9 is the fallback where H.264 encoding is missing
@@ -1170,36 +1675,75 @@ async function makeClip() {
   const chunks = []; let failed = null;
   const enc = new VideoEncoder({ output: (ch, meta) => chunks.push([ch, meta]), error: e => failed = e });
   enc.configure(cfg);
-  const L0 = level(), throws = S.throws.map(q => q.slice()), ev = scanRun(L0, throws);
-  if (ev.tw < 0) { enc.close(); toast('Could not rebuild this run.', 3000); return; }
+  const L0 = level(), throws = S.throws.map(q => q.slice()), ev = oops ? null : scanRun(L0, throws);
+  if (!oops && ev.tw < 0) { enc.close(); toast('Could not rebuild this run.', 3000); return; }
+  const ink = TOY && !SKY().dark ? '31,42,51' : '239,232,218';
   // set the game aside, render the reel at film size, then put everything back
   const keep = { S: { ...S }, DPR, W, H, cssW, cssH, G, V };
   CLIP = true; Sound.rec = { list: [], at: 0 };
   DPR = 2; cssW = vw / 2; cssH = vh / 2; W = vw; H = vh; cvs.width = fx.width = W; cvs.height = fx.height = H; geom();
   const out = document.createElement('canvas'); out.width = vw; out.height = vh; const oc = out.getContext('2d');
   S.time = 0;
-  load(keep.S.idx, { throws: throws.map(q => q.slice()) });
+  if (!oops) load(keep.S.idx, { throws: throws.map(q => q.slice()) });
   const btn = $('#clipBtn'); btn.disabled = true;
   const box = levelBox(L0), fitZ = bx => { const hw = (cssW / 2 - 8) / G.s, hh = (cssH / 2 - 60) / G.s; return clamp(Math.min(hw / Math.max(-bx[0], bx[1]), hh / Math.max(-bx[2], bx[3])), 0.22, 1.2); };
-  let rate = 1, f = 0, bars = 0, jumped = ev.tf < 120;
+  let rate = 1, f = 0, bars = 0, jumped = oops || ev.tf < 120;
   const frame = async (extra) => {
     S.hitStop = 0;
     renderGL(); draw();
     oc.drawImage(cvs, 0, 0); oc.drawImage(fx, 0, 0);
     // letterbox bars slide in for the slow-motion moments; a soft vignette throughout
     if (bars > 0.01) { oc.fillStyle = '#000'; const bh = vh * 0.075 * bars; oc.fillRect(0, 0, vw, bh); oc.fillRect(0, vh - bh, vw, bh); }
-    const vg = oc.createRadialGradient(vw / 2, vh / 2, vh * 0.3, vw / 2, vh / 2, vh * 0.75); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.45)');
+    const vg = oc.createRadialGradient(vw / 2, vh / 2, vh * 0.3, vw / 2, vh / 2, vh * 0.75); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${TOY ? 0.16 : 0.45})`);
     oc.fillStyle = vg; oc.fillRect(0, 0, vw, vh);
     if (extra) extra(oc);
-    oc.font = '400 24px "IBM Plex Mono", ui-monospace, monospace'; oc.textAlign = 'center'; oc.fillStyle = 'rgba(239,232,218,.55)'; oc.fillText('areabake.com/phone', vw / 2, vh - 52);
+    oc.font = TOY ? '600 30px Fredoka, system-ui, sans-serif' : '400 24px "IBM Plex Mono", ui-monospace, monospace'; oc.textAlign = 'center'; oc.fillStyle = `rgba(${ink},.55)`; oc.fillText(TOY ? 'bonk' : 'areabake.com/phone', vw / 2, vh - 52);
     const vf = new VideoFrame(out, { timestamp: Math.round(f * 1e6 / fps), duration: Math.round(1e6 / fps) });
     enc.encode(vf, { keyFrame: f % 120 === 0 }); vf.close(); f++;
     Sound.rec.at = f / fps;
     while (enc.encodeQueueSize > 4) await new Promise(r => setTimeout(r, 2));
-    if (f % 20 === 0) { toast(`Cutting your highlight reel ${Math.min(99, Math.round(S.tick / Math.max(1, ev.tw) * 100))}%`); await new Promise(r => setTimeout(r, 0)); }
+    if (f % 20 === 0) { toast(oops ? 'Cutting your oops reel' : `Cutting your highlight reel ${Math.min(99, Math.round(S.tick / Math.max(1, ev.tw) * 100))}%`); await new Promise(r => setTimeout(r, 0)); }
   };
   const advance = (simDt) => { S.time += simDt; simulate(simDt); stepCamera(1 / fps); };
   try {
+   if (oops) {
+    // the oops reel: each crash on its own, slowing right before the bump, then a beat on the splat
+    for (const [q, cr] of bloopers) {
+      load(keep.S.idx, { throws: [[0, q[1], q[2]]] }); S.title = null; S.camShot = null;
+      for (let k = 0; k < fps * 14 && !failed; k++) {
+        const near = S.tick > cr.tick - 260;
+        const want = near ? 0.25 : S.tick < cr.tick - 1200 ? 2.2 : 1;
+        rate += (want - rate) * 0.15; bars += ((near ? 1 : 0) - bars) * 0.1;
+        S.camShot = near ? { z: 1.6, x: cr.x * 0.85, y: cr.y * 0.85 } : null;
+        if (S.tick > cr.tick + 20) { for (let j = 0; j < fps * 1.1 && !failed; j++) { advance(0.6 / fps); await frame(); } break; }
+        advance(rate / fps); await frame();
+      }
+    }
+    S.camShot = { z: 1, x: 0, y: 0 };
+    for (let k = 0; k < fps * 2 && !failed; k++) {
+      bars += (0 - bars) * 0.08; advance(0.3 / fps);
+      const a = clamp((k - fps * 0.2) / (fps * 0.5), 0, 1), fade = clamp((k - fps * 1.5) / (fps * 0.5), 0, 1);
+      await frame(c => {
+        c.textAlign = 'center'; c.fillStyle = `rgba(${ink},${0.9 * a})`; c.font = '600 150px Fredoka, system-ui, sans-serif'; c.fillText('oops', vw / 2, vh * 0.78);
+        c.font = '500 36px Fredoka, system-ui, sans-serif'; c.fillStyle = `rgba(${ink},${0.6 * a})`; c.fillText(`${bloopers.length} bonk${bloopers.length === 1 ? '' : 's'} on ${L0.name}`, vw / 2, vh * 0.78 + 70);
+        if (fade) { c.fillStyle = `rgba(0,0,0,${fade})`; c.fillRect(0, 0, vw, vh); }
+      });
+    }
+   } else {
+    // 0. the hook (Bonk): open on the winning bump in slow motion, then rewind to the start
+    const fh = ev.hits.length ? ev.hits[ev.hits.length - 1] : null;
+    if (TOY && fh && fh.tick - ev.tf > 600) {
+      S.title = null;
+      const n0 = Sound.rec.list.length; while (S.tick < fh.tick - 140) { S.time += 0.25; simulate(0.25); } Sound.rec.list.length = n0; S.sparks = []; S.dust = []; S.puffs = []; S.waves = [];
+      const T = L0.targets[fh.i]; S.camShot = { z: 1.6, x: T[0] * 0.85, y: T[1] * 0.85 }; S.cam.z = 1.6; S.cam.x = S.camShot.x; S.cam.y = S.camShot.y; bars = 1;
+      let wf = -1;
+      for (let k = 0; k < fps * 4 && !failed; k++) { if (S.won && wf < 0) wf = k; if (wf >= 0 && k - wf > fps * 0.45) break; advance(0.3 / fps); await frame(); }
+      for (let k = 0; k < fps * 0.3 && !failed; k++) await frame();
+      S.won = false; S.glide = null; S.rewind = { tr: S.comets.filter(c => c.trail && c.trail.length > 8).map(c => c.trail.slice()), t0: S.time };
+      Sound.tone(523.25, 0.3, 'sine', 0.03); Sound.tone(392, 0.3, 'sine', 0.03, 0.12); S.camShot = { z: Math.min(1, fitZ(box) * 0.92), x: 0, y: 0 };
+      for (let k = 0; k < fps * 0.55 && !failed; k++) { S.time += 1 / fps; bars += (0 - bars) * 0.1; stepCamera(1 / fps); await frame(); }
+      S.rewind = null; load(keep.S.idx, { throws: throws.map(q => q.slice()) });
+    }
     // 1. the opening: the title in starlight over a wide view of the whole system
     S.camShot = { z: Math.min(1, fitZ(box) * 0.92), x: 0, y: 0 }; S.cam.z = S.camShot.z;
     // the clock holds while the name writes itself, then lets it fall into the level's wells
@@ -1208,8 +1752,10 @@ async function makeClip() {
     // 2. straight to the winning throw
     if (!jumped && S.tick < ev.tf - 240) { const n0 = Sound.rec.list.length; while (S.tick < ev.tf - 240) { S.time += 0.25; simulate(0.25); } Sound.rec.list.length = n0; S.sparks = []; S.dust = []; S.labels = []; S.waves = []; }
     // 3. the flight, directed
-    let wonF = -1;
+    let wonF = -1, held = !TOY || !fh;
     for (let k = 0; k < fps * 40 && !failed; k++) {
+      // wait for it: just before the last bump, the clock stops and the camera leans in
+      if (!held && S.tick >= fh.tick - 70) { held = true; S.camShot = { z: 1.75, x: L0.targets[fh.i][0] * 0.9, y: L0.targets[fh.i][1] * 0.9 }; for (let j = 0; j < fps * 0.8 && !failed; j++) { bars += (1 - bars) * 0.1; stepCamera(1 / fps); await frame(); } }
       const tt = S.tick, hit = ev.hits.find(h => Math.abs(h.tick - tt) < 270), pass = ev.passes.find(p => Math.abs(p.tick - tt) < 300);
       const nextEv = [...ev.hits.map(h => h.tick), ...ev.passes.map(p => p.tick), ev.tw].filter(x => x > tt).sort((a, b) => a - b)[0] ?? 1e9;
       const prevEv = [ev.tf, ...ev.hits.map(h => h.tick), ...ev.passes.map(p => p.tick)].filter(x => x <= tt).sort((a, b) => b - a)[0] ?? ev.tf;
@@ -1232,13 +1778,21 @@ async function makeClip() {
       const fade = clamp((k - fps * 2.7) / (fps * 0.5), 0, 1);
       await frame(c => {
         const a = clamp((k - fps * 0.9) / (fps * 0.6), 0, 1);
-        c.textAlign = 'center'; c.fillStyle = `rgba(239,232,218,${0.85 * a})`; c.font = '300 italic 84px "Cormorant Garamond", serif';
+        c.textAlign = 'center'; c.fillStyle = `rgba(${ink},${0.85 * a})`; c.font = TOY ? '600 92px Fredoka, system-ui, sans-serif' : '300 italic 84px "Cormorant Garamond", serif';
         c.fillText(L0.name, vw / 2, vh * 0.8);
-        c.font = '500 22px "IBM Plex Mono", monospace'; c.fillStyle = `rgba(155,152,170,${a})`;
-        c.fillText(`${world().daily ? "TODAY'S SKY" : world().name.toUpperCase()} · ${L0.li + 1}`.split('').join(' '), vw / 2, vh * 0.8 + 56);
+        if (TOY) {
+          // the caption says what happened, in plain counts
+          const n = throws.length, secs = Math.round((ev.tw - ev.tf) * DT), pl = (x, w) => `${x} ${w}${x === 1 ? '' : 's'}`;
+          c.font = '500 38px Fredoka, system-ui, sans-serif'; c.fillStyle = `rgba(${ink},${0.65 * a})`;
+          c.fillText([pl(n, 'throw'), ev.loops ? pl(ev.loops, 'loop') : '', pl(secs, 'second')].filter(Boolean).join(' · '), vw / 2, vh * 0.8 + 66);
+        } else {
+          c.font = '500 22px "IBM Plex Mono", monospace'; c.fillStyle = `rgba(155,152,170,${a})`;
+          c.fillText(`${world().daily ? "TODAY'S SKY" : world().name.toUpperCase()} · ${L0.li + 1}`.split('').join(' '), vw / 2, vh * 0.8 + 56);
+        }
         if (fade) { c.fillStyle = `rgba(0,0,0,${fade})`; c.fillRect(0, 0, vw, vh); }
       });
     }
+   }
     if (!failed) await enc.flush();
   } finally {
     try { enc.close(); } catch (e) {}
@@ -1273,10 +1827,10 @@ async function makeClip() {
     await aenc.flush(); aenc.close();
   }
   mux.finalize();
-  const L = level(), name = `slingshot-${world().id}-${L.li + 1}.mp4`, blob = new Blob([mux.target.buffer], { type: 'video/mp4' });
+  const L = level(), name = `${TOY ? 'bonk' : 'slingshot'}-${world().id}-${L.li + 1}${oops ? '-oops' : ''}.mp4`, blob = new Blob([mux.target.buffer], { type: 'video/mp4' });
   const file = new File([blob], name, { type: 'video/mp4' });
   // sharing needs a fresh tap, so the finished reel waits behind one
-  const t = toast('Your highlight reel is ready. <button type="button">Share or save</button>');
+  const t = toast(`Your ${oops ? 'oops' : 'highlight'} reel is ready. <button type="button">Share or save</button>`);
   t.querySelector('button').onclick = () => shareFile(file, blob, name);
 }
 async function renderReelAudio(list, dur) {
@@ -1284,7 +1838,7 @@ async function renderReelAudio(list, dur) {
   try {
     const oac = new OfflineAudioContext(2, Math.ceil(dur * 48000), 48000), saved = Sound.ctx, on = Sound.on, mute = Sound.mute;
     Sound.ctx = oac; Sound.on = true; Sound.mute = false;
-    for (const [kind, args, at] of list) { if (kind === 'tone') Sound.tone(args[0], args[1], args[2], args[3], at); else Sound.whoosh(args[0], at); }
+    for (const [kind, args, at] of list) { if (kind === 'tone') Sound.tone(args[0], args[1], args[2], args[3], at); else if (kind === 'bonk') Sound.bonk(args[0], args[1], at); else Sound.whoosh(args[0], at); }
     // a drone on the world's two notes, a fifth apart, swelling in and out over the whole reel
     for (const fq of [110, 164.81]) {
       const o = oac.createOscillator(), g = oac.createGain(); o.type = 'sine'; o.frequency.value = fq;
@@ -1295,16 +1849,36 @@ async function renderReelAudio(list, dur) {
     return await oac.startRendering();
   } catch (e) { return null; }
 }
+// The share card gives nothing away: no stars and no drums from the level, only the shape your winning
+// path traced (scaled to fit), how many throws it took, and your streak as a row of little drums.
+function shareCard() {
+  const k = SKY(), cw = 1080, ch = 1350, c = document.createElement('canvas'); c.width = cw; c.height = ch; const x = c.getContext('2d');
+  const gr = x.createLinearGradient(0, ch, 0, 0); gr.addColorStop(0, k.bg0); gr.addColorStop(1, k.bg1); x.fillStyle = gr; x.fillRect(0, 0, cw, ch);
+  const ink = k.dark ? '#fff6e6' : '#1f2a33', L = level(), tr = S.gold || [];
+  x.fillStyle = ink; x.textAlign = 'center'; x.font = '600 110px Fredoka, system-ui, sans-serif'; x.fillText('Bonk', cw / 2, 190);
+  x.font = '500 40px Fredoka, system-ui, sans-serif'; x.globalAlpha = 0.7; x.fillText(world().daily ? `Today's sky · No. ${L.li + 1}` : `${world().name} · ${L.li + 1}`, cw / 2, 262); x.globalAlpha = 1;
+  if (tr.length > 1) {
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const [a, b] of tr) { x0 = Math.min(x0, a); x1 = Math.max(x1, a); y0 = Math.min(y0, b); y1 = Math.max(y1, b); }
+    const sc = Math.min(760 / Math.max(x1 - x0, 1e-3), 640 / Math.max(y1 - y0, 1e-3)), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    x.lineCap = 'round'; x.lineJoin = 'round'; x.strokeStyle = '#d6a03c'; x.lineWidth = 14; x.beginPath();
+    tr.forEach(([a, b], i) => { const px = cw / 2 + (a - cx) * sc, py = 690 - (b - cy) * sc; i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.stroke();
+    const [ea, eb] = tr[tr.length - 1]; x.fillStyle = PAL.coral; x.beginPath(); x.arc(cw / 2 + (ea - cx) * sc, 690 - (eb - cy) * sc, 26, 0, 7); x.fill();
+  }
+  const n = S.throws.length; x.fillStyle = ink; x.font = '600 76px Fredoka, system-ui, sans-serif'; x.fillText(`${n} throw${n === 1 ? '' : 's'}`, cw / 2, 1120);
+  const sk = streak(); for (let i = 0; i < Math.min(sk, 14); i++) { const px = cw / 2 + (i - (Math.min(sk, 14) - 1) / 2) * 52; x.fillStyle = ['#a94a33', '#2f8f80', '#9c6e22'][i % 3]; x.beginPath(); x.ellipse(px, 1196, 20, 15, 0, 0, 7); x.fill(); x.fillStyle = TH[i % 3]; x.beginPath(); x.ellipse(px, 1190, 20, 15, 0, 0, 7); x.fill(); }
+  x.font = '500 30px Fredoka, system-ui, sans-serif'; x.globalAlpha = 0.6; x.fillStyle = ink; x.fillText(ON_SITE ? 'areabake.com/bonk' : 'areabake', cw / 2, 1290); x.globalAlpha = 1;
+  c.toBlob(blob => { if (!blob) return; const name = `bonk-${world().id}-${L.li + 1}.png`; shareFile(new File([blob], name, { type: 'image/png' }), blob, name); }, 'image/png');
+}
 // where video can't be made, the finished sky as a picture instead
 function stillShot() {
   renderGL(); draw();
   const out = document.createElement('canvas'); out.width = W; out.height = H; const oc = out.getContext('2d');
   oc.drawImage(cvs, 0, 0); oc.drawImage(fx, 0, 0);
-  oc.font = `400 ${12 * DPR}px "IBM Plex Mono", ui-monospace, monospace`; oc.textAlign = 'center'; oc.fillStyle = 'rgba(239,232,218,.6)';
-  oc.fillText('areabake.com/phone', W / 2, H - 26 * DPR);
+  oc.font = TOY ? `600 ${14 * DPR}px Fredoka, system-ui, sans-serif` : `400 ${12 * DPR}px "IBM Plex Mono", ui-monospace, monospace`; oc.textAlign = 'center'; oc.fillStyle = TOY && !SKY().dark ? 'rgba(31,42,51,.55)' : 'rgba(239,232,218,.6)';
+  oc.fillText(TOY ? 'bonk' : 'areabake.com/phone', W / 2, H - 26 * DPR);
   out.toBlob(blob => {
     if (!blob) { toast('Could not make a picture.', 3000); return; }
-    const name = `slingshot-${world().id}-${level().li + 1}.png`, file = new File([blob], name, { type: 'image/png' });
+    const name = `${TOY ? 'bonk' : 'slingshot'}-${world().id}-${level().li + 1}.png`, file = new File([blob], name, { type: 'image/png' });
     const t = toast('Video is not supported here. <button type="button">Share a picture</button>');
     t.querySelector('button').onclick = () => shareFile(file, blob, name);
   }, 'image/png');
@@ -1317,15 +1891,17 @@ async function shareFile(file, blob, name) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60000); toast('Saved', 2500);
 }
-$('#clipBtn').onclick = makeClip;
+$('#clipBtn').onclick = () => makeClip();
 
 /* ======================= loop ======================= */
 let last = performance.now();
 function loop(now) {
   requestAnimationFrame(loop);
-  const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000)); last = now;
-  if (document.hidden || CLIP) { Sound.hum(0); return; }
+  const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000)); last = now; S.frameDt = dt;
+  if (document.hidden || CLIP) { Sound.hum(0); if (Sound.amb) Sound.stopAmbient(); return; }
+  if (TOY && !Sound.amb && Sound.ctx && Sound.on && Sound.ctx.state === 'running') Sound.ambient(level());
   S.time += dt;
+  if (S.photo) { setView(); renderGL(); draw(); return; }
   if (S.rewind) { renderGL(); draw(); if (S.time - S.rewind.t0 > 0.5) { S.rewind = null; load(S.idx); } return; }
   simulate(dt); renderGL(); draw();
   const hc = !S.won && S.comets[0];
@@ -1337,8 +1913,12 @@ function loop(now) {
 }
 window.addEventListener('resize', resize);
 resize();
-const m = /#r=([0-9a-z._~-]+)/.exec(location.hash), rp = m && parseReplay(m[1]);
-if (rp && rp.throws.length) load(rp.idx, { throws: rp.throws });
+const ms = TOY && /#s\.([0-9a-z._~-]+)/.exec(location.hash), sky = ms && readSky(ms[1]);
+const m = !sky && /#([rc])[.=]([0-9a-z._~-]+)/.exec(location.hash), rp = m && parseReplay(m[2]);
+if (sky) load(addCustom(sky)); else
+// a challenge: play the level yourself, with your friend's winning throw flying beside each of yours as a ghost
+if (rp && rp.throws.length && m[1] === 'c' && TOY) { S.ghostRun = { throw: rp.throws[rp.throws.length - 1] }; load(rp.idx); }
+else if (rp && rp.throws.length) load(rp.idx, { throws: rp.throws });
 else if (rp) load(rp.idx);
 else if (/#today/.test(location.hash) && todayIdx() >= 0) load(todayIdx());
 else load(Math.min(store.last || 0, (DAILY ? DAILY0 : ALL.length) - 1));

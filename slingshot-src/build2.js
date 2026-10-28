@@ -38,7 +38,7 @@ const keep = [{ ...orig.find(l => l.name === 'Bend it'), par: 1, sol: [0.36592, 
 const keep2 = [{ ...orig.find(l => l.name === 'Two suns'), name: 'Binary', par: 1, sol: OS['Two suns'] }, { ...orig.find(l => l.name === 'Figure eight'), name: 'Infinity', par: 1, sol: OS['Figure eight'] }];
 // the campaign is hand-made (lab.js): each world easiest first, by the share of throws that win
 const hand = w => read(`hand-${w}.json`).sort((a, b) => b.win - a.win)
-  .map(L => exact({ name: L.name, par: 1, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol }));
+  .map(L => exact({ name: L.name, par: 1, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol, win: L.win }));
 // nothing moves in either game any more, so the orbiting worlds (Waltz, Moons) are gone.
 // The toy game also gets two worlds of its own: star clusters (Plummer spheres) and three fixed suns.
 const W_FIRST = { id: 'w1', name: 'First light', levels: [...keep.map(exact), ...hand('first')] };
@@ -71,7 +71,7 @@ const daily = [...frozen, ...[...read('daily-v3.json'), ...fresh].filter(still).
 if (process.env.FREEZE) fs.writeFileSync('daily-v4.json', JSON.stringify(daily));
 spare.length = 0; spare.push(...daily);
 const DAILYW = ({ id: 'd', name: 'Today', daily: true,
-  levels: spare.map((L, i) => exact({ name: STARS[i % STARS.length] + (i >= STARS.length ? ' ' + (1 + Math.floor(i / STARS.length)) : ''), par: L.par, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol })) });
+  levels: spare.map((L, i) => exact({ name: STARS[i % STARS.length] + (i >= STARS.length ? ' ' + (1 + Math.floor(i / STARS.length)) : ''), par: L.par, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol, win: L.win })) });
 // two games: the night one (Slingshot) and the toy one (Bonk), each with its own worlds and store
 const GAMES = [
   { theme: 'night', out: '/home/user/claude-s-space/slingshot-phone.html', worlds: [W_FIRST, W_TWO, W_BH, DAILYW] },
@@ -81,18 +81,21 @@ const head = fs.readFileSync('phone-head.html', 'utf8'), script = fs.readFileSyn
 const phys = fs.readFileSync('phys.js', 'utf8').replace(/\nif \(typeof module[^\n]*\n?$/, '\n');
 const all = [];
 for (const G of GAMES) {
-  const worlds = G.worlds.filter(w => w.levels.length);
+  // in Bonk, sand thrown from a hit plate can ring the others (chain bonks)
+  const worlds = G.worlds.filter(w => w.levels.length).map(w => G.theme === 'toy' ? { ...w, levels: w.levels.map(L => ({ ...L, chain: true })) } : w);
+  if (G.theme === 'toy') fs.writeFileSync('worlds-toy.json', JSON.stringify(worlds));
   let h = head;
   if (G.theme === 'toy') {
     h = h.replace('<title>Slingshot</title>', '<title>Bonk</title>')
       .replace('family=Cormorant+Garamond', 'family=Fredoka:wght@500;600&family=Cormorant+Garamond')
-      .replace('</style>', toyCss + '\n</style>')
+      .replace('</style>', toyCss + '\n</style>').replace('<h1>Slingshot</h1>', '<h1>Bonk</h1>').replace('<b>areabake</b> · slingshot', '<b>areabake</b> · bonk')
+      .replace('Drag back anywhere and let go. Comets never stop on their own, so a throw that misses can loop around and come back for a double.', 'Drag back anywhere and let go. The ball never stops on its own, so a miss can loop around and bonk two drums on the way back.')
       .replace('A gravity game for your phone. Throw a comet past stars and moons and collect every target.', 'A bright, squishy gravity toy: fling a ball past stars and wobbly drums.');
   }
   fs.writeFileSync(G.out, h + script.replace('/*PHYS*/', () => phys).replace("const THEME = /*THEME*/'night'", () => `const THEME = /*THEME*/'${G.theme}'`)
     .split("'areabake.slingshot.v3'").join(G.theme === 'toy' ? "'areabake.bonk.v1'" : "'areabake.slingshot.v3'")
     .replace('const WORLDS = /*LEVELS*/[];', () => 'const WORLDS = /*LEVELS*/' + JSON.stringify(worlds) + ';'));
-  all.push(...worlds.filter(w => !all.includes(w)));
+  if (G.theme === 'night') all.push(...worlds);
   console.log(G.theme + ': ' + worlds.map(w => `${w.name} ${w.levels.length}`).join(', '));
 }
 fs.writeFileSync('worlds.json', JSON.stringify(all.filter((w, i) => all.indexOf(w) === i)));
