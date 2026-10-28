@@ -11,21 +11,24 @@ const WORLDS = /*LEVELS*/[];
 
 /* ======================= sound ======================= */
 const Sound = {
-  ctx: null, on: true, mute: false,
+  ctx: null, on: true, mute: false, rec: null,
   wake() {
     if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; } }
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
   },
   tone(f, dur = 0.7, type = 'sine', gain = 0.08, when = 0) {
+    // while a highlight reel renders, sounds are noted with their time in the film and played into it later
+    if (this.rec) { this.rec.list.push(['tone', [f, dur, type, gain], this.rec.at + when]); return; }
     if (!this.on || this.mute || !this.ctx) return;
     const t = this.ctx.currentTime + when, o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = type; o.frequency.setValueAtTime(f, t);
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g).connect(this.ctx.destination); o.start(t); o.stop(t + dur + 0.05);
   },
-  whoosh(p) {
+  whoosh(p, when = 0) {
+    if (this.rec) { this.rec.list.push(['whoosh', [p], this.rec.at]); return; }
     if (!this.on || this.mute || !this.ctx) return;
-    const c = this.ctx, t = c.currentTime, n = Math.floor(c.sampleRate * 0.45), buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+    const c = this.ctx, t = c.currentTime + when, n = Math.floor(c.sampleRate * 0.45), buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
     const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
     src.buffer = buf; f.type = 'bandpass'; f.Q.value = 1.4;
@@ -115,12 +118,13 @@ function fp(L) {
 /* ======================= GPU background ======================= */
 const cvs = $('#gl'), fx = $('#fx'), g2 = fx.getContext('2d');
 const gl = cvs.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance' });
-let DPR = 1, W = 1, H = 1, cssW = 1, cssH = 1, G = { s: 100, cx: 0, cy: 0 };
+let DPR = 1, W = 1, H = 1, cssW = 1, cssH = 1, G = { s: 100, cx: 0, cy: 0 }, V = { s: 100, cx: 0, cy: 0 };
 const FS = `#version 300 es
 precision highp float; precision highp int;
 uniform vec2 u_center; uniform float u_scale, u_time, u_flash; uniform int u_n; uniform vec4 u_b[10]; uniform float u_kind[10]; uniform vec3 u_sc[10];
 uniform vec3 u_acc, u_neb; uniform vec4 u_gw; uniform vec2 u_gw2;
 uniform int u_tn; uniform vec4 u_tg[6]; uniform vec3 u_tcol[6]; uniform float u_tr;
+uniform vec4 u_dent; uniform float u_dentA;
 out vec4 o;
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
@@ -195,12 +199,15 @@ void main(){
     col += mix(u_acc, u_neb, 0.5) * w * u_gw2.x * smoothstep(u_gw2.y * 0.6, u_gw2.y * 1.6, r) / (r + 0.35);
   }
   float phi = 0.0; vec3 light = vec3(0.0);
+  // the launcher's dent drags space toward the pull; the field lines are drawn in the dragged space
+  vec2 dq = p - u_dent.xy, pw = p - u_dent.zw * exp(-dot(dq, dq) / 0.05);
   for (int i = 0; i < 10; i++) {
     if (i >= u_n) break;
     vec4 b = u_b[i]; vec2 d = p - b.xy; float r = length(d);
+    float rw = length(pw - b.xy);
     if (u_kind[i] > 1.5) {
       float rs = b.w / 2.6, rin = 3.0 * rs, rout = 7.0 * rs;
-      phi += b.z / max(r - rs, 0.004);
+      phi += b.z / max(rw - rs, 0.004);
       // a thin accretion disk seen face on, from the innermost stable orbit (3 rs) outward.
       // Temperature follows the thin-disk law T ~ r^-3/4 (1 - sqrt(rin / r))^1/4, which peaks at r = 49/36 rin;
       // light climbing out of the well is redshifted by g = sqrt(1 - 3 rs / 2r); gas turns at the
@@ -216,7 +223,7 @@ void main(){
       }
       continue;
     }
-    phi += b.z / sqrt(r * r + 0.0004);
+    phi += b.z / sqrt(rw * rw + 0.0004);
     float core = 1.0 - smoothstep(b.w * 0.9, b.w, r);
     if (u_kind[i] > 0.5) {
       float sh = sqrt(max(0.0, 1.0 - r * r / (b.w * b.w)));
@@ -240,6 +247,12 @@ void main(){
   vec3 lc = dp < 0.5 ? mix(vec3(0.52, 0.38, 1.0), vec3(0.22, 0.86, 0.82), dp * 2.0) : mix(vec3(0.22, 0.86, 0.82), vec3(1.0, 0.8, 0.45), dp * 2.0 - 1.0);
   col += lc * line * (0.07 + 0.22 * smoothstep(0.0, 2.4, log(phi + 1.0)));
   col += u_acc * 0.028 * smoothstep(0.2, 3.0, phi) + light + vec3(0.55, 0.85, 1.0) * u_flash * 0.08;
+  // the dent itself: log-spaced rings of a small well, stretched with the sheet, and a faint dimple of shade
+  if (u_dentA > 0.0) {
+    vec2 qq = pw - u_dent.xy; float rr = length(qq), v2 = log(rr + 0.012) * 6.5, fw2 = max(fwidth(v2), 1e-4);
+    float rings = (1.0 - smoothstep(0.3, 1.25, abs(fract(v2) - 0.5) / fw2)) * clamp(0.2 / fw2, 0.0, 1.0) * smoothstep(0.4, 0.05, length(dq));
+    col = col * (1.0 - 0.35 * u_dentA * exp(-rr * rr / 0.004)) + u_acc * rings * 0.45 * u_dentA;
+  }
   col = col * shadow + vec3(1.0, 0.86, 0.68) * ring;
   // plates sit over the sky: darken beneath them, then lay the sand
   { vec3 pl = plates(p); float cover = 0.0;
@@ -255,13 +268,45 @@ if (gl) {
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, `#version 300 es
   void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`));
   gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
-  for (const n of ['u_center', 'u_scale', 'u_time', 'u_flash', 'u_n', 'u_b', 'u_kind', 'u_sc', 'u_acc', 'u_neb', 'u_gw', 'u_gw2', 'u_tn', 'u_tg', 'u_tcol', 'u_tr']) U[n] = gl.getUniformLocation(prog, n);
+  for (const n of ['u_center', 'u_scale', 'u_time', 'u_flash', 'u_n', 'u_b', 'u_kind', 'u_sc', 'u_acc', 'u_neb', 'u_gw', 'u_gw2', 'u_tn', 'u_tg', 'u_tcol', 'u_tr', 'u_dent', 'u_dentA']) U[n] = gl.getUniformLocation(prog, n);
   gl.bindVertexArray(gl.createVertexArray());
 }
 function geom() {
   // the 2 x 3.4 portrait arena, between the top bar and the bottom controls
   const top = CLIP ? 70 : 96, bottom = CLIP ? 60 : 70, s = Math.min((cssW - 12) / 2.1, (cssH - top - bottom) / 3.45);
   G = { s, cx: cssW / 2, cy: top + (cssH - top - bottom) / 2 };
+  setView();
+}
+/* ---- the camera ---- */
+// G is the layout (the arena at rest); V is what you see. The camera eases out when a throw heads far
+// away, so the comet and the whole level stay in frame, and glides back in as the comet falls home.
+// Zoom and pan follow first-order springs (they settle without overshooting, never with a jolt);
+// a close pass gets a short, gentle push-in. Only the view moves: the physics never sees the camera.
+function setView() { const c = S.cam || { z: 1, x: 0, y: 0 }; V = { s: G.s * c.z, cx: G.cx - c.x * G.s * c.z, cy: G.cy + c.y * G.s * c.z }; }
+function levelBox(L) {
+  let x0 = L.launch[0], x1 = x0, y0 = L.launch[1], y1 = y0;
+  const add = (x, y, r = 0) => { x0 = Math.min(x0, x - r); x1 = Math.max(x1, x + r); y0 = Math.min(y0, y - r); y1 = Math.max(y1, y + r); };
+  for (const t of L.targets) add(t[0], t[1], TR);
+  for (const b of L.bodies) b.orbit ? add(b.orbit.cx, b.orbit.cy, b.orbit.R + b.r) : add(b.x, b.y, b.r);
+  return [x0, x1, y0, y1];
+}
+function stepCamera(dt) {
+  const c = S.cam, L = level();
+  let zt = 1, xt = 0, yt = 0;
+  if (S.camShot) ({ z: zt, x: xt, y: yt } = S.camShot);
+  else {
+    let [x0, x1, y0, y1] = levelBox(L), out = false;
+    for (const k of S.comets) { if (!k.alive) continue; const m = 0.22; if (k.x - m < x0) x0 = k.x - m; if (k.x + m > x1) x1 = k.x + m; if (k.y - m < y0) y0 = k.y - m; if (k.y + m > y1) y1 = k.y + m; }
+    // the arena at rest shows about +/-hw by -hb..+ht in world units
+    const hw = (cssW / 2 - 8) / G.s, ht = (G.cy - 70) / G.s, hb = (cssH - G.cy - 20) / G.s;
+    const need = Math.max((x1 - x0) / (2 * hw), (y1 - y0) / (ht + hb), Math.max(-x0, x1) / hw, y1 / ht, -y0 / hb);
+    if (need > 1) { out = true; zt = Math.max(0.22, 1 / need); xt = (x0 + x1) / 2 * (1 - zt); yt = ((y0 + y1) / 2 - (ht - hb) / 2) * (1 - zt); }
+    // a close pass: lean in a little toward it, briefly
+    if (S.near && S.time - S.near.t < 0.9 && !S.ff) { const e = Math.sin(Math.PI * (S.time - S.near.t) / 0.9); zt *= 1 + 0.16 * e; xt += (S.near.x - xt) * 0.25 * e; yt += (S.near.y - yt) * 0.25 * e; }
+  }
+  const kz = 1 - Math.exp(-dt * (zt < c.z ? 3.2 : 1.4)), kp = 1 - Math.exp(-dt * 2.4);
+  c.z += (zt - c.z) * kz; c.x += (xt - c.x) * kp; c.y += (yt - c.y) * kp;
+  setView();
 }
 function resize() {
   if (CLIP) return;
@@ -270,24 +315,27 @@ function resize() {
   cvs.width = fx.width = W; cvs.height = fx.height = H;
   geom();
 }
-const toScr = (x, y) => [G.cx + x * G.s, G.cy - y * G.s];
+const toScr = (x, y) => [V.cx + x * V.s, V.cy - y * V.s];
 function renderGL() {
   if (!gl) return;
   const L = level(), B = L.bodies, n = Math.min(10, B.length), arr = new Float32Array(40), kind = new Float32Array(10), col = new Float32Array(30), th = world().theme;
   for (let i = 0; i < n; i++) { arr.set([S.P[i][0], S.P[i][1], B[i].m, B[i].r], i * 4); kind[i] = B[i].bh ? 2 : isMoon(B[i]) ? 1 : 0; col.set(L.cols[i], i * 3); }
   gl.viewport(0, 0, W, H); gl.useProgram(prog);
-  gl.uniform2f(U.u_center, G.cx * DPR, H - G.cy * DPR); gl.uniform1f(U.u_scale, G.s * DPR);
+  gl.uniform2f(U.u_center, V.cx * DPR, H - V.cy * DPR); gl.uniform1f(U.u_scale, V.s * DPR);
   gl.uniform1f(U.u_time, S.time % 1000); gl.uniform1f(U.u_flash, S.flash);
   gl.uniform1i(U.u_n, n); gl.uniform4fv(U.u_b, arr); gl.uniform1fv(U.u_kind, kind); gl.uniform3fv(U.u_sc, col);
   gl.uniform3fv(U.u_acc, hex(th.acc)); gl.uniform3fv(U.u_neb, hex(th.neb));
-  // Chladni plates are drawn by the shader: position, mode (or -1 for a cell), and time since hit
+  // Chladni plates are drawn by the shader: position, mode (or -1 once collected), and time since hit
   const tg = new Float32Array(24), tc = new Float32Array(18), nt = Math.min(6, L.targets.length);
   for (let i = 0; i < nt; i++) {
-    const o = S.tg[i] || { kind: 'cell', hit: -1 }, done = S.got[i] && o.hit < 0;
-    tg.set([L.targets[i][0], L.targets[i][1], o.kind === 'plate' && !done ? o.mode : -1, o.hit], i * 4);
+    const o = S.tg[i] || { hit: -1, mode: -1 }, done = S.got[i] && o.hit < 0;
+    tg.set([L.targets[i][0], L.targets[i][1], done ? -1 : o.mode, o.hit], i * 4);
     tc.set(hex(o.hue || '#ffffff'), i * 3);
   }
   gl.uniform1i(U.u_tn, nt); gl.uniform4fv(U.u_tg, tg); gl.uniform3fv(U.u_tcol, tc); gl.uniform1f(U.u_tr, TR);
+  // the launcher's dent: where it sits, how far it is pulled (in world units), and how strongly it shows
+  const off = dentOffset(), ready = !S.won && !S.replay && (S.aim || !S.comets.length);
+  gl.uniform4f(U.u_dent, L.launch[0], L.launch[1], off[0] / V.s, -off[1] / V.s); gl.uniform1f(U.u_dentA, CLIP && !ready ? 0.3 : ready ? 1 : 0.35);
   // a pair of stars sharing one orbit center radiates; its waves leave at a slow, visible "speed of light"
   const pair = B.map((b, i) => i).filter(i => B[i].star && B[i].orbit);
   if (pair.length >= 2) {
@@ -305,11 +353,12 @@ function load(i, replay) {
   const W = makeWorld(L);
   Object.assign(S, { W, tick: 0, acc: 0, ffK: 1, ff: false, comets: W.comets, ghosts: [], dust: [], sparks: [], waves: [], labels: [],
     got: W.got, order: [], shots: 0, score: 0, tricks: [], won: false, gold: null, aim: null, throws: [], replay: replay || null, flash: 0, hitStop: 0,
-    P: W.P, Q: W.Q, band: null, rewind: null, tg: makeTargets(L) });
+    P: W.P, Q: W.Q, band: null, rewind: null, tg: makeTargets(L), cam: { z: 1, x: 0, y: 0 }, camShot: null, near: null });
+  setView();
   if (!CLIP) {
     document.documentElement.style.setProperty('--accent', world().theme.acc);
     $('#lvname').textContent = `${L.li + 1}. ${L.name}`;
-    $('#winbar').hidden = true; $('#toast').hidden = true; $('#hintBtn').hidden = true; $('#speedBtn').hidden = false;
+    $('#winbar').hidden = true; $('#toast').hidden = true; $('#menu').hidden = true;
     $('#replayTag').hidden = !replay; $('#replayTag').textContent = replay && replay.hint ? 'Hint' : 'Replay';
     if (!world().daily) store.last = S.idx;
     save(); hudPips();
@@ -321,8 +370,6 @@ function hudPips() {
   const L = level(), p = $('#pips'); p.replaceChildren();
   L.targets.forEach((_, i) => { const d = document.createElement('span'); d.className = 'pip' + (S.got[i] ? ' on' : ''); d.style.setProperty('--pc', TH[i % TH.length]); p.append(d); });
   const s = document.createElement('span'); s.className = 'shots'; s.textContent = `${S.shots} · par ${L.par}`; p.append(s);
-  $('#skipBtn').hidden = S.won || !!S.replay || S.shots < L.par + 4;
-  $('#hintBtn').hidden = S.won || !!S.replay || S.shots < L.par + 2 || !L.sol;
 }
 
 /* ---- the title: the level name written in starlight, then released into the level's gravity ---- */
@@ -339,10 +386,10 @@ function titleCard() {
   for (let k = pts.length - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); [pts[k], pts[j]] = [pts[j], pts[k]]; }
   const cy = cssH * 0.4, th = world().theme, tint = hex(th.acc);
   const parts = pts.slice(0, 720).map(([px, py]) => {
-    const sx = px, sy = cy + py - h / 2, ax = (sx - G.cx) / G.s, ay = -(sy - G.cy) / G.s, sc = Math.random();
+    const sx = px, sy = cy + py - h / 2, ax = (sx - V.cx) / V.s, ay = -(sy - V.cy) / V.s, sc = Math.random();
     return { x: ax, y: ay, hx: ax, hy: ay, vx: 0, vy: 0, ox: (Math.random() - 0.5) * 0.5, oy: (Math.random() - 0.5) * 0.5, tw: Math.random() * 6.28, sc, alive: true };
   });
-  S.title = { parts, t0: S.time, released: false, eyebrow: `${S.replay ? (S.replay.hint ? 'Hint' : 'Replay') : world().daily ? 'Today' : world().name} · ${L.li + 1}`, par: `par ${L.par}`, tint };
+  S.title = { parts, t0: S.time, released: false, eyebrow: `${S.replay && !CLIP ? (S.replay.hint ? 'Hint' : 'Replay') : world().daily ? 'Today' : world().name} · ${L.li + 1}`, par: `par ${L.par}`, tint };
   if (!CLIP) document.body.classList.add('titling');
   // the italic face may still be loading on the very first level
   if (!CLIP && document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (S.title && !S.title.released && S.time - S.title.t0 < 0.6) titleCard(); });
@@ -424,7 +471,6 @@ function win(c) {
     if (S.idx === todayIdx()) { store.days = store.days || {}; store.days[dayNo()] = Math.max(store.days[dayNo()] || 0, rec.stars); }
     save();
   }
-  $('#hintBtn').hidden = true; $('#skipBtn').hidden = true;
 }
 
 /* ======================= simulation ======================= */
@@ -442,6 +488,8 @@ function tricks(c) {
       if (c.angs[k] != null) { let da = ang - c.angs[k]; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI; c.winds[k] += da; }
       c.angs[k] = ang;
       if (d < b.r * 1.45) c.close = true;
+      // a fast, close pass: the camera leans in and time breathes out for a moment
+      if (d < b.r * 1.7 && !S.ff && Math.hypot(c.vx, c.vy) > 0.7 && (!S.near || S.time - S.near.t > 2.5)) { S.near = { t: S.time, x: (c.x + p[0]) / 2, y: (c.y + p[1]) / 2 }; S.slow = 0.45; }
     }
     if (b.orbit && d < b.r * 4) far = false;
   }
@@ -473,8 +521,8 @@ function onHit(c, i) {
 function simulate(dt) {
   S.ffK += ((S.ff ? FF : 1) - S.ffK) * (1 - Math.exp(-dt * (S.ff ? 2.2 : 7)));
   S.flash *= Math.exp(-dt * 3);
-  const stop = S.hitStop > 0 ? 0.2 : 1; S.hitStop -= dt;
-  S.acc += dt * S.speed * S.ffK * stop * (S.won ? 0.3 : 1);
+  const stop = S.hitStop > 0 ? 0.2 : S.slow > 0 ? 0.45 : 1; S.hitStop -= dt; S.slow = (S.slow || 0) - dt;
+  S.acc += dt * (S.hold ? 6 : 1) * S.ffK * stop * (S.won ? 0.3 : 1);
   const L = level(), B = L.bodies, W = S.W;
   let n = 0;
   while (S.acc >= DT && n < 9000) {
@@ -494,10 +542,10 @@ function simulate(dt) {
     if (l.age > 0) { accel(B, S.P, l.x, l.y, a); l.vx += a[0] * dt * 0.06; l.vy += a[1] * dt * 0.06; l.x += l.vx * dt; l.y += l.vy * dt; } } }
   S.dust = S.dust.filter(p => p.age < p.life); S.sparks = S.sparks.filter(p => p.age < p.life);
   S.waves = S.waves.filter(w => w.age < 1); S.labels = S.labels.filter(l => l.age < 1.8);
-  stepTitle(dt); stepTargets(dt); stepBand(dt);
+  stepTitle(dt); stepTargets(dt); stepBand(dt); if (!CLIP) stepCamera(dt);
   // time speeds up once every comet still flying has gone stale (decided per step inside the physics)
   S.ff = !S.won && S.comets.length > 0 && S.comets.every(c => c.ff);
-  if (!CLIP) { const show = S.ffK > 1.6; if ($('#ff').hidden === show) $('#ff').hidden = !show; }
+  if (!CLIP) { const show = S.ffK > 1.6 || !!S.hold; if ($('#ff').hidden === show) $('#ff').hidden = !show; }
 }
 
 /* ---- comet tails, formed the way real ones are ---- */
@@ -533,128 +581,61 @@ function tails(dt, B) {
   }
 }
 
-/* ---- targets: two kinds of living pattern, alternating, each in its own color ---- */
-// A Chladni plate: sand on a vibrating drumhead gathers where the plate stays still, the nodal lines of the
-// mode J_n(k r) cos(n theta) = 0 (k a zero of the Bessel function J_n). Drawn in the sky shader.
-// A Morphogen cell: a dish of Gray-Scott chemistry, u' = Du lap u - u v^2 + f (1 - u), v' = Dv lap v + u v^2 - (f + k) v,
-// the same reaction as the Morphogen exhibit, run on a small wrap-around grid per cell and seen through a round window.
-const CELL_N = 30, CH_MODES = 6;
-function makeTargets(L) {
-  return L.targets.map((t, i) => {
-    const kind = (i + L.li) % 2 ? 'cell' : 'plate', o = { kind, hue: TH[i % TH.length], hit: -1, mode: (i * 2 + L.li) % CH_MODES };
-    if (kind === 'cell') {
-      const N = CELL_N; o.U = new Float32Array(N * N).fill(1); o.V = new Float32Array(N * N); o.U2 = new Float32Array(N * N); o.V2 = new Float32Array(N * N);
-      for (let s = 0; s < 6; s++) { const cx = Math.random() * N, cy = Math.random() * N; for (let j = -2; j <= 2; j++) for (let k = -2; k <= 2; k++) { const q = ((cy + j + N) % N | 0) * N + ((cx + k + N) % N | 0); o.U[q] = 0.5; o.V[q] = 0.25; } }
-      o.cv = document.createElement('canvas'); o.cv.width = o.cv.height = N; o.cx = o.cv.getContext('2d'); o.img = o.cx.createImageData(N, N);
-      for (let n = 0; n < 1500; n++) cellStep(o, 0.0367, 0.0649);
-      paintCell(o);
-    }
-    return o;
-  });
-}
-function cellStep(o, f, k) {
-  const N = CELL_N, U = o.U, V = o.V, U2 = o.U2, V2 = o.V2;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
-    // edges wrap around (a dish wall would feed the reaction and pile it into a ring)
-    const q = j * N + i, l = (j ? q - N : q + N * (N - 1)), r = (j < N - 1 ? q + N : i), a = (i ? q - 1 : q + N - 1), b = (i < N - 1 ? q + 1 : q - N + 1);
-    const lu = U[l] + U[r] + U[a] + U[b] - 4 * U[q], lv = V[l] + V[r] + V[a] + V[b] - 4 * V[q], uvv = U[q] * V[q] * V[q];
-    // Pearson's scaling of the diffusion rates, under which f = 0.0367, k = 0.0649 makes spots that divide
-    U2[q] = U[q] + 0.2097 * lu - uvv + f * (1 - U[q]);
-    V2[q] = V[q] + 0.105 * lv + uvv - (f + k) * V[q];
-  }
-  o.U = U2; o.U2 = U; o.V = V2; o.V2 = V;
-}
-function paintCell(o) {
-  const N = CELL_N, d = o.img.data, [hr, hg, hb] = hex(o.hue);
-  for (let q = 0; q < N * N; q++) {
-    const v = Math.min(1, o.V[q] * 3.4), w = Math.pow(v, 2.4), i = q * 4;
-    d[i] = (10 + 245 * (hr * v * 0.85 + w * 0.3)) | 0; d[i + 1] = (12 + 243 * (hg * v * 0.85 + w * 0.3)) | 0; d[i + 2] = (24 + 231 * (hb * v * 0.85 + w * 0.3)) | 0; d[i + 3] = 255;
-  }
-  o.cx.putImageData(o.img, 0, 0);
-}
+/* ---- targets: Chladni plates ---- */
+// Sand on a vibrating drumhead gathers where the plate stays still: the nodal lines of the mode
+// J_n(k r) cos(n theta) = 0, with k a zero of the Bessel function J_n so the rim never moves.
+// Each plate rings in its own mode and its own color. They are drawn in the sky shader.
+function makeTargets(L) { return L.targets.map((t, i) => ({ hue: TH[(i + L.li) % TH.length], hit: -1, mode: (i * 2 + L.li) % 6 })); }
 function targetHit(i, c) {
   const L = level(), o = S.tg[i], [tx, ty] = L.targets[i];
   o.hit = 0;
-  // sand thrown off the plate, or the cell's contents spilling out: grains of its color, falling in the real field
-  for (let k = 0; k < 46; k++) {
-    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * TR * 0.8, v = 0.15 + Math.random() * 0.45;
-    S.sparks.push({ x: tx + Math.cos(a) * r, y: ty + Math.sin(a) * r, vx: Math.cos(a) * v + c.vx * 0.2, vy: Math.sin(a) * v + c.vy * 0.2, life: 1 + Math.random() * 1.2, age: 0, col: k % 4 ? o.hue : '#fff6e6' });
+  // the sand is thrown off the plate: grains of its color, falling in the level's real field
+  for (let k = 0; k < 54; k++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * TR * 0.85, v = 0.12 + Math.random() * 0.45;
+    S.sparks.push({ x: tx + Math.cos(a) * r, y: ty + Math.sin(a) * r, vx: Math.cos(a) * v + c.vx * 0.2, vy: Math.sin(a) * v + c.vy * 0.2, life: 1 + Math.random() * 1.3, age: 0, col: k % 4 ? o.hue : '#fff6e6' });
   }
 }
-function stepTargets(dt) {
-  for (const o of S.tg) {
-    if (o.hit >= 0) o.hit += dt;
-    if (o.kind !== 'cell' || o.hit > 1.6) continue;
-    // alive, the cell keeps dividing; hit, it blooms (more feed), then dissolves (more kill)
-    const f = o.hit < 0 ? 0.0367 : o.hit < 0.5 ? 0.046 : 0.03, k = o.hit < 0 ? 0.0649 : o.hit < 0.5 ? 0.063 : 0.075;
-    for (let n = 0; n < (o.hit < 0 ? 3 : 8); n++) cellStep(o, f, k);
-    paintCell(o);
-  }
-}
+function stepTargets(dt) { for (const o of S.tg) if (o.hit >= 0) o.hit += dt; }
 function drawTargets(g, t) {
   const L = level();
   L.targets.forEach(([x, y], i) => {
     const o = S.tg[i]; if (!o) return;
-    const [sx, sy] = toScr(x, y), R = TR * G.s, gone = o.hit > 1.2;
-    if (gone || S.got[i] && o.hit < 0) {
+    const [sx, sy] = toScr(x, y), R = TR * V.s;
+    if (o.hit > 1.2 || S.got[i] && o.hit < 0) {
       // where it was: a faint ring in its color
       g.strokeStyle = rgba(o.hue, 0.3); g.lineWidth = 1; g.setLineDash([2, 4]); g.beginPath(); g.arc(sx, sy, R * 0.95, 0, 7); g.stroke(); g.setLineDash([]);
       return;
     }
-    const fade = o.hit < 0 ? 1 : clamp(1 - o.hit / 1.2, 0, 1);
-    const glow = g.createRadialGradient(sx, sy, R * 0.7, sx, sy, R * 2.2);
+    const fade = o.hit < 0 ? 1 : clamp(1 - o.hit / 1.2, 0, 1), glow = g.createRadialGradient(sx, sy, R * 0.7, sx, sy, R * 2.2);
     glow.addColorStop(0, rgba(o.hue, 0.2 * fade)); glow.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, R * 2.2, 0, 7); g.fill();
-    if (o.kind === 'cell') {
-      const grow = o.hit < 0 ? 1 : 1 + 0.35 * Math.sin(Math.min(1, o.hit / 0.5) * Math.PI / 2);
-      g.save(); g.globalAlpha = fade; g.beginPath(); g.arc(sx, sy, R * 0.92 * grow, 0, 7); g.clip();
-      g.imageSmoothingEnabled = true; g.drawImage(o.cv, sx - R * grow, sy - R * grow, 2 * R * grow, 2 * R * grow); g.restore();
-      g.strokeStyle = rgba(o.hue, 0.6 * fade); g.lineWidth = 1; g.beginPath(); g.arc(sx, sy, R * 0.92 * grow, 0, 7); g.stroke();
-    }
   });
 }
 
-/* ---- the slingshot: two prongs and an elastic band that obeys Hooke's law ---- */
-// While you pull, the band stretches and thins (its volume is kept, so width ~ 1 / sqrt(length)).
-// Let go and the pouch springs back as a damped oscillator, x'' = -k x - c x', ringing a few times at 6 Hz.
+/* ---- the launcher: a dent in spacetime ---- */
+// The comet waits in a small well of its own. Pulling back drags the well, like a weight on a rubber sheet:
+// the rings around it, and the level's own field lines nearby, stretch toward your finger (the shader displaces
+// space by the pull, fading as exp(-r^2 / s^2)). Let go and the sheet springs back as a damped oscillator,
+// x'' = -k x - c x', ringing a few times at 6 Hz.
 const BAND_K = Math.pow(2 * Math.PI * 6, 2), BAND_C = 2 * 0.11 * Math.sqrt(BAND_K);
 function stepBand(dt) {
   const b = S.band; if (!b) return;
   for (let k = 0; k < 4; k++) { const h = dt / 4; b.vx += (-BAND_K * b.x - BAND_C * b.vx) * h; b.vy += (-BAND_K * b.y - BAND_C * b.vy) * h; b.x += b.vx * h; b.y += b.vy * h; }
   if (Math.abs(b.x) + Math.abs(b.y) < 0.2 && Math.abs(b.vx) + Math.abs(b.vy) < 2) S.band = null;
 }
-// The slingshot itself: a Y-shaped frame and a band. Slack, the band hangs in a shallow catenary
-// (y = a cosh(x / a), sag set by its weight); pulled, it runs straight from each prong to the pouch.
-function drawSlingshot(g, t) {
-  const L = level(), [lx, ly] = toScr(L.launch[0], L.launch[1]), tipL = [lx - 17, ly - 5], tipR = [lx + 17, ly - 5], crotch = [lx, ly + 15], base = [lx, ly + 36];
-  // the frame: two arms meeting in a smooth crotch, and a handle; a dark core with a lit edge
-  const frame = () => { g.beginPath(); g.moveTo(tipL[0], tipL[1]); g.quadraticCurveTo(lx - 15, ly + 12, crotch[0], crotch[1]); g.quadraticCurveTo(lx + 15, ly + 12, tipR[0], tipR[1]); g.moveTo(crotch[0], crotch[1]); g.lineTo(base[0], base[1]); };
-  g.lineCap = 'round'; g.lineJoin = 'round';
-  g.strokeStyle = 'rgba(8,9,16,.9)'; g.lineWidth = 5.5; frame(); g.stroke();
-  g.strokeStyle = 'rgba(214,206,190,.95)'; g.lineWidth = 3.2; frame(); g.stroke();
-  g.strokeStyle = 'rgba(255,250,240,.55)'; g.lineWidth = 1; g.save(); g.translate(-0.8, -0.8); frame(); g.stroke(); g.restore();
-  for (const q of [tipL, tipR]) { g.fillStyle = 'rgba(232,226,212,1)'; g.beginPath(); g.arc(q[0], q[1], 2.6, 0, 7); g.fill(); }
-  // the band
-  const off = S.aim && !S.aim.cancel ? pullOffset(S.aim) : S.band ? [S.band.x, S.band.y] : [0, 0], stretch = Math.hypot(off[0], off[1]);
-  const pouch = [lx + off[0], ly + off[1]], acc = world().theme.acc;
-  for (const q of [tipL, tipR]) {
-    const len = Math.hypot(pouch[0] - q[0], pouch[1] - q[1]), w = 2.4 * Math.sqrt(18 / Math.max(len, 18));
-    const sag = Math.max(0, 3.5 - stretch * 0.25), mx = (q[0] + pouch[0]) / 2, my = (q[1] + pouch[1]) / 2 + sag;
-    g.strokeStyle = rgba(acc, 0.9); g.lineWidth = w; g.beginPath(); g.moveTo(q[0], q[1]); g.quadraticCurveTo(mx, my, pouch[0], pouch[1]); g.stroke();
-  }
-  // the pouch, turned across the pull, with the next comet sitting in it
-  const ang = stretch > 0.5 ? Math.atan2(off[1], off[0]) + Math.PI / 2 : 0;
-  g.save(); g.translate(pouch[0], pouch[1]); g.rotate(ang); g.fillStyle = 'rgba(70,58,48,1)'; g.strokeStyle = rgba(acc, 0.9); g.lineWidth = 1;
-  g.beginPath(); g.ellipse(0, 0, 7, 3.4, 0, 0, 7); g.fill(); g.stroke(); g.restore();
-  if (!S.won && !S.replay && !CLIP && (S.aim || !S.comets.length)) {
-    const gp = g.createRadialGradient(pouch[0], pouch[1] - 2, 0, pouch[0], pouch[1] - 2, 10);
-    gp.addColorStop(0, '#ffffff'); gp.addColorStop(0.35, 'rgba(200,230,255,.55)'); gp.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gp; g.beginPath(); g.arc(pouch[0], pouch[1] - 2, 10, 0, 7); g.fill();
-  }
+// the dent's pull, in screen pixels: the drag while aiming, the spring after release
+const dentOffset = () => S.aim && !S.aim.cancel ? pullOffset(S.aim) : S.band ? [S.band.x, S.band.y] : [0, 0];
+function drawLauncher(g) {
+  if (S.won || S.replay || CLIP || !(S.aim || !S.comets.length)) return;
+  // the next comet, resting where the sheet is pulled to
+  const L = level(), [lx, ly] = toScr(L.launch[0], L.launch[1]), off = dentOffset(), px = lx + off[0], py = ly + off[1];
+  const gp = g.createRadialGradient(px, py, 0, px, py, 12);
+  gp.addColorStop(0, '#ffffff'); gp.addColorStop(0.3, 'rgba(200,230,255,.55)'); gp.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gp; g.beginPath(); g.arc(px, py, 12, 0, 7); g.fill();
 }
 function pullOffset(A) {
   // the finger's drag, scaled down to the slingshot: full power stretches the band 70 px
-  const maxDrag = PULL * G.s / 0.55, dx = A.cx - A.sx, dy = A.cy - A.sy, l = Math.hypot(dx, dy), f = 70 / maxDrag * Math.min(1, maxDrag / Math.max(l, 1e-6));
+  const maxDrag = PULL * G.s / 0.55, dx = A.cx - A.sx, dy = A.cy - A.sy, l = Math.hypot(dx, dy), f = 56 / maxDrag * Math.min(1, maxDrag / Math.max(l, 1e-6));
   return [dx * f, dy * f];
 }
 
@@ -667,11 +648,11 @@ function spCol(v, a) {
 }
 const rgba = (h, a) => { const c = hex(h).map(v => Math.round(v * 255)); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
 function path(tr, a, b) { g2.beginPath(); for (let i = a; i < b; i++) { const [x, y] = toScr(tr[i][0], tr[i][1]); i === a ? g2.moveTo(x, y) : g2.lineTo(x, y); } }
-function preview(vx, vy) {
+function preview(vx, vy, dur = 3.2) {
   const L = level(), B = L.bodies, out = [], a = [0, 0, -1], h = 1 / 150, t0 = S.tick * DT;
   let x = L.launch[0], y = L.launch[1];
   const P = L.bodies.map(() => [0, 0]);
-  for (let s = 0; s < 3.2; s += h) {
+  for (let s = 0; s < dur; s += h) {
     B.forEach((b, i) => { const q = bodyPos(b, t0 + s); P[i][0] = q[0]; P[i][1] = q[1]; });
     accel(B, P, x, y, a); vx += a[0] * h * 0.5; vy += a[1] * h * 0.5; x += vx * h; y += vy * h;
     accel(B, P, x, y, a); vx += a[0] * h * 0.5; vy += a[1] * h * 0.5;
@@ -707,7 +688,7 @@ function draw() {
   for (const tr of S.ghosts) { path(tr, 0, tr.length); g.stroke(); }
   // every moving body keeps to a circle; a faint trace of it lets you read the timing
   g.setLineDash([2, 7]); g.strokeStyle = 'rgba(239,232,218,.13)';
-  for (const b of L.bodies) if (b.orbit) { const [ox, oy] = toScr(b.orbit.cx, b.orbit.cy); g.beginPath(); g.arc(ox, oy, b.orbit.R * G.s, 0, 7); g.stroke(); }
+  for (const b of L.bodies) if (b.orbit) { const [ox, oy] = toScr(b.orbit.cx, b.orbit.cy); g.beginPath(); g.arc(ox, oy, b.orbit.R * V.s, 0, 7); g.stroke(); }
   g.setLineDash([]);
   drawTargets(g, t);
   g.globalCompositeOperation = 'lighter';
@@ -761,7 +742,7 @@ function draw() {
   g.globalAlpha = 1;
   for (const w of S.waves) {
     const [sx, sy] = toScr(w.x, w.y), e = 1 - Math.pow(1 - w.age, 3);
-    g.strokeStyle = `rgba(${w.col},${(1 - w.age) * 0.7})`; g.lineWidth = 1.8; g.beginPath(); g.arc(sx, sy, (w.r0 + e * 0.34) * G.s, 0, 7); g.stroke();
+    g.strokeStyle = `rgba(${w.col},${(1 - w.age) * 0.7})`; g.lineWidth = 1.8; g.beginPath(); g.arc(sx, sy, (w.r0 + e * 0.34) * V.s, 0, 7); g.stroke();
   }
   // a win, drawn in the sky: the targets join into a constellation, stars and score glow above
   if (S.won) {
@@ -799,7 +780,7 @@ function draw() {
     g.save(); g.translate(G.cx + dx * k, G.cy + dy * k); g.rotate(Math.atan2(dy, dx)); g.fillStyle = 'rgba(255,244,226,.9)';
     g.beginPath(); g.moveTo(11, 0); g.lineTo(-6, -7); g.lineTo(-2, 0); g.lineTo(-6, 7); g.closePath(); g.fill(); g.restore();
   }
-  drawSlingshot(g, t);
+  drawLauncher(g);
   // first time only: a ghost finger showing the gesture
   if (!S.coached && !S.aim && !S.comets.length && !CLIP && (!S.title || S.title.released)) {
     const ph = (t % 2.6) / 2.6, pull = Math.sin(Math.min(1, ph / 0.7) * Math.PI / 2), fade = ph < 0.8 ? 1 : 1 - (ph - 0.8) / 0.2;
@@ -807,6 +788,13 @@ function draw() {
     g.strokeStyle = `rgba(239,232,218,${0.35 * fade})`; g.setLineDash([3, 5]); g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox, fy); g.stroke(); g.setLineDash([]);
     g.fillStyle = `rgba(239,232,218,${0.28 * fade})`; g.beginPath(); g.arc(ox, fy, 20, 0, 7); g.fill();
     g.strokeStyle = `rgba(239,232,218,${0.6 * fade})`; g.lineWidth = 1.5; g.beginPath(); g.arc(ox, fy, 20, 0, 7); g.stroke();
+  }
+  // after five misses, a throw that works shows as a faint path (unless hints are off in the menu)
+  if (store.hints !== false && L.sol && S.shots >= 5 && !S.won && !S.replay && !CLIP) {
+    const hp = preview(L.sol[0], L.sol[1], 7), a0 = clamp((S.shots - 4.5) * 2, 0, 1);
+    g.fillStyle = acc;
+    for (let i = 0; i < hp.length; i += 3) { const [sx, sy] = toScr(hp[i][0], hp[i][1]); g.globalAlpha = 0.28 * a0 * (1 - i / hp.length); g.beginPath(); g.arc(sx, sy, 1.4, 0, 7); g.fill(); }
+    g.globalAlpha = 1;
   }
   // aiming
   if (S.aim) {
@@ -839,8 +827,14 @@ function draw() {
 let pointer = null;
 const CANCEL_R = 34;
 cvs.addEventListener('contextmenu', e => e.preventDefault());
+// Gestures stay off the screen's edges, where the phone itself listens: swipe up for home, down for
+// notifications, in from the side to go back. A touch that starts there is left alone.
+const EDGE = 22;
+const nearEdge = e => e.clientX < EDGE || e.clientX > innerWidth - EDGE || e.clientY > innerHeight - 34;
+let lastTap = { t: -9, x: 0, y: 0 }, holdTimer = 0;
 cvs.addEventListener('pointerdown', e => {
   Sound.wake();
+  if (nearEdge(e)) return;
   if (S.won) { if (S.time - S.wonAt > 1.2 && !S.replay) next(); return; }
   // a second finger while aiming cancels the throw
   if (pointer !== null) { if (S.aim) S.band = { x: pullOffset(S.aim)[0], y: pullOffset(S.aim)[1], vx: 0, vy: 0 }; S.aim = null; pointer = null; buzz(6); return; }
@@ -848,12 +842,16 @@ cvs.addEventListener('pointerdown', e => {
   releaseTitle();
   cvs.setPointerCapture(e.pointerId);
   pointer = e.pointerId;
-  S.aim = { sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, v: [0, 0], path: [], cancel: true, moved: false };
+  S.aim = { sx: e.clientX, sy: e.clientY, cx: e.clientX, cy: e.clientY, v: [0, 0], path: [], cancel: true, moved: false, t0: performance.now() };
+  // a finger held still while a comet flies speeds time up until it lifts
+  clearTimeout(holdTimer);
+  if (S.comets.length) holdTimer = setTimeout(() => { if (S.aim && !S.aim.moved) { S.hold = true; buzz(6); } }, 220);
 });
 cvs.addEventListener('pointermove', e => {
   if (e.pointerId !== pointer || !S.aim) return;
   const A = S.aim; A.cx = e.clientX; A.cy = e.clientY;
   const was = A.cancel; A.cancel = Math.hypot(A.cx - A.sx, A.cy - A.sy) < CANCEL_R;
+  if (S.hold) { A.cancel = true; return; }
   if (!A.cancel) A.moved = true; else if (!was && A.moved) buzz(6);
   // a drag of about 40% of the arena height is full power; pulling back throws forward
   const k = 0.55 / G.s;
@@ -863,7 +861,14 @@ cvs.addEventListener('pointermove', e => {
 });
 const release = e => {
   if (e.pointerId !== pointer) return;
-  pointer = null; const A = S.aim; S.aim = null;
+  pointer = null; const A = S.aim; S.aim = null; clearTimeout(holdTimer);
+  if (S.hold) { S.hold = false; return; }
+  // two quick taps in about the same place start the level again
+  if (A && !A.moved && e.type === 'pointerup' && performance.now() - A.t0 < 300) {
+    const now = performance.now();
+    if (now - lastTap.t < 380 && Math.hypot(A.sx - lastTap.x, A.sy - lastTap.y) < 60) { lastTap.t = -9; restart(); return; }
+    lastTap = { t: now, x: A.sx, y: A.sy };
+  }
   if (A && !A.cancel) { const o = pullOffset(A); S.band = { x: o[0], y: o[1], vx: 0, vy: 0 }; }
   if (A && e.type === 'pointerup' && !A.cancel && Math.hypot(A.v[0], A.v[1]) > 0.06) fire(A.v[0], A.v[1]);
 };
@@ -872,16 +877,16 @@ document.addEventListener('gesturestart', e => e.preventDefault());
 window.addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R') restart();
   if (e.key === 'n' || e.key === 'N') next();
+  if (e.key === ' ') { e.preventDefault(); if (!e.repeat) S.hold = true; }
 });
+window.addEventListener('keyup', e => { if (e.key === ' ') S.hold = false; });
 
 /* ======================= buttons and sheets ======================= */
-const SPEEDS = [1, 2, 4];
 const next = () => {
   if (S.replay) load(S.idx);
   else if (world().daily) load(Math.min(store.last || 0, DAILY0 - 1));
   else load(S.idx + 1 >= ALL.length || isDaily(S.idx + 1) ? 0 : S.idx + 1);
 };
-$('#speedBtn').onclick = () => { S.speed = SPEEDS[(SPEEDS.indexOf(S.speed) + 1) % SPEEDS.length]; $('#speedBtn').textContent = S.speed + '×'; };
 // restart rewinds: leapfrog is time-reversible, so running a flight backward is just its own trail in reverse
 function restart() {
   const tr = S.comets.filter(c => c.trail && c.trail.length > 8).map(c => c.trail.slice());
@@ -889,13 +894,9 @@ function restart() {
   S.rewind = { tr, t0: S.time }; S.aim = null;
   Sound.tone(523.25, 0.3, 'sine', 0.03); Sound.tone(392, 0.3, 'sine', 0.03, 0.12);
 }
-$('#restartBtn').onclick = restart;
-$('#skipBtn').onclick = () => { store.skipped = [...new Set([...(store.skipped || []), level().gid])]; save(); next(); };
-$('#hintBtn').onclick = () => { const L = level(); if (L.sol) load(S.idx, { throws: [[0, L.sol[0], L.sol[1]]], hint: true }); };
+$('#skipBtn').onclick = () => { store.skipped = [...new Set([...(store.skipped || []), level().gid])]; save(); $('#menu').hidden = true; next(); };
 $('#menuBtn').onclick = () => { buildMenu(); $('#menu').hidden = false; };
 $('#closeMenu').onclick = () => $('#menu').hidden = true;
-$('#retryBtn').onclick = () => load(S.idx);
-$('#nextBtn').onclick = next;
 function toast(html, ms) {
   const t = $('#toast'); t.innerHTML = html; t.hidden = false;
   clearTimeout(toast.h); if (ms) toast.h = setTimeout(() => t.hidden = true, ms);
@@ -929,6 +930,9 @@ function buildMenu() {
     });
     sec.append(h, grid); box.append(sec);
   });
+  const hr = $('#hintRow'); hr.replaceChildren();
+  [[true, 'On'], [false, 'Off']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === (store.hints !== false))); b.onclick = () => { store.hints = id; save(); buildMenu(); }; hr.append(b); });
+  $('#skipBtn').disabled = S.won || !!S.replay;
   const r = $('#soundRow'); r.replaceChildren();
   [[true, 'On'], [false, 'Off']].forEach(([id, name]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pill'; b.textContent = name; b.setAttribute('aria-pressed', String(id === Sound.on)); b.onclick = () => { Sound.on = store.sound = id; save(); if (id) Sound.wake(); buildMenu(); }; r.append(b); });
 }
@@ -966,9 +970,13 @@ $('#shareBtn').onclick = async () => {
   try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link copied', 2500); } catch (e) { toast(url); }
 };
 
-/* ======================= video clips ======================= */
-// The run is replayed from its first step and rendered frame by frame into a
-// vertical 1080 x 1920 video, so nothing has to be recording while you play.
+/* ======================= highlight reels ======================= */
+// Not a screen recording: the run is replayed from its throws (bit for bit, so every shot is what really
+// happened), and a small director cuts it like a sports highlight. First a silent pass finds the moments:
+// the winning throw, each plate it rings, its close passes, the win. Then the film: the level's starlight
+// title, a jump to the winning throw, slow motion and a push-in on every hit, a lean-in on close passes,
+// quiet stretches run fast, and a pull-back over the gold path for the win. Sound is synthesized offline
+// to the same timeline. Everything renders here on the device; nothing is uploaded.
 let muxer = null;
 function loadMuxer() {
   if (window.Mp4Muxer) return Promise.resolve(window.Mp4Muxer);
@@ -977,6 +985,30 @@ function loadMuxer() {
     sc.onload = () => ok(window.Mp4Muxer); sc.onerror = () => { muxer = null; no(new Error('load')); }; document.head.append(sc);
   }));
 }
+// the silent pass: where are the moments, in physics steps?
+function scanRun(L, throws) {
+  const W = makeWorld(L), ev = { hits: [], passes: [], tf: throws.length ? throws[throws.length - 1][0] : 0, tw: -1 }, last = { t: -1e9 };
+  const H = {
+    hit: (c, i) => ev.hits.push({ tick: W.tick, i }),
+    track: c => {
+      for (let k = 0; k < L.bodies.length; k++) {
+        const b = L.bodies[k]; if (isMoon(b)) continue;
+        const dx = W.P[k][0] - c.x, dy = W.P[k][1] - c.y;
+        if (dx * dx + dy * dy < (b.r * 1.7) ** 2 && Math.hypot(c.vx, c.vy) > 0.7 && W.tick - last.t > 900) { last.t = W.tick; ev.passes.push({ tick: W.tick, x: (c.x + W.P[k][0]) / 2, y: (c.y + W.P[k][1]) / 2 }); }
+      }
+    },
+  };
+  const end = ev.tf + 600 * 90;
+  while (W.tick < end && !W.won) {
+    for (const q of throws) if (q[0] === W.tick) { for (const c of W.comets) c.alive = false; W.comets.push(newComet(W, q[1], q[2], 'n')); }
+    P_step(W, H);
+    if (W.tick > ev.tf && !W.comets.some(c => c.alive)) break;
+  }
+  if (W.won) ev.tw = W.tick;
+  ev.hits = ev.hits.filter(h => h.tick >= ev.tf); ev.passes = ev.passes.filter(p => p.tick >= ev.tf);
+  return ev;
+}
+const P_step = step;
 async function makeClip() {
   if (CLIP) return;
   if (!('VideoEncoder' in window)) { stillShot(); return; }
@@ -989,44 +1021,133 @@ async function makeClip() {
   }
   if (!cfg) { stillShot(); return; }
   let M; try { M = await loadMuxer(); } catch (e) { toast('Could not load the video tools. Check your connection.', 3500); return; }
-  const mux = new M.Muxer({ target: new M.ArrayBufferTarget(), video: { codec: kind, width: vw, height: vh, frameRate: fps }, fastStart: 'in-memory' });
-  let failed = null;
-  const enc = new VideoEncoder({ output: (ch, meta) => mux.addVideoChunk(ch, meta), error: e => failed = e });
+  const chunks = []; let failed = null;
+  const enc = new VideoEncoder({ output: (ch, meta) => chunks.push([ch, meta]), error: e => failed = e });
   enc.configure(cfg);
-  // set the game aside, render the replay at clip size, then put everything back
-  const keep = { S: { ...S }, DPR, W, H, cssW, cssH, G };
-  CLIP = true; Sound.mute = true;
+  const L0 = level(), throws = S.throws.map(q => q.slice()), ev = scanRun(L0, throws);
+  if (ev.tw < 0) { enc.close(); toast('Could not rebuild this run.', 3000); return; }
+  // set the game aside, render the reel at film size, then put everything back
+  const keep = { S: { ...S }, DPR, W, H, cssW, cssH, G, V };
+  CLIP = true; Sound.rec = { list: [], at: 0 };
   DPR = 2; cssW = vw / 2; cssH = vh / 2; W = vw; H = vh; cvs.width = fx.width = W; cvs.height = fx.height = H; geom();
   const out = document.createElement('canvas'); out.width = vw; out.height = vh; const oc = out.getContext('2d');
   S.time = 0;
-  load(keep.S.idx, { throws: keep.S.throws.map(q => q.slice()) });
+  load(keep.S.idx, { throws: throws.map(q => q.slice()) });
   const btn = $('#clipBtn'); btn.disabled = true;
+  const box = levelBox(L0), fitZ = bx => { const hw = (cssW / 2 - 8) / G.s, hh = (cssH / 2 - 60) / G.s; return clamp(Math.min(hw / Math.max(-bx[0], bx[1]), hh / Math.max(-bx[2], bx[3])), 0.22, 1.2); };
+  let rate = 1, f = 0, bars = 0, jumped = ev.tf < 120;
+  const frame = async (extra) => {
+    S.hitStop = 0;
+    renderGL(); draw();
+    oc.drawImage(cvs, 0, 0); oc.drawImage(fx, 0, 0);
+    // letterbox bars slide in for the slow-motion moments; a soft vignette throughout
+    if (bars > 0.01) { oc.fillStyle = '#000'; const bh = vh * 0.075 * bars; oc.fillRect(0, 0, vw, bh); oc.fillRect(0, vh - bh, vw, bh); }
+    const vg = oc.createRadialGradient(vw / 2, vh / 2, vh * 0.3, vw / 2, vh / 2, vh * 0.75); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.45)');
+    oc.fillStyle = vg; oc.fillRect(0, 0, vw, vh);
+    if (extra) extra(oc);
+    oc.font = '400 24px "IBM Plex Mono", ui-monospace, monospace'; oc.textAlign = 'center'; oc.fillStyle = 'rgba(239,232,218,.55)'; oc.fillText('areabake.com/phone', vw / 2, vh - 52);
+    const vf = new VideoFrame(out, { timestamp: Math.round(f * 1e6 / fps), duration: Math.round(1e6 / fps) });
+    enc.encode(vf, { keyFrame: f % 120 === 0 }); vf.close(); f++;
+    Sound.rec.at = f / fps;
+    while (enc.encodeQueueSize > 4) await new Promise(r => setTimeout(r, 2));
+    if (f % 20 === 0) { toast(`Cutting your highlight reel ${Math.min(99, Math.round(S.tick / Math.max(1, ev.tw) * 100))}%`); await new Promise(r => setTimeout(r, 0)); }
+  };
+  const advance = (simDt) => { S.time += simDt; simulate(simDt); stepCamera(1 / fps); };
   try {
-    for (let f = 0; f < fps * 75 && !failed; f++) {
-      S.time += 1 / fps; simulate(1 / fps); renderGL(); draw();
-      oc.drawImage(cvs, 0, 0); oc.drawImage(fx, 0, 0);
-      const vf = new VideoFrame(out, { timestamp: Math.round(f * 1e6 / fps), duration: Math.round(1e6 / fps) });
-      enc.encode(vf, { keyFrame: f % 120 === 0 }); vf.close();
-      while (enc.encodeQueueSize > 4) await new Promise(r => setTimeout(r, 2));
-      if (f % 20 === 0) { toast(`Making your video ${Math.round(Math.min(1, S.won ? (S.time - S.wonAt) / 3 : S.time / 40) * 100)}%`); await new Promise(r => setTimeout(r, 0)); }
-      if (S.won && S.time - S.wonAt > 3.2) break;
-      if (!S.won && !S.comets.length && S.replay && S.replay.throws.every(q => q.done) && S.time > 2) break;
+    // 1. the opening: the title in starlight over a wide view of the whole system
+    S.camShot = { z: Math.min(1, fitZ(box) * 0.92), x: 0, y: 0 }; S.cam.z = S.camShot.z;
+    // the clock holds while the name writes itself, then lets it fall into the level's wells
+    for (let k = 0; k < fps * 2.4 && !failed; k++) { S.time += 1 / fps; stepTitle(1 / fps); stepCamera(1 / fps); await frame(); }
+    releaseTitle();
+    // 2. straight to the winning throw
+    if (!jumped && S.tick < ev.tf - 240) { const n0 = Sound.rec.list.length; while (S.tick < ev.tf - 240) { S.time += 0.25; simulate(0.25); } Sound.rec.list.length = n0; S.sparks = []; S.dust = []; S.labels = []; S.waves = []; }
+    // 3. the flight, directed
+    let wonF = -1;
+    for (let k = 0; k < fps * 40 && !failed; k++) {
+      const tt = S.tick, hit = ev.hits.find(h => Math.abs(h.tick - tt) < 270), pass = ev.passes.find(p => Math.abs(p.tick - tt) < 300);
+      const nextEv = [...ev.hits.map(h => h.tick), ...ev.passes.map(p => p.tick), ev.tw].filter(x => x > tt).sort((a, b) => a - b)[0] ?? 1e9;
+      const prevEv = [ev.tf, ...ev.hits.map(h => h.tick), ...ev.passes.map(p => p.tick)].filter(x => x <= tt).sort((a, b) => b - a)[0] ?? ev.tf;
+      let want = 1, shot = null;
+      if (S.won) { want = 0.3; shot = null; }
+      else if (hit) { want = 0.28; const T = L0.targets[hit.i]; shot = { z: 1.55, x: T[0] * 0.85, y: T[1] * 0.85 }; }
+      else if (pass) { want = 0.5; shot = { z: 1.25, x: pass.x * 0.7, y: pass.y * 0.7 }; }
+      else if (nextEv - tt > 1500 && tt - prevEv > 900) want = 3.2;
+      rate += (want - rate) * 0.12; bars += ((hit || pass ? 1 : 0) - bars) * 0.08;
+      S.camShot = shot;
+      if (S.won && wonF < 0) wonF = f;
+      if (S.won && f - wonF > fps * 1.2) break;
+      advance(rate / fps); await frame();
+    }
+    // 4. the win: pull back over the gold path as the constellation draws, then the card
+    const gb = S.gold ? S.gold.reduce((b, p) => [Math.min(b[0], p[0]), Math.max(b[1], p[0]), Math.min(b[2], p[1]), Math.max(b[3], p[1])], [...box]) : box;
+    S.camShot = { z: fitZ(gb) * 0.95, x: 0, y: 0 };
+    for (let k = 0; k < fps * 3.2 && !failed; k++) {
+      bars += (0 - bars) * 0.08; advance(0.35 / fps);
+      const fade = clamp((k - fps * 2.7) / (fps * 0.5), 0, 1);
+      await frame(c => {
+        const a = clamp((k - fps * 0.9) / (fps * 0.6), 0, 1);
+        c.textAlign = 'center'; c.fillStyle = `rgba(239,232,218,${0.85 * a})`; c.font = '300 italic 84px "Cormorant Garamond", serif';
+        c.fillText(L0.name, vw / 2, vh * 0.8);
+        c.font = '500 22px "IBM Plex Mono", monospace'; c.fillStyle = `rgba(155,152,170,${a})`;
+        c.fillText(`${world().daily ? "TODAY'S SKY" : world().name.toUpperCase()} · ${L0.li + 1}`.split('').join(' '), vw / 2, vh * 0.8 + 56);
+        if (fade) { c.fillStyle = `rgba(0,0,0,${fade})`; c.fillRect(0, 0, vw, vh); }
+      });
     }
     if (!failed) await enc.flush();
   } finally {
     try { enc.close(); } catch (e) {}
-    CLIP = false; Sound.mute = false; btn.disabled = false;
-    Object.assign(S, keep.S); DPR = keep.DPR; W = keep.W; H = keep.H; cssW = keep.cssW; cssH = keep.cssH; G = keep.G;
+    const rec = Sound.rec; Sound.rec = null; CLIP = false; btn.disabled = false;
+    Object.assign(S, keep.S); DPR = keep.DPR; W = keep.W; H = keep.H; cssW = keep.cssW; cssH = keep.cssH; G = keep.G; V = keep.V;
     cvs.width = fx.width = W; cvs.height = fx.height = H; resize();
     last = performance.now();
+    makeClip.rec = rec;
   }
   if (failed) { toast('The video encoder stopped. Try again.', 3500); return; }
+  // the soundtrack: every noted sound, plus a low two-note drone, rendered offline and encoded as AAC where the device can
+  const dur = f / fps, audio = await renderReelAudio(makeClip.rec.list, dur);
+  // AAC where the device has it, Opus otherwise (both play inside an MP4); silent only if neither can encode
+  let aCfg = null, aKind = null;
+  if ('AudioEncoder' in window && audio) for (const [codec, k] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
+    const c = { codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 };
+    try { if ((await AudioEncoder.isConfigSupported(c)).supported) { aCfg = c; aKind = k; break; } } catch (e) {}
+  }
+  const aOK = !!aCfg;
+  const mux = new M.Muxer({ target: new M.ArrayBufferTarget(), video: { codec: kind, width: vw, height: vh, frameRate: fps },
+    ...(aOK ? { audio: { codec: aKind, numberOfChannels: 2, sampleRate: 48000 } } : {}), fastStart: 'in-memory' });
+  for (const [ch, meta] of chunks) mux.addVideoChunk(ch, meta);
+  if (aOK) {
+    const aenc = new AudioEncoder({ output: (ch, meta) => mux.addAudioChunk(ch, meta), error: () => {} });
+    aenc.configure(aCfg);
+    const L = audio.getChannelData(0), R = audio.getChannelData(1), n = 1024;
+    for (let i = 0; i < audio.length; i += n) {
+      const m = Math.min(n, audio.length - i), buf = new Float32Array(m * 2); buf.set(L.subarray(i, i + m), 0); buf.set(R.subarray(i, i + m), m);
+      const ad = new AudioData({ format: 'f32-planar', sampleRate: 48000, numberOfFrames: m, numberOfChannels: 2, timestamp: Math.round(i / 48000 * 1e6), data: buf });
+      aenc.encode(ad); ad.close();
+    }
+    await aenc.flush(); aenc.close();
+  }
   mux.finalize();
   const L = level(), name = `slingshot-${world().id}-${L.li + 1}.mp4`, blob = new Blob([mux.target.buffer], { type: 'video/mp4' });
   const file = new File([blob], name, { type: 'video/mp4' });
-  // sharing needs a fresh tap, so the finished video waits behind one
-  const t = toast('Your video is ready. <button type="button">Share or save</button>');
+  // sharing needs a fresh tap, so the finished reel waits behind one
+  const t = toast('Your highlight reel is ready. <button type="button">Share or save</button>');
   t.querySelector('button').onclick = () => shareFile(file, blob, name);
+}
+async function renderReelAudio(list, dur) {
+  if (!window.OfflineAudioContext) return null;
+  try {
+    const oac = new OfflineAudioContext(2, Math.ceil(dur * 48000), 48000), saved = Sound.ctx, on = Sound.on, mute = Sound.mute;
+    Sound.ctx = oac; Sound.on = true; Sound.mute = false;
+    for (const [kind, args, at] of list) { if (kind === 'tone') Sound.tone(args[0], args[1], args[2], args[3], at); else Sound.whoosh(args[0], at); }
+    // a drone on the world's two notes, a fifth apart, swelling in and out over the whole reel
+    for (const fq of [110, 164.81]) {
+      const o = oac.createOscillator(), g = oac.createGain(); o.type = 'sine'; o.frequency.value = fq;
+      g.gain.setValueAtTime(0, 0); g.gain.linearRampToValueAtTime(0.022, 1.5); g.gain.setValueAtTime(0.022, Math.max(1.6, dur - 1.2)); g.gain.linearRampToValueAtTime(0, dur);
+      o.connect(g).connect(oac.destination); o.start(0); o.stop(dur);
+    }
+    Sound.ctx = saved; Sound.on = on; Sound.mute = mute;
+    return await oac.startRendering();
+  } catch (e) { return null; }
 }
 // where video can't be made, the finished sky as a picture instead
 function stillShot() {
@@ -1064,8 +1185,7 @@ function loop(now) {
   const hc = !S.won && S.comets[0];
   Sound.hum(hc && S.ffK < 2 ? Math.hypot(hc.vx, hc.vy) : 0);
   if (S.won && $('#winbar').hidden && S.time - S.wonAt > 1.1) {
-    $('#winbar').hidden = false; $('#shareBtn').hidden = $('#clipBtn').hidden = !!S.replay; $('#speedBtn').hidden = true;
-    $('#nextBtn').setAttribute('aria-label', S.replay ? 'Play this level' : 'Next level');
+    $('#winbar').hidden = !!S.replay;
   }
   if (S.replay && !S.won && !S.comets.length && S.replay.throws.every(q => q.done)) load(S.idx);
 }

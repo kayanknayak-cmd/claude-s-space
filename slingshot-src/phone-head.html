@@ -30,15 +30,15 @@ button{font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;touch-
 
 /* top bar */
 .bar{position:fixed;left:0;right:0;top:0;padding:calc(var(--top) + 10px) max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));
-  display:grid;grid-template-columns:56px 1fr 56px;align-items:center;gap:8px;pointer-events:none}
+  display:flex;justify-content:center;pointer-events:none}
 .bar>*{pointer-events:auto}
 .round{appearance:none;width:52px;height:52px;border:0;background:none;padding:0;display:grid;place-items:center;cursor:pointer;color:var(--paper);
   opacity:.8;filter:drop-shadow(0 0 5px color-mix(in srgb,var(--accent) 60%,transparent));transition:opacity .2s,color .2s}
 .round:active{transform:scale(.92);opacity:1}
 .round svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round}
 .round svg .dot{fill:currentColor;stroke:none}
-.mid{display:grid;justify-items:center;gap:6px;pointer-events:none;text-align:center;min-width:0}
-.lvname{font:400 italic 22px/1 var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.mid{appearance:none;border:0;background:none;color:inherit;padding:6px 18px 10px;cursor:pointer;display:grid;justify-items:center;gap:6px;text-align:center;min-width:0;max-width:100%}
+.lvname{display:block;font:400 italic 22px/1 var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .pips{display:flex;gap:7px;align-items:center}
 .pip{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--pc,var(--accent));opacity:.85}
 .pip.on{background:var(--pc,var(--accent));box-shadow:0 0 10px var(--pc,var(--accent))}
@@ -86,7 +86,7 @@ a{color:var(--accent)}
 .lvname,.pips{transition:opacity .5s ease}
 body.titling .lvname,body.titling .pips{opacity:0}
 /* after a win: a row of quiet icons instead of a panel */
-.winbar{position:fixed;left:0;right:0;bottom:calc(var(--bot) + 22px);display:flex;justify-content:center;align-items:center;gap:14px;animation:fade .5s ease both}
+.winbar{position:fixed;left:50%;transform:translateX(-50%);top:226px;display:flex;justify-content:center;align-items:center;gap:22px;animation:fade .8s ease both}
 .winbar .round{width:56px;height:56px}
 /* the way on: a lit ring, like the photon ring around a black hole */
 .winbar .go{width:74px;height:74px;border-radius:50%;color:var(--accent);opacity:1;box-shadow:inset 0 0 0 1px var(--accent),0 0 18px color-mix(in srgb,var(--accent) 45%,transparent);
@@ -103,28 +103,14 @@ body.titling .lvname,body.titling .pips{opacity:0}
 <canvas id="fx" aria-hidden="true"></canvas>
 
 <div class="bar">
-  <button class="round" id="menuBtn" type="button" aria-label="Levels and settings">
-    <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-  </button>
-  <div class="mid"><div class="lvname" id="lvname"></div><div class="pips" id="pips"></div></div>
-  <button class="round" id="restartBtn" type="button" aria-label="Restart level">
-    <svg viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 4.5v4.2h4.2"/></svg>
-  </button>
+  <button class="mid" id="menuBtn" type="button" aria-label="Levels and settings"><span class="lvname" id="lvname"></span><span class="pips" id="pips"></span></button>
 </div>
 <div class="ff" id="ff" hidden aria-label="Fast-forward"><i></i><i></i><i></i></div>
 <div class="replay" id="replayTag" hidden>Replay</div>
-<button class="skip" id="skipBtn" type="button" hidden>Skip this level</button>
-<div class="corner">
-  <button class="round speed" id="speedBtn" type="button" aria-label="Speed of time">1×</button>
-</div>
-<button class="round hintb" id="hintBtn" type="button" hidden aria-label="Show me a throw that works">
-  <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>
-</button>
+<!-- after a win, two small glyphs sit in the sky under the score: tap anywhere else for the next level -->
 <div class="winbar" id="winbar" hidden>
-  <button class="round" id="retryBtn" type="button" aria-label="Play again"><svg viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 4.5v4.2h4.2"/></svg></button>
   <button class="round" id="shareBtn" type="button" aria-label="Share a replay link"><svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg></button>
-  <button class="round" id="clipBtn" type="button" aria-label="Save a video of this run"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3z"/></svg></button>
-  <button class="round go" id="nextBtn" type="button" aria-label="Next level"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+  <button class="round" id="clipBtn" type="button" aria-label="Make a highlight reel of this run"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3z"/></svg></button>
 </div>
 <div class="toast" id="toast" hidden aria-live="polite"></div>
 
@@ -134,8 +120,10 @@ body.titling .lvname,body.titling .pips{opacity:0}
       <button class="round" id="closeMenu" type="button" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <h1>Slingshot</h1>
     <div id="worlds" style="display:grid;gap:24px"></div>
+    <div><h2>Hints</h2><div class="row" id="hintRow"></div></div>
     <div><h2>Sound</h2><div class="row" id="soundRow"></div></div>
-    <p class="muted">Drag back anywhere and let go. Comets never stop on their own, so a throw that misses can loop around and come back for a double.</p>
+    <div class="row"><button class="pill" id="skipBtn" type="button">Skip this level</button></div>
+    <p class="muted">Drag back anywhere and let go. Comets never stop on their own, so a throw that misses can loop around and come back for a double. Hold a finger down to speed up time; tap twice to start the level again.</p>
     <p class="muted"><a href="https://areabake.com/" target="_blank" rel="noopener">More from areabake</a></p>
   </div>
 </div>
