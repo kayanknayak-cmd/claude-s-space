@@ -1,0 +1,43 @@
+// Every model the game uses: key -> [kit/file, scale, role, options].
+// role: char (animated person), food (throwable), plate (dynamic, can smash), prop (dynamic),
+// static (fixed collider), deco (no collider). Colliders are fitted boxes unless shape is 'cyl' or ball is set.
+export const CAT = {
+  chef:    ['chars/character-male-e', 1, 'char'],
+  cop:     ['chars/character-male-c', 1, 'char'],
+  beard:   ['chars/character-male-b', 1, 'char'],
+  suit:    ['chars/character-male-d', 1, 'char'],
+  bun:     ['chars/character-female-b', 1, 'char'],
+  curls:   ['chars/character-female-f', 1, 'char'],
+
+  burger:     ['food/burger', .8, 'food', { shape: 'cyl' }],
+  pizza:      ['food/pizza', .55, 'food', { shape: 'cyl' }],
+  donut:      ['food/donut-sprinkles', 1.2, 'food', { shape: 'cyl' }],
+  fries:      ['food/fries', .95, 'food'],
+  watermelon: ['food/watermelon', .8, 'food', { ball: 1, density: 1.4 }],
+  apple:      ['food/apple', 1.1, 'food', { ball: 1 }],
+  cupcake:    ['food/cupcake', .75, 'food', { shape: 'cyl' }],
+  hotdog:     ['food/hot-dog', .7, 'food'],
+  cake:       ['food/cake', .6, 'food', { shape: 'cyl', density: 1.5 }],
+
+  plate:      ['food/plate', .45, 'plate', { shape: 'cyl', density: 2.5 }],
+  plateBroke: ['food/plate-broken', .45, 'deco'],
+  mug:        ['food/mug', .75, 'prop', { shape: 'cyl' }],
+  can:        ['food/soda-can', .7, 'prop', { shape: 'cyl', density: .6 }],
+  barrel:     ['food/barrel', .62, 'prop', { density: .8 }],
+  crate:      ['arena/block', .42, 'prop', { density: 1.2 }],
+  plank:      ['skate/plank', 1.1, 'prop', { density: 1.2 }],
+  pallet:     ['skate/pallet', .8, 'prop', { density: 1 }],
+
+  table:    ['skate/structure-platform', .5, 'static'],
+  bigtable: ['skate/structure-wood-platform', .6, 'static'],
+  bench:    ['skate/bench', .75, 'static'],
+  register: ['market/cash-register', .6, 'static'],
+  fruit:    ['market/display-fruit', .8, 'static'],
+  shelf:    ['market/shelf-boxes', 1.1, 'static'],
+  column:   ['arena/column', 1.2, 'static'],
+  wall:     ['market/wall', 1.2, 'deco'],
+  wallwin:  ['market/wall-window', 1.2, 'deco'],
+  floor:    ['market/floor', 1.2, 'deco'],
+  floorwood:['skate/floor-wood', 1.2, 'deco'],
+  tree:     ['forest/tree', 1, 'deco'],
+};

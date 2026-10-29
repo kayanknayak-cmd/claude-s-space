@@ -1,0 +1,80 @@
+<title>Dinner Rush</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet">
+<style>
+  /* The diner keeps one palette in light and dark mode: it is a lit room, not a document. */
+  :root { --ink: #3a2a22; --paper: #fff4e2; --sky: #f1d7b3; --tomato: #e4572e; --mustard: #f2b134; --mint: #4fb39a; --shade: rgba(58, 42, 34, .22); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink: #3a2a22; --paper: #fff4e2; --sky: #f1d7b3; } }
+  :root[data-theme="dark"] { --ink: #3a2a22; --paper: #fff4e2; --sky: #f1d7b3; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sky); color: var(--ink);
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    font-family: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif; }
+  canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  #top { position: fixed; left: 0; right: 0; top: env(safe-area-inset-top); padding: 14px 16px; display: flex;
+    justify-content: space-between; align-items: center; pointer-events: none; }
+  #top > * { pointer-events: auto; }
+  .tag { background: var(--paper); border-radius: 14px; padding: 7px 14px 8px; font-size: 18px; letter-spacing: .3px;
+    box-shadow: 0 3px 0 var(--shade); transform: rotate(-1.5deg); }
+  .tag b { color: var(--tomato); font-weight: normal; margin-right: 6px; }
+  .round { width: 44px; height: 44px; border-radius: 50%; background: var(--paper); box-shadow: 0 3px 0 var(--shade);
+    display: grid; place-items: center; }
+  .round svg { width: 22px; height: 22px; }
+  #card { position: fixed; inset: 0; display: grid; place-items: end center; padding-bottom: calc(40px + env(safe-area-inset-bottom));
+    pointer-events: none; }
+  #card[hidden], #menu[hidden] { display: none; }
+  #card .row { display: flex; gap: 14px; pointer-events: auto; animation: rise .35s cubic-bezier(.2, 1.6, .4, 1) both; }
+  .big { width: 74px; height: 74px; border-radius: 22px; background: var(--paper); box-shadow: 0 5px 0 var(--shade);
+    display: grid; place-items: center; }
+  .big svg { width: 34px; height: 34px; }
+  .big.go { background: var(--tomato); color: var(--paper); width: 96px; }
+  .big:active, .round:active, .tag:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--shade); }
+  @keyframes rise { from { transform: translateY(40px) scale(.8); opacity: 0; } }
+  #menu { position: fixed; inset: 0; background: rgba(58, 42, 34, .35); display: grid; place-items: center; }
+  #menu .sheet { background: var(--paper); border-radius: 24px; padding: 18px; width: min(320px, calc(100vw - 32px));
+    box-shadow: 0 6px 0 var(--shade); transform: rotate(-.8deg); }
+  #menu .lv { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 8px; border-radius: 12px; font-size: 20px; text-align: left; }
+  #menu .lv:active { background: rgba(58, 42, 34, .08); }
+  #menu .lv i { font-style: normal; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--sky); font-size: 17px; }
+  #menu .lv.done i { background: var(--mint); color: var(--paper); }
+  #hint { position: fixed; left: 50%; top: 66%; width: 46px; height: 46px; margin: -23px; border-radius: 50%;
+    border: 4px solid var(--ink); background: rgba(255, 244, 226, .7); pointer-events: none; animation: pull 2.4s ease-in-out infinite; }
+  #hint[hidden] { display: none; }
+  @keyframes pull { 0%, 12% { transform: translate(0, 0) scale(1.2); opacity: 0; } 25% { transform: translate(0, 0) scale(1); opacity: 1; }
+    70% { transform: translate(-60px, 90px); opacity: 1; } 85%, 100% { transform: translate(-60px, 90px) scale(1.3); opacity: 0; } }
+  #load { position: fixed; inset: 0; display: grid; place-items: center; background: var(--sky); font-size: 30px; transition: opacity .4s; }
+  #load.gone { opacity: 0; pointer-events: none; }
+  #load span { display: inline-block; animation: bob 1s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { #hint, #load span, #card .row { animation-duration: 0s; animation-iteration-count: 1; } }
+  @keyframes bob { 50% { transform: translateY(-6px) rotate(-3deg); } }
+</style>
+<canvas id="c"></canvas>
+<div id="top">
+  <button id="name" class="tag" aria-label="Levels"><b>1</b><span>Dinner Rush</span></button>
+  <button id="redo" class="round" aria-label="Restart">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.6-5.7"/><path d="M4 4.5v4h4"/></svg>
+  </button>
+</div>
+<div id="hint" hidden></div>
+<div id="card" hidden>
+  <div class="row">
+    <button id="again" class="big" aria-label="Retry"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.6-5.7"/><path d="M4 4.5v4h4"/></svg></button>
+    <button id="replay" class="big" aria-label="Replay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3z"/></svg></button>
+    <button id="next" class="big go" aria-label="Next level"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+  </div>
+</div>
+<div id="menu" hidden><div class="sheet" id="levels"></div></div>
+<div id="load"><span>Dinner Rush</span></div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+  "rapier": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.14.0/rapier.es.js"
+} }
+</script>
+<script type="module">
+/*GAME*/
+</script>

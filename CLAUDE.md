@@ -5,7 +5,7 @@
 > rejected idea, a gotcha, a new feature), update this file in the same session and commit it, so the next session
 > starts where you stopped. Keep it accurate: delete what stops being true instead of piling on.
 
-Home of **areabake** (`areabake.html`, `site/`), **Slingshot for phones** (`slingshot-phone.html`), its light sibling
+Home of **areabake** (`areabake.html`, `site/`), **Dinner Rush** (`rush.html`, from `rush-src/`), **Slingshot for phones** (`slingshot-phone.html`), its light sibling
 **Bonk** (`bonk.html`) and the **Epicycle Machine** (`epicycles.html`). Both games build from `slingshot-src/`.
 
 ## Working with the owner
@@ -19,13 +19,14 @@ Home of **areabake** (`areabake.html`, `site/`), **Slingshot for phones** (`slin
 - Keep this file updated whenever something new is learned.
 - End every message with links to the artifacts:
   - areabake: https://claude.ai/artifact/QyKjViaYyb2G7wT2udgsAK
+  - Dinner Rush: https://claude.ai/artifact/XzoTPw9deyYhUnD5horq9m
   - Slingshot for phones: https://claude.ai/artifact/K2qhs1tpJsR69gPuAXwpze
   - Bonk: https://claude.ai/artifact/9d6V9nGLmcLCuzgeHDEhSf
   - (optional) Target Studies demo, the target-design comparison: https://claude.ai/artifact/5ipNRWvbJN68hraRoE2xKr
 - Edit and republish the artifacts only. Never push to Base44 (areabake.com) unless the owner explicitly asks.
   `.claude/settings.json` allows the Base44 MCP tools for when they do.
 
-## Third game (decided Oct 29, not started)
+## Dinner Rush, the third game (started Oct 29)
 - Owner's verdict: Slingshot and Bonk look AI (art, motion and feel, menus and UI), and adding features didn't fix it.
   The owner wants a human-made feel.
 - A brand new third game. Slingshot and Bonk stay as they are.
@@ -42,7 +43,36 @@ Home of **areabake** (`areabake.html`, `site/`), **Slingshot for phones** (`slin
   - mini-characters GLBs are rigged (6 bones: legs, torso, arms, head) with 32 hand-made animations (idle, walk,
     jump, fall, sit, die, emote-yes, emote-no, pick-up, kicks...). Other kits are static meshes.
 - Concepts pitched Oct 29: Dinner Rush (food fight), Bail (skate ragdoll), Wreck Day (tiny demolition), Island
-  Bowling (hex). The owner liked all four and asked which Claude can execute best; Claude recommended Dinner Rush.
+  Bowling (hex). The owner liked all four; Claude recommended Dinner Rush and the owner agreed. Bail is the natural
+  later mode (same rigged characters), but ragdoll feel can't be tuned without a phone.
+- The owner will add any Kenney pack on request (they have the whole library). Worth asking for: Furniture Kit
+  (diner tables, chairs, counters), Impact Sounds and Interface Sounds (real audio), UI Pack (buttons).
+- Design: a cut-away diner several storeys tall (portrait first), chef bottom left. Drag back and release to throw
+  the next food from a fixed queue. Each customer's hand-drawn bubble shows the food they want; it counts when
+  that food comes within reach (CATCH 0.44 of their chest), including food knocked off a balcony. Wrong food gets
+  a head shake. Plates smash on hard hits. Everyone's head follows the flying food.
+- Feel: hit-stop on catch and smash, camera shake, squash pulse, puffs, slow motion on the winning catch,
+  synthesized sounds, the last throw's dashed path stays, a win card (retry, replay, next) and a half-speed replay.
+- Levels (3 so far): Table for one, Top shelf (knock the watermelon off a balcony onto him), Rush hour.
+
+### Dinner Rush code
+- `rush-src/` is the source; `rush.html` (repo root) is build output, never edit it.
+  - `catalog.mjs` (model key, file, scale, role, collider), `sim.mjs` (Rapier world and rules, shared with Node),
+    `levels.mjs`, `game.js` (three.js renderer, input, sound, feel), `head.html` (shell, CSS, import map).
+  - `assets/` holds only the Kenney GLBs and colormaps the catalog uses, plus the CC0 license.
+  - `node build.mjs` embeds models and textures (GLB image URIs are rewritten to `tex-<kit>.png`) and writes
+    `rush.html` and `hulls.json` (model bounds; gitignored).
+  - Libraries load from jsdelivr: three@0.169.0, @dimforge/rapier3d-compat@0.14.0.
+- Tools (Rapier for Node: `cd rush-src/tools && npm i`):
+  - `node tools/solve.mjs [i]` searches throws and prints a winning hint. Slow on multi-customer levels.
+  - `node tools/reach.mjs i` gives each customer's share of throws that feed them.
+  - `node tools/shot.mjs i [w h]` screenshots the real page (HINT='[[vx,vy]]' plays throws). Playwright needs the
+    proxy (`https_proxy`) to reach the CDN.
+- Physics facts:
+  - Throws are rounded to 0.01 so hints replay exactly. Node and the browser agree (a Node hint wins in Chromium).
+  - Rapier convex hulls let thin plates sink into each other; colliders are fitted boxes, cylinders and balls.
+  - G = -13, VMAX = 10, DT = 1/120, and 240 settle steps before play.
+- Artifact: https://claude.ai/artifact/XzoTPw9deyYhUnD5horq9m (no capabilities). Publish `rush.html` to that url.
 - Old Slingshot and Bonk rules (no rubble, no moving bodies, no Y slingshot) don't automatically apply here.
 
 ## The two games (direction as of Oct 28)
