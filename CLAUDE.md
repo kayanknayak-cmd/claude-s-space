@@ -38,6 +38,11 @@ Home of **areabake** (`areabake.html`, `site/`), **Slingshot for phones** (`slin
     mini-market, mini-skate, modular-space, racing, space-station, train, watercraft (about 1,250 models).
   - 2D: physics-assets (wood, stone, glass, metal blocks), tiny-city, tiny-factory, skyboxes, input-prompts.
   - Missing: no audio packs, no UI pack. Ask the owner before relying on anything not listed here.
+  - The owner confirmed 21 is the full set; sounds get made in code.
+  - mini-characters GLBs are rigged (6 bones: legs, torso, arms, head) with 32 hand-made animations (idle, walk,
+    jump, fall, sit, die, emote-yes, emote-no, pick-up, kicks...). Other kits are static meshes.
+- Concepts pitched Oct 29: Dinner Rush (food fight), Bail (skate ragdoll), Wreck Day (tiny demolition), Island
+  Bowling (hex). The owner liked all four and asked which Claude can execute best; Claude recommended Dinner Rush.
 - Old Slingshot and Bonk rules (no rubble, no moving bodies, no Y slingshot) don't automatically apply here.
 
 ## The two games (direction as of Oct 28)
