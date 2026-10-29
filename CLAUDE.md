@@ -31,9 +31,13 @@ Home of **areabake** (`areabake.html`, `site/`), **Slingshot for phones** (`slin
 - A brand new third game. Slingshot and Bonk stay as they are.
 - Copy what made Angry Birds viral (instant readable goal, satisfying physical destruction, short levels, one more
   try), but not its plot or general idea. It can be 3D.
-- Art: Kenney CC0 packs (the owner downloaded about 100). Use the owner's packs before asking for more.
-  - As of Oct 29 none are in the repo, Drive or a connected computer, and kenney.nl is blocked (403) from the
-    container, so the owner has to push the chosen packs to the repo.
+- Art: Kenney CC0 packs, uploaded by the owner as 21 zips (about 85 MB) at the repo root of branch
+  `claude/serene-rubin-bnqy4l` (commits "Add files via upload"). Always `git fetch` that branch before saying
+  assets are missing (a session once wrongly reported them absent).
+  - 3D (GLB): building, car, coaster, factory 3.0, food, hexagon, mini-arena, mini-characters, mini-forest,
+    mini-market, mini-skate, modular-space, racing, space-station, train, watercraft (about 1,250 models).
+  - 2D: physics-assets (wood, stone, glass, metal blocks), tiny-city, tiny-factory, skyboxes, input-prompts.
+  - Missing: no audio packs, no UI pack. Ask the owner before relying on anything not listed here.
 - Old Slingshot and Bonk rules (no rubble, no moving bodies, no Y slingshot) don't automatically apply here.
 
 ## The two games (direction as of Oct 28)
