@@ -25,6 +25,17 @@ Home of **areabake** (`areabake.html`, `site/`), **Slingshot for phones** (`slin
 - Edit and republish the artifacts only. Never push to Base44 (areabake.com) unless the owner explicitly asks.
   `.claude/settings.json` allows the Base44 MCP tools for when they do.
 
+## Third game (decided Oct 29, not started)
+- Owner's verdict: Slingshot and Bonk look AI (art, motion and feel, menus and UI), and adding features didn't fix it.
+  The owner wants a human-made feel.
+- A brand new third game. Slingshot and Bonk stay as they are.
+- Copy what made Angry Birds viral (instant readable goal, satisfying physical destruction, short levels, one more
+  try), but not its plot or general idea. It can be 3D.
+- Art: Kenney CC0 packs (the owner downloaded about 100). Use the owner's packs before asking for more.
+  - As of Oct 29 none are in the repo, Drive or a connected computer, and kenney.nl is blocked (403) from the
+    container, so the owner has to push the chosen packs to the repo.
+- Old Slingshot and Bonk rules (no rubble, no moving bodies, no Y slingshot) don't automatically apply here.
+
 ## The two games (direction as of Oct 28)
 - **Slingshot** (night): Morphogen's Specimen palette, a still, real night sky (jittered stars, Milky Way band).
 - **Bonk** (light, playful, 3D-ish, inspired by Totally Accurate Battle Simulator): free to experiment, but only in Bonk.
@@ -112,7 +123,7 @@ Whenever the owner asks for improvements, put these first on the list. Bonk alre
     `{"downloads":true,"db":{"rules":[{"path":"runs","read":"view","write":"owner"},{"path":"runs/{self}","read":"view","write":"interact"}]},"user":{"scopes":["profile"]}}`
     (omit `capabilities` on a redeploy to keep them).
   - Slingshot: its own link, with `{"downloads":true}`.
-- Git: develop on `claude/serene-rubin-bnqy4l`. As of Oct 29 it is the repo's only branch (there is no main), so a
+- Git: each session gets its own `claude/...` branch. There is no main branch (as of Oct 29), so a
   pull request can't be opened until the owner creates a base branch.
 
 ## Technical facts worth knowing
