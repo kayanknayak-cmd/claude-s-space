@@ -1,5 +1,5 @@
 const OUT = process.env.OUT || require('os').tmpdir();
-const fs=require('fs'); const src=fs.readFileSync('/home/user/claude-s-space/'+(process.argv[2]||'slingshot-phone')+'.html','utf8');
+const fs=require('fs'); const src=fs.readFileSync('/home/user/claude-s-space/slingshot/'+(process.argv[2]||'slingshot-phone')+'.html','utf8');
 fs.writeFileSync(OUT+'/ph.html',`<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'><style>body{margin:0}[hidden]{display:none!important}</style></head><body>${src}</body></html>`);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 (async()=>{

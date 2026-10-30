@@ -74,8 +74,8 @@ const DAILYW = ({ id: 'd', name: 'Today', daily: true,
   levels: spare.map((L, i) => exact({ name: STARS[i % STARS.length] + (i >= STARS.length ? ' ' + (1 + Math.floor(i / STARS.length)) : ''), par: L.par, launch: L.launch, bodies: L.bodies, targets: L.targets, sol: L.sol, win: L.win })) });
 // two games: the night one (Slingshot) and the toy one (Bonk), each with its own worlds and store
 const GAMES = [
-  { theme: 'night', out: '/home/user/claude-s-space/slingshot-phone.html', worlds: [W_FIRST, W_TWO, W_BH, DAILYW] },
-  { theme: 'toy', out: '/home/user/claude-s-space/bonk.html', worlds: [W_FIRST, W_TWO, W_CL, W_TRI, W_BH, DAILYW] },
+  { theme: 'night', out: '/home/user/claude-s-space/slingshot/slingshot-phone.html', worlds: [W_FIRST, W_TWO, W_BH, DAILYW] },
+  { theme: 'toy', out: '/home/user/claude-s-space/slingshot/bonk.html', worlds: [W_FIRST, W_TWO, W_CL, W_TRI, W_BH, DAILYW] },
 ];
 const head = fs.readFileSync('phone-head.html', 'utf8'), script = fs.readFileSync('phone-script.js', 'utf8'), toyCss = fs.readFileSync('toy.css', 'utf8');
 const phys = fs.readFileSync('phys.js', 'utf8').replace(/\nif \(typeof module[^\n]*\n?$/, '\n');

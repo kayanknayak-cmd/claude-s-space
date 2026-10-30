@@ -2,7 +2,7 @@
 
 Small things built for fun.
 
-## areabake (`areabake.html`)
+## areabake (`areabake/areabake.html`)
 
 Fresh math, baked on your GPU. Each exhibit takes a region of the plane or of space and bakes it into an image, live, with WebGL 2. It's one HTML file with no server and no build step.
 
@@ -12,6 +12,6 @@ Fresh math, baked on your GPU. Each exhibit takes a region of the plane or of sp
 
 A small legend in each exhibit shows what the mouse buttons and wheel do. Keys: `1` `2` `3` switch exhibits and `H` hides the interface. In Slingshot, `R` restarts and `N` skips a level. In the Attractor, `[` and `]` change system and `Space` scatters the swarm.
 
-## Epicycle Machine (`epicycles.html`)
+## Epicycle Machine (`epicycles/epicycles.html`)
 
 Draw a closed loop and watch a chain of Fourier circles redraw it.

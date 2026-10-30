@@ -1,6 +1,6 @@
 const OUT = process.env.OUT || require('os').tmpdir();
 // full-size reels are too slow for the container's software GL, so this renders them at 270x480
-{ const fs=require('fs'); const src=fs.readFileSync('/home/user/claude-s-space/bonk.html','utf8').replace('const vw = 1080, vh = 1920, fps = 60;','const vw = 270, vh = 480, fps = 60;');
+{ const fs=require('fs'); const src=fs.readFileSync('/home/user/claude-s-space/slingshot/bonk.html','utf8').replace('const vw = 1080, vh = 1920, fps = 60;','const vw = 270, vh = 480, fps = 60;');
   fs.writeFileSync(OUT+'/bk-small.html',`<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'><style>body{margin:0}[hidden]{display:none!important}</style></head><body>${src}</body></html>`); }
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 (async()=>{ const b=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
