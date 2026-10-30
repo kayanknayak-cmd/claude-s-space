@@ -1,6 +1,6 @@
 # Racer (working name), the fourth game
 
-Started Oct 30. Status: no code yet. Assets verified Oct 30; next step is clarifying questions, then building.
+Started Oct 30. Status: no code yet. Assets verified and questions answered Oct 30; ready to build when the owner says go.
 
 ## Decisions so far
 - Owner asked for a racing game (Oct 30). Chosen: ghost time trial (short tracks, drift, beat your own and friends'
@@ -8,6 +8,15 @@ Started Oct 30. Status: no code yet. Assets verified Oct 30; next step is clarif
 - Packs: racing-kit (tracks, decor), car-kit (cars), plus the owner's Oct 30 uploads: impact-sounds, city-kit-roads,
   nature-kit, mobile-controls-1 (and unrequested extras: city-kit-commercial, -industrial, -suburban, survival-kit).
   See `assets/kenney/INDEX.md` for every model and sound name.
+
+## Owner's answers (Oct 30)
+- Setting: race circuit (racing-kit tiles, grandstands, pits; nature-kit trees around it).
+- Camera: low chase cam behind the car.
+- Steering: build both thumb drag and gyroscope tilt. Caveat found: the artifact sandbox refuses device motion and
+  this account has no motion capability (checked Oct 30), so tilt can't work inside the published artifact. Plan:
+  thumb drag is the default; tilt code turns on only if orientation events actually arrive (for example if the game
+  is ever hosted elsewhere). Tell the owner this plainly.
+- Branches: keep as is (no main). Keep merging whichever branch the owner uploads to.
 
 ## Asset findings
 - racing-kit GLBs use material colors, no textures; car-kit, city kits use a colormap texture.
