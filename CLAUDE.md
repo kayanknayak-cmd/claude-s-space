@@ -18,7 +18,10 @@
 - Visual work: real math and real art, never generic or "AI looking". The owner wants a human-made feel (art,
   motion, menus); new games use Kenney's hand-made CC0 packs. Minimal text, no fast flashing words.
 - Be usage-conscious with tests: one targeted run, not repeated full suites.
+- No rush: quality over speed, keep going until there's a real reason to stop, but be careful with usage
+  (Oct 30).
 - End every message with links to the artifacts:
+  - Ghost Lap: https://claude.ai/artifact/UTCuSjqjdAevcyj4EPAz9T
   - Dinner Rush: https://claude.ai/artifact/XzoTPw9deyYhUnD5horq9m
   - areabake: https://claude.ai/artifact/QyKjViaYyb2G7wT2udgsAK
   - Slingshot for phones: https://claude.ai/artifact/K2qhs1tpJsR69gPuAXwpze
@@ -31,14 +34,14 @@
 | Path | What | Status |
 | --- | --- | --- |
 | `memory/` | Claude's notes: `log.md` (dated decisions), one file per project | always current |
-| `racer/` | Ghost time-trial racer, the fourth game (`memory/racer.md`) | planned, no code yet |
+| `racer/` | Ghost Lap, a time-trial racer (`src/`, built `racer.html`; `memory/racer.md`) | playable, 7 tracks |
 | `dinner-rush/` | Food-throwing physics game (`src/`, built `rush.html`; `memory/dinner-rush.md`) | paused Oct 30 |
 | `slingshot/` | Slingshot and Bonk orbit games (`src/`, built HTML; `memory/slingshot-bonk.md`) | done for now |
 | `areabake/` | areabake (WebGL math exhibits, one HTML file) and `site/`, an older deploy copy with a Slingshot PWA | done |
 | `epicycles/` | Epicycle Machine (draw a loop, Fourier circles redraw it) | done |
 | `assets/kenney/` | 29 Kenney CC0 zips; `INDEX.md` lists every model and sound; `make-index.py` regenerates it | |
 
-`racer/` doesn't exist until the racer is started. Built HTML files are build output: edit `src/` and rebuild.
+Built HTML files are build output: edit `src/` and rebuild.
 
 ## Assets and uploads
 - The owner downloads Kenney packs on request (they have the whole library) and uploads them through GitHub's web

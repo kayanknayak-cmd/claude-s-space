@@ -3,6 +3,8 @@
 Newest first. One or two lines per decision, request or lesson, so later sessions can see how things got here.
 
 ## Oct 30
+- Built and published Ghost Lap (racer): 7 tracks, drift boosts, ghosts, challenge links, friends leaderboard.
+  Owner said: no rush, make it as good as possible, be careful with usage.
 - Racer answers: race circuit, chase cam, thumb drag plus tilt (tilt blocked in artifacts), no main branch.
 - Owner: the repo is Claude's memory and workshop, not a showcase of finished products. Claude may store anything it
   needs to remember here. Organized the repo into project folders plus `memory/` (this folder) and

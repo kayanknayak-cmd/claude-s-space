@@ -1,0 +1,125 @@
+<title>Ghost Lap</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Layout: full-bleed 3D chase view; a timer tag at the top, the finish sheet rises from the bottom.
+     One palette in both themes: it is a sunny race day, not a document. Colors come from the racing kit. */
+  :root {
+    --ink: #24273a; --paper: #fbf7ee; --grass: #94c5b0; --tarmac: #4a4a52; --red: #e5484d; --green: #2f9e6e;
+    --gold: #f2b134; --shade: rgba(36, 39, 58, .28);
+    --display: 'Bungee', 'Arial Black', system-ui, sans-serif; --body: 'Rubik', system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink: #24273a; --paper: #fbf7ee; } }
+  :root[data-theme="dark"] { --ink: #24273a; --paper: #fbf7ee; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--grass); color: var(--ink); font-family: var(--body);
+    touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  #top { position: fixed; left: 0; right: 0; top: 0; padding: calc(12px + env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 0 max(14px, env(safe-area-inset-left, 0px));
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 8px; pointer-events: none; }
+  #top > * { pointer-events: auto; }
+  .tag { justify-self: start; background: var(--paper); border-radius: 12px; padding: 7px 12px; font-weight: 700; font-size: 15px;
+    box-shadow: 0 3px 0 var(--shade); display: flex; gap: 7px; align-items: center; white-space: nowrap; }
+  .tag img { width: 16px; height: 16px; filter: brightness(0) saturate(100%) invert(14%) sepia(12%) saturate(1500%) hue-rotate(195deg); }
+  .round { justify-self: end; width: 44px; height: 44px; border-radius: 50%; background: var(--ink); box-shadow: 0 3px 0 var(--shade);
+    display: grid; place-items: center; }
+  .round img { width: 24px; height: 24px; }
+  .tag:active, .round:active, .big:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--shade); }
+  #clock { text-align: center; }
+  #time { font-family: var(--display); font-size: 30px; line-height: 1; background: var(--paper); padding: 8px 14px 6px; border-radius: 14px;
+    box-shadow: 0 3px 0 var(--shade); font-variant-numeric: tabular-nums; letter-spacing: .5px; min-width: 6.2ch; display: inline-block; }
+  #split { margin-top: 8px; font-family: var(--display); font-size: 17px; color: #fff; padding: 4px 10px 3px; border-radius: 10px;
+    display: inline-block; opacity: 0; transform: translateY(-6px); transition: opacity .2s, transform .2s; }
+  #split.on { opacity: 1; transform: none; }
+  #split.ahead { background: var(--green); } #split.behind { background: var(--red); }
+  #lights { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); background: var(--ink); border-radius: 22px; padding: 12px 14px;
+    display: flex; gap: 12px; box-shadow: 0 5px 0 var(--shade); transition: opacity .3s; }
+  #lights i { width: 34px; height: 34px; border-radius: 50%; background: #3b3f55; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .3); }
+  #lights i.r { background: var(--red); } #lights i.g { background: #4fd18b; }
+  #lights.off { opacity: 0; pointer-events: none; }
+  #pad { position: fixed; width: 112px; height: 112px; margin: -56px 0 0 -56px; pointer-events: none; opacity: 0; transition: opacity .15s; }
+  #pad.on { opacity: .85; }
+  #pad img { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #pad #nub { inset: auto; width: 56px; height: 56px; left: 28px; top: 28px; }
+  #hint { position: fixed; left: 50%; bottom: calc(15% + env(safe-area-inset-bottom, 0px)); width: 112px; height: 112px; margin-left: -56px; pointer-events: none; opacity: .8; }
+  #hint img { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #hint .n { inset: auto; width: 56px; height: 56px; left: 28px; top: 28px; animation: sway 1.8s ease-in-out infinite; }
+  @keyframes sway { 0%, 100% { transform: translateX(-30px); } 50% { transform: translateX(30px); } }
+  #sheet { position: fixed; left: 0; right: 0; bottom: 0; padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(22px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    display: grid; justify-items: center; pointer-events: none; }
+  #sheet .card { pointer-events: auto; background: var(--paper); border-radius: 22px; padding: 16px 18px 18px; width: min(360px, 100%); box-sizing: border-box;
+    box-shadow: 0 6px 0 var(--shade); animation: rise .4s cubic-bezier(.2, 1.4, .4, 1) both; position: relative; }
+  @keyframes rise { from { transform: translateY(60px); opacity: 0; } }
+  #big { font-family: var(--display); font-size: 46px; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; }
+  .rows { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; margin: 12px 4px 14px; font-weight: 500; font-size: 15px; align-items: center; }
+  .rows b { font-family: var(--display); font-weight: normal; font-variant-numeric: tabular-nums; text-align: right; }
+  .rows .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .ahead { color: var(--green); } .behind { color: var(--red); }
+  #stamp { position: absolute; right: -8px; top: -14px; background: var(--gold); color: var(--ink); font-family: var(--display); font-size: 14px;
+    padding: 6px 10px 4px; border-radius: 10px; transform: rotate(6deg); box-shadow: 0 3px 0 var(--shade); }
+  #board { margin: -4px 0 14px; border-top: 2px dashed #e2d9c6; padding-top: 10px; }
+  #board h3 { margin: 0 4px 6px; font-size: 13px; font-weight: 700; color: #6b6e80; }
+  .fr { display: grid; grid-template-columns: 3ch 1fr auto; gap: 8px; width: 100%; padding: 6px 4px; border-radius: 10px; text-align: left; font-size: 15px; font-weight: 500; }
+  .fr:not(:disabled):active { background: #ece5d6; }
+  .fr i { font-style: normal; color: #6b6e80; font-size: 13px; align-self: center; }
+  .fr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fr b { font-family: var(--display); font-weight: normal; font-variant-numeric: tabular-nums; }
+  .fr.me { font-weight: 700; cursor: default; }
+  .btns { display: grid; grid-template-columns: 56px 1fr 56px; gap: 10px; }
+  .big { height: 56px; border-radius: 16px; background: #ece5d6; box-shadow: 0 4px 0 var(--shade); display: grid; place-items: center; font-weight: 700; font-size: 16px; }
+  .big img { width: 26px; height: 26px; filter: brightness(0) saturate(100%) invert(14%) sepia(12%) saturate(1500%) hue-rotate(195deg); }
+  .big.go { background: var(--red); color: #fff; }
+  .big.go img { filter: none; }
+  #menu { position: fixed; inset: 0; background: rgba(36, 39, 58, .4); display: grid; place-items: center; padding: 16px; }
+  #menu .card { background: var(--paper); border-radius: 22px; padding: 14px; width: min(360px, 100%); box-sizing: border-box; box-shadow: 0 6px 0 var(--shade); }
+  #menu h2 { font-family: var(--display); font-weight: normal; font-size: 22px; margin: 4px 6px 10px; }
+  .trk { display: grid; grid-template-columns: 1fr auto; width: 100%; text-align: left; padding: 10px 8px; border-radius: 12px; gap: 2px 10px; }
+  .trk:active, .trk.cur { background: #ece5d6; }
+  .trk span { font-weight: 700; font-size: 17px; }
+  .trk small { grid-column: 1; color: #6b6e80; font-size: 13px; }
+  .trk b { grid-row: 1 / 3; grid-column: 2; align-self: center; font-family: var(--display); font-weight: normal; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .opts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .opt { padding: 8px 12px; border-radius: 10px; background: #ece5d6; font-weight: 700; font-size: 14px; }
+  .opt[aria-pressed="false"] { opacity: .5; }
+  #toast { position: fixed; left: 50%; top: calc(80px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--paper);
+    padding: 10px 14px; border-radius: 12px; font-weight: 500; font-size: 14px; max-width: calc(100vw - 48px); overflow-wrap: anywhere; box-shadow: 0 4px 0 var(--shade); }
+  #load { position: fixed; inset: 0; display: grid; place-items: center; background: var(--grass); font-family: var(--display); font-size: 30px; transition: opacity .4s; }
+  #load.gone { opacity: 0; pointer-events: none; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { #hint .n, #sheet .card { animation: none; } }
+</style>
+<canvas id="c"></canvas>
+<div id="top">
+  <button id="name" class="tag" aria-label="Tracks"><img src="ICON_menu" alt=""><span>Warm Up</span></button>
+  <div id="clock"><div id="time">0:00.00</div><br><div id="split"></div></div>
+  <button id="redo" class="round" aria-label="Restart"><img src="ICON_restart" alt=""></button>
+</div>
+<div id="lights"><i></i><i></i><i></i></div>
+<div id="hint" hidden><img src="ICON_pad" alt=""><img class="n" src="ICON_nub" alt=""></div>
+<div id="pad"><img src="ICON_pad" alt=""><img id="nub" src="ICON_nub" alt=""></div>
+<div id="sheet" hidden><div class="card">
+  <div id="stamp" hidden>New best</div>
+  <div id="big">0:00.00</div>
+  <div class="rows" id="rows"></div>
+  <div id="board" hidden></div>
+  <div class="btns">
+    <button id="again" class="big" aria-label="Race again"><img src="ICON_restart" alt=""></button>
+    <button id="dare" class="big">Challenge a friend</button>
+    <button id="next" class="big go" aria-label="Next track"><img src="ICON_play" alt=""></button>
+  </div>
+</div></div>
+<div id="menu" hidden><div class="card"><h2>Ghost Lap</h2><div id="list"></div><div class="opts" id="opts"></div></div></div>
+<div id="toast" hidden></div>
+<div id="load">Ghost Lap</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+/*GAME*/
+</script>
