@@ -26,7 +26,14 @@ Home of **areabake** (`areabake.html`, `site/`), **Dinner Rush** (`rush.html`, f
 - Edit and republish the artifacts only. Never push to Base44 (areabake.com) unless the owner explicitly asks.
   `.claude/settings.json` allows the Base44 MCP tools for when they do.
 
-## Dinner Rush, the third game (started Oct 29)
+## Ghost racer, the fourth game (started Oct 30)
+- Owner asked for a racing game (Oct 30). Chosen: ghost time trial (short tracks, drift, beat your own and friends'
+  ghost cars, challenge links, later a friends leaderboard), cars only, Kenney racing-kit + car-kit.
+- Owner agreed to upload: Impact Sounds, City Kit (Roads), Nature Kit, Mobile Controls. Fetch
+  `claude/serene-rubin-bnqy4l` and look for them before using.
+
+## Dinner Rush, the third game (started Oct 29, paused Oct 30)
+- Paused by the owner on Oct 30 (no play feedback given). Keep it as is.
 - Owner's verdict: Slingshot and Bonk look AI (art, motion and feel, menus and UI), and adding features didn't fix it.
   The owner wants a human-made feel.
 - A brand new third game. Slingshot and Bonk stay as they are.
