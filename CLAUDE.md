@@ -21,6 +21,7 @@
 - No rush: quality over speed, keep going until there's a real reason to stop, but be careful with usage
   (Oct 30).
 - End every message with links to the artifacts:
+  - Sunday Drive: https://claude.ai/artifact/23nQtNRt6EDqaG6QzQrbsP
   - Ghost Lap: https://claude.ai/artifact/UTCuSjqjdAevcyj4EPAz9T
   - Dinner Rush: https://claude.ai/artifact/XzoTPw9deyYhUnD5horq9m
   - areabake: https://claude.ai/artifact/QyKjViaYyb2G7wT2udgsAK
@@ -34,7 +35,8 @@
 | Path | What | Status |
 | --- | --- | --- |
 | `memory/` | Claude's notes: `log.md` (dated decisions), one file per project | always current |
-| `racer/` | Ghost Lap, a time-trial racer (`src/`, built `racer.html`; `memory/racer.md`) | owner: bad; open-world rewrite planned |
+| `drive/` | Sunday Drive, the open-world island driving game (`src/`, built `drive.html`; `memory/drive.md`) | built Oct 31, awaiting feedback |
+| `racer/` | Ghost Lap, a time-trial racer (`src/`, built `racer.html`; `memory/racer.md`) | superseded by Sunday Drive |
 | `dinner-rush/` | Food-throwing physics game (`src/`, built `rush.html`; `memory/dinner-rush.md`) | paused Oct 30 |
 | `slingshot/` | Slingshot and Bonk orbit games (`src/`, built HTML; `memory/slingshot-bonk.md`) | done for now |
 | `areabake/` | areabake (WebGL math exhibits, one HTML file) and `site/`, an older deploy copy with a Slingshot PWA | done |

@@ -327,7 +327,7 @@ function makeWorld() {
       if (hash(i, j, 20 + k) > dens) continue;
       const x = (i + .15 + .7 * hash(i, j, 30 + k)) * T, z = (j + .15 + .7 * hash(i, j, 40 + k)) * T, key = pick(list, hash(i, j, 50 + k));
       if (c === 'f') {   // corn in rows of four per tile on alternate fields
-        if (Math.floor(i / 7) % 2 === Math.floor(j / 5) % 2) for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) W.items.push(['crop', (i + .25 + a * .5) * T, (j + .25 + b * .5) * T, 0, 4]);
+        if (Math.floor(i / 7) % 2 === Math.floor(j / 5) % 2) for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) W.items.push(['crop', (i + .25 + a * .5) * T, (j + .25 + b * .5) * T, 0, 2.1]);
         continue;
       }
       const big = key.startsWith('rock') ? 7 : 5.5 + 3 * hash(i, j, 60 + k);
@@ -896,11 +896,24 @@ async function loadModels(onProgress) {
 }
 // every mesh of a model, its geometry baked into the model's own space
 const partsCache = {};
+// compressed models store positions and normals as normalized integers; turn them back into floats before baking a
+// transform in, or anything past +-1 gets clipped
+function floatGeo(g) {
+  const out = g.clone();
+  for (const name of Object.keys(out.attributes)) {
+    const a = out.attributes[name];
+    if (a.array instanceof Float32Array && !a.normalized) continue;
+    const f = new Float32Array(a.count * a.itemSize);
+    for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = a.getComponent(i, c);
+    out.setAttribute(name, new THREE.BufferAttribute(f, a.itemSize));
+  }
+  return out;
+}
 function parts(key) {
   if (partsCache[key]) return partsCache[key];
   const root = proto[key]; root.updateMatrixWorld(true);
   const out = [];
-  root.traverse(m => { if (m.isMesh) out.push({ geo: m.geometry.clone().applyMatrix4(m.matrixWorld), mat: m.material }); });
+  root.traverse(m => { if (m.isMesh) out.push({ geo: floatGeo(m.geometry).applyMatrix4(m.matrixWorld), mat: m.material }); });
   return partsCache[key] = out;
 }
 function mk(key) { const o = proto[key].clone(true); return o; }
@@ -1754,6 +1767,7 @@ function showResults(e, r) {
   if (r.prev) rows.push(`<span>Your best before</span><b class="${r.time < r.prev.time ? 'ahead' : 'behind'}">${fmtD(r.time - r.prev.time)}</b>`);
   if (r.isBest) rows.push(`<span>New best</span><b>★</b>`);
   $('rrows').innerHTML = rows.join('');
+  $('rdare').hidden = !save.best[e.id];
   $('results').hidden = false; renderBoard();
 }
 function closeResults() { $('results').hidden = true; mode = 'free'; active = null; }
@@ -1941,7 +1955,10 @@ async function start() {
   requestAnimationFrame(frame);
 }
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
-window.__drive = { scene, renderer, THREE, get car() { return car; }, get mode() { return mode; }, keys, begin: id => begin(EV.list.find(e => e.id === id)), get W() { return W; }, cam: v => { camMode = v; } };
+window.__drive = { scene, renderer, THREE, get car() { return car; }, get mode() { return mode; }, keys, begin: id => begin(EV.list.find(e => e.id === id)), get W() { return W; }, cam: v => { camMode = v; },
+  // test hook: put the car just before gate n of the running event, moving through it
+  go() { countT = 3; return 1; },
+  toGate(n) { gate.gi = n; gate.prev = undefined; const g = active.gates[n]; Object.assign(car, { x: g[0] - g[2] * 5, z: g[1] - g[3] * 5, hx: g[2], hz: g[3], vx: g[2] * 20, vz: g[3] * 20 }); return n; } };
 start();
 
 </script>

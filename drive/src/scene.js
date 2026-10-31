@@ -92,11 +92,24 @@ async function loadModels(onProgress) {
 }
 // every mesh of a model, its geometry baked into the model's own space
 const partsCache = {};
+// compressed models store positions and normals as normalized integers; turn them back into floats before baking a
+// transform in, or anything past +-1 gets clipped
+function floatGeo(g) {
+  const out = g.clone();
+  for (const name of Object.keys(out.attributes)) {
+    const a = out.attributes[name];
+    if (a.array instanceof Float32Array && !a.normalized) continue;
+    const f = new Float32Array(a.count * a.itemSize);
+    for (let i = 0; i < a.count; i++) for (let c = 0; c < a.itemSize; c++) f[i * a.itemSize + c] = a.getComponent(i, c);
+    out.setAttribute(name, new THREE.BufferAttribute(f, a.itemSize));
+  }
+  return out;
+}
 function parts(key) {
   if (partsCache[key]) return partsCache[key];
   const root = proto[key]; root.updateMatrixWorld(true);
   const out = [];
-  root.traverse(m => { if (m.isMesh) out.push({ geo: m.geometry.clone().applyMatrix4(m.matrixWorld), mat: m.material }); });
+  root.traverse(m => { if (m.isMesh) out.push({ geo: floatGeo(m.geometry).applyMatrix4(m.matrixWorld), mat: m.material }); });
   return partsCache[key] = out;
 }
 function mk(key) { const o = proto[key].clone(true); return o; }

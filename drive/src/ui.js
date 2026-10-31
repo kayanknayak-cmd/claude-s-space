@@ -152,6 +152,7 @@ function showResults(e, r) {
   if (r.prev) rows.push(`<span>Your best before</span><b class="${r.time < r.prev.time ? 'ahead' : 'behind'}">${fmtD(r.time - r.prev.time)}</b>`);
   if (r.isBest) rows.push(`<span>New best</span><b>★</b>`);
   $('rrows').innerHTML = rows.join('');
+  $('rdare').hidden = !save.best[e.id];
   $('results').hidden = false; renderBoard();
 }
 function closeResults() { $('results').hidden = true; mode = 'free'; active = null; }

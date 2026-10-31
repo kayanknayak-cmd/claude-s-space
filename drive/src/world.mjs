@@ -209,7 +209,7 @@ export function makeWorld() {
       if (hash(i, j, 20 + k) > dens) continue;
       const x = (i + .15 + .7 * hash(i, j, 30 + k)) * T, z = (j + .15 + .7 * hash(i, j, 40 + k)) * T, key = pick(list, hash(i, j, 50 + k));
       if (c === 'f') {   // corn in rows of four per tile on alternate fields
-        if (Math.floor(i / 7) % 2 === Math.floor(j / 5) % 2) for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) W.items.push(['crop', (i + .25 + a * .5) * T, (j + .25 + b * .5) * T, 0, 4]);
+        if (Math.floor(i / 7) % 2 === Math.floor(j / 5) % 2) for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) W.items.push(['crop', (i + .25 + a * .5) * T, (j + .25 + b * .5) * T, 0, 2.1]);
         continue;
       }
       const big = key.startsWith('rock') ? 7 : 5.5 + 3 * hash(i, j, 60 + k);

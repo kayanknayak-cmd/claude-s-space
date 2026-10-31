@@ -1,7 +1,7 @@
 # Ghost Lap (the racer), the fourth game
 
 Started and first published Oct 30: https://claude.ai/artifact/UTCuSjqjdAevcyj4EPAz9T
-Status: superseded. Owner verdict Oct 31: "really bad". Being replaced by an open-world driving game (plan below);
+Status: superseded. Owner verdict Oct 31: "really bad". Replaced by Sunday Drive (memory/drive.md);
 Ghost Lap stays published as is but gets no more work.
 
 ## Owner feedback Oct 31 (played on a computer)

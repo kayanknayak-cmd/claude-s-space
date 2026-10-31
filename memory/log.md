@@ -3,6 +3,8 @@
 Newest first. One or two lines per decision, request or lesson, so later sessions can see how things got here.
 
 ## Oct 31
+- Owner said "implement all changes": built Sunday Drive (all 5 phases) in `drive/`, published. A usage limit
+  and a worker restart interrupted the session once; commit early on long builds.
 - Owner: Ghost Lap is "really bad" (locked in, twitchy, boring, looks bad, wobbly wheels, bad colors, flashing roofs).
   New direction: open-world mini Forza Horizon you can also just chill in, huge map using every kit, computer first,
   arcade drift handling. Claude proposed a 5-phase plan with a handling sandbox checkpoint first (memory/racer.md).
