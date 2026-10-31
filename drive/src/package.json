@@ -1,0 +1,12 @@
+{
+  "name": "sunday-drive-build",
+  "private": true,
+  "type": "module",
+  "description": "Build-time tools only: compress Kenney GLBs before they are embedded in drive.html",
+  "devDependencies": {
+    "@gltf-transform/core": "4.1.1",
+    "@gltf-transform/extensions": "4.1.1",
+    "@gltf-transform/functions": "4.1.1",
+    "meshoptimizer": "0.22.0"
+  }
+}

@@ -1,0 +1,117 @@
+<title>Sunday Drive</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* Layout: full-bleed 3D view; speed bottom right, minimap bottom left, the current event top centre.
+     One palette in both themes: it's a sunny afternoon on the island. */
+  :root {
+    --ink: #1d2433; --paper: #fffaf0; --sun: #ff7a3d; --sea: #2bb3a3; --gold: #ffd23f; --drift: #a35bff; --trap: #ff4d5a;
+    --glass: rgba(29, 36, 51, .72); --shade: rgba(29, 36, 51, .3);
+    --display: 'Archivo Black', 'Arial Black', system-ui, sans-serif; --body: 'Archivo', system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink: #1d2433; --paper: #fffaf0; } }
+  :root[data-theme="dark"] { --ink: #1d2433; --paper: #fffaf0; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd3ea; color: var(--paper); font-family: var(--body);
+    -webkit-user-select: none; user-select: none; touch-action: none; }
+  canvas#c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .pill { background: var(--glass); border-radius: 14px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  #speed { position: fixed; right: max(18px, env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); padding: 10px 16px 12px; text-align: right; min-width: 128px; }
+  #kmh { font-family: var(--display); font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
+  #kmh small { font-family: var(--body); font-size: 13px; font-weight: 700; opacity: .7; margin-left: 4px; }
+  #meter { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .18); margin-top: 8px; overflow: hidden; }
+  #meter i { display: block; height: 100%; width: 30%; background: linear-gradient(90deg, var(--sea), var(--gold)); border-radius: 4px; transition: width .1s; }
+  #meter.full i { background: linear-gradient(90deg, var(--gold), var(--sun)); }
+  #mini { position: fixed; left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); width: 176px; height: 176px; border-radius: 50%;
+    border: 4px solid var(--paper); box-shadow: 0 4px 0 var(--shade); background: #3d9bd6; }
+  #top { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); right: max(18px, env(safe-area-inset-right, 0px)); display: flex; gap: 8px; }
+  #top .pill { padding: 8px 12px; font-weight: 700; font-size: 14px; display: flex; gap: 6px; align-items: center; }
+  #top button.pill:hover { background: rgba(29, 36, 51, .85); }
+  #event { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 10px 18px; text-align: center; min-width: 210px; }
+  #event h3 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+  #etime { font-family: var(--display); font-size: 34px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  #esub { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ahead { color: #6ff0a8; } .behind { color: #ff8a92; }
+  #count { position: fixed; left: 50%; top: 34%; transform: translate(-50%, -50%); font-family: var(--display); font-size: 120px; color: var(--paper);
+    text-shadow: 0 6px 0 var(--shade); pointer-events: none; }
+  #toast { position: fixed; left: 50%; top: calc(96px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 10px 16px; font-weight: 700; font-size: 15px;
+    text-align: center; max-width: calc(100vw - 48px); }
+  #prompt { position: fixed; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 10px 16px; font-weight: 700; font-size: 15px; white-space: nowrap; }
+  kbd { font-family: var(--display); font-size: 12px; background: var(--paper); color: var(--ink); border-radius: 6px; padding: 2px 7px; margin: 0 2px; box-shadow: 0 2px 0 var(--shade); }
+  .sheet { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(29, 36, 51, .45); padding: 16px; }
+  .card { background: var(--paper); color: var(--ink); border-radius: 22px; padding: 18px 20px; box-shadow: 0 6px 0 var(--shade); width: min(440px, 100%); box-sizing: border-box; max-height: calc(100vh - 32px); overflow: auto; }
+  .card h2 { font-family: var(--display); font-weight: normal; font-size: 24px; margin: 0 0 4px; }
+  .card p { margin: 4px 0 12px; color: #5a6275; font-size: 14px; }
+  .rows { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; margin: 10px 0 16px; font-weight: 700; }
+  .rows b { font-family: var(--display); font-weight: normal; font-variant-numeric: tabular-nums; text-align: right; }
+  .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { padding: 11px 16px; border-radius: 12px; background: #ece4d2; font-weight: 700; box-shadow: 0 3px 0 var(--shade); }
+  .btn.go { background: var(--sun); color: #fff; }
+  .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--shade); }
+  #mapc { width: min(92vmin, 900px); height: min(92vmin, 900px); border-radius: 18px; box-shadow: 0 6px 0 var(--shade); cursor: crosshair; }
+  #maplegend { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 8px 14px; font-size: 13px; font-weight: 700; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  #maplegend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  #cars { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 12px 0; }
+  .car { text-align: left; background: #f3ecdc; border-radius: 12px; padding: 10px; font-weight: 700; font-size: 14px; }
+  .car small { display: block; font-weight: 500; color: #5a6275; font-size: 12px; margin-top: 2px; }
+  .car.on { background: var(--sun); color: #fff; } .car.on small { color: #ffe6d8; }
+  .car[disabled] { opacity: .45; cursor: default; }
+  .bars { display: grid; grid-template-columns: auto 1fr; gap: 3px 6px; margin-top: 6px; font-size: 11px; font-weight: 500; align-items: center; }
+  .bars span { height: 5px; border-radius: 3px; background: currentColor; opacity: .7; }
+  #help .keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 12px 0 16px; font-size: 14px; align-items: center; }
+  #board { margin: 0 0 14px; } #board h4 { margin: 0 0 6px; font-size: 13px; color: #5a6275; }
+  .fr { display: grid; grid-template-columns: 3ch 1fr auto; gap: 8px; width: 100%; padding: 5px 4px; border-radius: 8px; text-align: left; font-weight: 500; }
+  .fr:not(:disabled):hover { background: #f3ecdc; } .fr b { font-family: var(--display); font-weight: normal; font-variant-numeric: tabular-nums; } .fr.me { font-weight: 700; }
+  #touch { position: fixed; inset: 0; pointer-events: none; }
+  #touch .tb { position: absolute; width: 74px; height: 74px; pointer-events: auto; display: grid; place-items: center; opacity: .85; touch-action: none; }
+  #touch .tb img.bg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #touch .tb img.ic { position: relative; width: 34px; height: 34px; }
+  #touch .tb.on { opacity: 1; transform: scale(.94); }
+  #tpad { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; opacity: 0; transition: opacity .15s; }
+  #tpad.on { opacity: .85; } #tpad img { position: absolute; inset: 0; width: 100%; height: 100%; } #tnub { inset: auto !important; width: 60px !important; height: 60px !important; left: 30px; top: 30px; }
+  #load { position: fixed; inset: 0; display: grid; place-items: center; background: #9fd3ea; color: var(--ink); font-family: var(--display); font-size: 34px; transition: opacity .5s; z-index: 5; }
+  #load small { display: block; font-family: var(--body); font-size: 14px; font-weight: 700; text-align: center; margin-top: 8px; opacity: .7; }
+  #load.gone { opacity: 0; pointer-events: none; }
+  [hidden] { display: none !important; }
+  @media (max-width: 640px) { #mini { width: 120px; height: 120px; } #kmh { font-size: 34px; } }
+</style>
+<canvas id="c"></canvas>
+<canvas id="mini" width="352" height="352"></canvas>
+<div id="speed" class="pill"><div id="kmh">0<small>km/h</small></div><div id="meter"><i></i></div></div>
+<div id="top">
+  <div class="pill" id="heads" title="Stone heads found">◉ 0/30</div>
+  <button class="pill" id="bmap">Map <kbd>M</kbd></button>
+  <button class="pill" id="bgarage">Garage <kbd>G</kbd></button>
+  <button class="pill" id="bhelp" aria-label="Controls">?</button>
+</div>
+<div id="event" class="pill" hidden><h3 id="ename"></h3><div id="etime">0:00.00</div><div id="esub"></div></div>
+<div id="count" hidden></div>
+<div id="toast" class="pill" hidden></div>
+<div id="prompt" class="pill" hidden></div>
+<div id="touch" hidden>
+  <div id="tpad"><img src="ICON_pad" alt=""><img id="tnub" src="ICON_nub" alt=""></div>
+</div>
+<div id="mapsheet" class="sheet" hidden><canvas id="mapc" width="960" height="960"></canvas>
+  <div id="maplegend" class="pill"><span><i style="background:#ffd23f"></i>Race</span><span><i style="background:#ff4d5a"></i>Speed trap</span><span><i style="background:#a35bff"></i>Drift zone</span><span><i style="background:#ff8c1a"></i>Jump</span><span>Click a found event to drive there. <kbd>M</kbd> closes</span></div></div>
+<div id="garage" class="sheet" hidden><div class="card"><h2>Garage</h2><p>Every two stone heads you find unlock another car.</p><div id="cars"></div><div class="acts"><button class="btn go" id="gclose">Drive</button></div></div></div>
+<div id="results" class="sheet" hidden><div class="card"><h2 id="rname"></h2><div class="rows" id="rrows"></div><div id="board" hidden></div>
+  <div class="acts"><button class="btn go" id="rretry">Race again</button><button class="btn" id="rdare">Challenge a friend</button><button class="btn" id="rclose">Keep driving</button></div></div></div>
+<div id="help" class="sheet" hidden><div class="card"><h2>Sunday Drive</h2><p>An island to drive around. Races, speed traps, drift zones and jumps are marked by light beams; 30 stone heads are hidden off the roads.</p>
+  <div class="keys"><span><kbd>W</kbd><kbd>S</kbd></span><span>Gas, brake and reverse</span><span><kbd>A</kbd><kbd>D</kbd></span><span>Steer</span><span><kbd>Space</kbd></span><span>Handbrake: hold while turning to drift</span>
+  <span><kbd>Shift</kbd></span><span>Boost (drifting and airtime fill the meter)</span><span><kbd>E</kbd></span><span>Start an event when you're in its ring</span>
+  <span><kbd>R</kbd></span><span>Back on the road</span><span><kbd>C</kbd></span><span>Camera distance</span><span><kbd>M</kbd> <kbd>G</kbd></span><span>Map, garage</span><span><kbd>Esc</kbd></span><span>Leave an event</span></div>
+  <p>A gamepad works too: left stick, triggers, A for handbrake, B for boost.</p>
+  <div class="acts"><button class="btn go" id="hclose">Let's drive</button></div></div></div>
+<div id="load">Sunday Drive<small id="loadmsg">Building the island</small></div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+/*GAME*/
+</script>
