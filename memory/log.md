@@ -2,6 +2,12 @@
 
 Newest first. One or two lines per decision, request or lesson, so later sessions can see how things got here.
 
+## Oct 31
+- Owner: Ghost Lap is "really bad" (locked in, twitchy, boring, looks bad, wobbly wheels, bad colors, flashing roofs).
+  New direction: open-world mini Forza Horizon you can also just chill in, huge map using every kit, computer first,
+  arcade drift handling. Claude proposed a 5-phase plan with a handling sandbox checkpoint first (memory/racer.md).
+  Owner said not to change the game until the plan is agreed.
+
 ## Oct 30
 - Built and published Ghost Lap (racer): 7 tracks, drift boosts, ghosts, challenge links, friends leaderboard.
   Owner said: no rush, make it as good as possible, be careful with usage.

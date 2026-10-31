@@ -1,7 +1,24 @@
 # Ghost Lap (the racer), the fourth game
 
 Started and first published Oct 30: https://claude.ai/artifact/UTCuSjqjdAevcyj4EPAz9T
-Status: playable, 7 tracks, friends leaderboard. No owner play feedback yet.
+Status: superseded. Owner verdict Oct 31: "really bad". Being replaced by an open-world driving game (plan below);
+Ghost Lap stays published as is but gets no more work.
+
+## Owner feedback Oct 31 (played on a computer)
+- Feels locked into the track; wants an open world. Steering too twitchy. Boring. Looks bad.
+- Bugs seen: wheels wobble, colors look bad, some roofs flash or glitch.
+- Likely causes (from the code, not yet confirmed): front wheels steer on rotation.y while spinning on rotation.x
+  in XYZ Euler order, so the steer axis tumbles with the spin (wobble); no tone mapping plus heavy flat ambient
+  light (pastel, no contrast); the shadow camera follows the camera without snapping to shadow texels (shimmer on
+  flat roofs), maybe also z-fighting between overlapping decor; on a keyboard, a tap is instant full lock and full
+  lock auto-starts a drift, so every tap drifts (twitchy).
+
+## Open-world plan (agreed questions Oct 31, plan proposed, not started)
+- Answers: "mini Forza Horizon, but you can always just chill"; "huuuuge map, use everything"; computer first
+  (keyboard), phone later; arcade handling, easy to drift. "Fix this one but it can be a different game."
+- Phases: 1 handling sandbox on an empty lot, owner tests it before any world is built; 2 streamed world from all
+  kits; 3 Forza-style events with ghosts and leaderboard; 4 look and sound pass; 5 phone controls.
+- See the message of Oct 31 in memory/log.md for the summary the owner saw.
 
 ## Decisions
 - Owner asked for a racing game (Oct 30). Chosen: ghost time trial, cars only, race circuit setting, low chase

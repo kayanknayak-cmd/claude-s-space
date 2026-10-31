@@ -34,7 +34,7 @@
 | Path | What | Status |
 | --- | --- | --- |
 | `memory/` | Claude's notes: `log.md` (dated decisions), one file per project | always current |
-| `racer/` | Ghost Lap, a time-trial racer (`src/`, built `racer.html`; `memory/racer.md`) | playable, 7 tracks |
+| `racer/` | Ghost Lap, a time-trial racer (`src/`, built `racer.html`; `memory/racer.md`) | owner: bad; open-world rewrite planned |
 | `dinner-rush/` | Food-throwing physics game (`src/`, built `rush.html`; `memory/dinner-rush.md`) | paused Oct 30 |
 | `slingshot/` | Slingshot and Bonk orbit games (`src/`, built HTML; `memory/slingshot-bonk.md`) | done for now |
 | `areabake/` | areabake (WebGL math exhibits, one HTML file) and `site/`, an older deploy copy with a Slingshot PWA | done |
