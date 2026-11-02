@@ -35,7 +35,7 @@
 | Path | What | Status |
 | --- | --- | --- |
 | `memory/` | Claude's notes: `log.md` (dated decisions), one file per project | always current |
-| `drive/` | Sunday Drive, the open-world island driving game (`src/`, built `drive.html`; `memory/drive.md`) | built Oct 31, awaiting feedback |
+| `drive/` | Sunday Drive, the open-world island driving game (`src/`, built `drive.html`; `memory/drive.md`) | War Thunder/Forza update Nov 2, awaiting feedback |
 | `racer/` | Ghost Lap, a time-trial racer (`src/`, built `racer.html`; `memory/racer.md`) | superseded by Sunday Drive |
 | `dinner-rush/` | Food-throwing physics game (`src/`, built `rush.html`; `memory/dinner-rush.md`) | paused Oct 30 |
 | `slingshot/` | Slingshot and Bonk orbit games (`src/`, built HTML; `memory/slingshot-bonk.md`) | done for now |
