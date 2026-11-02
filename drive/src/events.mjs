@@ -47,7 +47,9 @@ export function makeEvents(W) {
     const tiles = route(W, way), gates = [];
     // a gate is a line across the road: its centre and the route direction through it
     const gateAt = k => { const [x, z] = center(tiles[k]), [px, pz] = center(tiles[Math.max(0, k - 1)]), d = Math.hypot(x - px, z - pz) || 1; return [x, z, (x - px) / d, (z - pz) / d]; };
-    for (let k = 7; k < tiles.length - 1; k += 7) gates.push(gateAt(k));
+    // gates sit on straight tiles only (a gate on a bend could be driven around without crossing its line)
+    const straight = k => k > 0 && k < tiles.length - 1 && (tiles[k - 1][0] === tiles[k + 1][0] || tiles[k - 1][1] === tiles[k + 1][1]);
+    for (let k = 7; k < tiles.length - 1; k += 7) { let q = k; while (q < tiles.length - 2 && !straight(q)) q++; if (straight(q) && (!gates.length || q !== gates.lastK)) { gates.push(gateAt(q)); gates.lastK = q; } }
     gates.push(gateAt(tiles.length - 1));
     const [x, z] = center(tiles[0]), [x1, z1] = center(tiles[1]), d = Math.hypot(x1 - x, z1 - z);
     E.push({ id, name, type: 'sprint', x, z, start: { x, z, hx: (x1 - x) / d, hz: (z1 - z) / d }, gates, r: 10, laps: 1, len: tiles.length * T, path: tiles.map(center) });
@@ -101,7 +103,7 @@ export function runGates(ev, c, st) {
   const g = ev.gates[st.gi], dx = c.x - g[0], dz = c.z - g[1], along = dx * g[2] + dz * g[3], side = -dx * g[3] + dz * g[2];
   const prev = st.prev === undefined ? -1 : st.prev;
   st.prev = along;
-  if (prev < 0 && along >= 0 && side > -18 && side < 18) {
+  if ((prev < 0 && along >= 0 && side > -18 && side < 18) || along * along + side * side < 81) {
     c.safe = { x: g[0], z: g[1], hx: g[2], hz: g[3] };
     st.gi++; st.split = c.steps; st.prev = undefined;
     if (st.gi >= ev.gates.length) { st.done = true; st.time = c.steps / 120; }
