@@ -22,7 +22,8 @@ Home of **areabake** (`areabake.html`, `site/`), **Slingshot for phones** (`slin
   - Slingshot for phones: https://claude.ai/artifact/K2qhs1tpJsR69gPuAXwpze
   - Bonk: https://claude.ai/artifact/9d6V9nGLmcLCuzgeHDEhSf
   - (optional) Target Studies demo, the target-design comparison: https://claude.ai/artifact/5ipNRWvbJN68hraRoE2xKr
-- Edit and republish the artifacts only. Never push to Base44 (areabake.com) unless the owner explicitly asks.
+- Edit and republish the artifacts only. Never push to Base44 (areabake.com) unless the owner explicitly asks
+  (how to, when asked: see "Deploy Slingshot to areabake.com/phone" below).
   `.claude/settings.json` allows the Base44 MCP tools for when they do.
 
 ## The two games (direction as of Oct 28)
@@ -112,6 +113,18 @@ Whenever the owner asks for improvements, put these first on the list. Bonk alre
     `{"downloads":true,"db":{"rules":[{"path":"runs","read":"view","write":"owner"},{"path":"runs/{self}","read":"view","write":"interact"}]},"user":{"scopes":["profile"]}}`
     (omit `capabilities` on a redeploy to keep them).
   - Slingshot: its own link, with `{"downloads":true}`.
+- Deploy Slingshot to areabake.com/phone (only when the owner asks; last done Nov 2 at their request):
+  - The site is the Base44 app "Areabake" (id `69fb492f04a96b88ae82fbce`). `src/main.jsx` serves `/phone` by fetching
+    `public/phone.html` and `document.write`-ing it. That file is the only thing to replace.
+  - Run `python3 slingshot-src/wrap.py`, which wraps `slingshot-phone.html` into `site/phone.html` with the head Base44 serves.
+    Commit and push it.
+  - The repo is public, so in the Base44 sandbox
+    `curl -sfL https://raw.githubusercontent.com/kayanknayak-cmd/claude-s-space/<commit>/site/phone.html -o public/phone.html`.
+    Check the sha256 against the local file. (Attachments from this container don't reach Base44.)
+  - Run `create_checkpoint`, and check that its `git_commit_hash` is the new sandbox HEAD (the first call once
+    returned the old commit). Then `POST /api/apps/{app_id}/deploy` with that `checkpoint_id`; its reply comes back
+    truncated, so verify by hashing `https://areabake.com/phone.html`.
+  - Bonk is not on the site yet.
 - Git: develop on `claude/serene-rubin-bnqy4l`. As of Oct 29 it is the repo's only branch (there is no main), so a
   pull request can't be opened until the owner creates a base branch.
 
