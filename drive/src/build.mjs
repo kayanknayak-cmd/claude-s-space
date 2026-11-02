@@ -68,7 +68,7 @@ const strip = s => s.replace(/^import .*$/mg, '').replace(/^export /mg, '');
 const read = f => fs.readFileSync(path.join(DIR, f), 'utf8');
 const code = [
   "import * as THREE from 'three';\nimport { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';\nimport { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';",
-  ...['world.mjs', 'car.mjs', 'events.mjs'].map(f => strip(read(f))),
+  ...['world.mjs', 'car.mjs', 'events.mjs', 'ai.mjs', 'race.mjs'].map(f => strip(read(f))),
   'const MODELS = ' + JSON.stringify(models) + ';',
   'const TEX = ' + JSON.stringify(TEX) + ';',
   'const SOUNDS = ' + JSON.stringify(sounds) + ';',

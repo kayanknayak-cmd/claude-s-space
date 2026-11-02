@@ -218,6 +218,11 @@ function buildWorld(root) {
     g2.rotation.y = yaw; g2.position.set(pc.A[0], .03, pc.A[1]); g2.scale.setScalar(C.S);
     root.add(g2);
   }
+  // guard rails along causeways: a row of road barriers on each edge that faces open water
+  for (const [x, z, alongZ] of W.rails) for (const o of [-.33, 0, .33]) {
+    const bx = x + (alongZ ? 0 : o * T), bz = z + (alongZ ? o * T : 0);
+    B[chunkOf(bx, bz)].add('guard', bx, .02, bz, alongZ ? Math.PI / 2 : 0, T * .9);
+  }
   // the railway: one 12 m track piece per tile, turned to run east-west (the model sits one unit low)
   for (let i = W.rail.i0; i <= W.rail.i1; i++) {
     const x = i * T, z = (W.rail.j + .5) * T;

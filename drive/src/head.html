@@ -61,6 +61,32 @@
   .car[disabled] { opacity: .45; cursor: default; }
   .bars { display: grid; grid-template-columns: auto 1fr; gap: 3px 6px; margin-top: 6px; font-size: 11px; font-weight: 500; align-items: center; }
   .bars span { height: 5px; border-radius: 3px; background: currentColor; opacity: .7; }
+  .card.wide { width: min(900px, 100%); }
+  .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; } .ghead h3 { margin: 0; font-family: var(--display); font-weight: normal; font-size: 20px; }
+  #gcr { font-family: var(--display); font-weight: normal; }
+  .gcols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; margin: 10px 0 14px; }
+  @media (max-width: 700px) { .gcols { grid-template-columns: 1fr; } }
+  #cars { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; align-content: start; max-height: 60vh; overflow: auto; margin: 0; }
+  .car { position: relative; } .car.cur { outline: 2px solid var(--sea); }
+  .cls { display: inline-block; font-family: var(--display); font-weight: normal; font-size: 11px; padding: 2px 6px; border-radius: 6px; color: #fff; background: #8a8f9c; margin-bottom: 4px; }
+  .cls.cD { background: #57a0d3; } .cls.cC { background: #f2b134; } .cls.cB { background: #ff7a3d; } .cls.cA { background: #e5484d; } .cls.cS { background: #a35bff; } .cls.cX { background: #1d2433; }
+  #gdetail .bars { grid-template-columns: 7.5em 1fr; gap: 6px 10px; font-size: 13px; margin: 10px 0 6px; }
+  #gdetail .bars em { font-style: normal; color: #5a6275; } #gdetail .bars span { height: 8px; background: #ece4d2; border-radius: 4px; opacity: 1; overflow: hidden; } #gdetail .bars i { display: block; height: 100%; background: var(--sun); }
+  .spec { font-size: 12px !important; margin: 0 0 10px !important; }
+  #gdetail h4 { margin: 12px 0 6px; font-size: 13px; color: #5a6275; text-transform: uppercase; letter-spacing: .05em; }
+  .ups { display: grid; grid-template-columns: auto auto 1fr; gap: 6px 10px; align-items: center; font-size: 14px; }
+  .ups b { font-weight: 700; } .ups i { font-style: normal; color: #5a6275; font-size: 12px; justify-self: end; }
+  .btn.sm { padding: 6px 10px; font-size: 12px; justify-self: end; } .btn[disabled] { opacity: .4; cursor: default; }
+  .tune { display: grid; gap: 8px; font-size: 13px; font-weight: 700; } .tune input { width: 100%; accent-color: var(--sun); }
+  .tune small { display: flex; justify-content: space-between; font-weight: 500; color: #5a6275; }
+  .srow { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
+  #gear { font-family: var(--display); font-size: 22px; width: 30px; height: 34px; border-radius: 8px; background: rgba(255,255,255,.14); display: grid; place-items: center; }
+  #dmg { display: grid; grid-template-columns: 8px 14px 8px; grid-template-rows: 8px 22px 8px; gap: 2px; }
+  #dmg i { border-radius: 3px; background: rgba(255,255,255,.25); } #dz-front { grid-column: 2; grid-row: 1; } #dz-left { grid-column: 1; grid-row: 2; }
+  #dz-engine { grid-column: 2; grid-row: 2; } #dz-right { grid-column: 3; grid-row: 2; } #dz-rear { grid-column: 2; grid-row: 3; }
+  .earn { position: fixed; right: max(24px, env(safe-area-inset-right, 0px)); bottom: calc(150px + env(safe-area-inset-bottom, 0px)); font-family: var(--display); font-size: 18px;
+    color: var(--gold); text-shadow: 0 2px 0 rgba(0,0,0,.35); animation: earn 2.6s ease-out forwards; pointer-events: none; }
+  @keyframes earn { 0% { opacity: 0; transform: translateY(10px); } 12% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
   #help .keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 12px 0 16px; font-size: 14px; align-items: center; }
   #board { margin: 0 0 14px; } #board h4 { margin: 0 0 6px; font-size: 13px; color: #5a6275; }
   .fr { display: grid; grid-template-columns: 3ch 1fr auto; gap: 8px; width: 100%; padding: 5px 4px; border-radius: 8px; text-align: left; font-weight: 500; }
@@ -80,8 +106,9 @@
 </style>
 <canvas id="c"></canvas>
 <canvas id="mini" width="352" height="352"></canvas>
-<div id="speed" class="pill"><div id="kmh">0<small>km/h</small></div><div id="meter"><i></i></div></div>
+<div id="speed" class="pill"><div class="srow"><div id="dmg" aria-label="Damage"><i id="dz-front"></i><i id="dz-left"></i><i id="dz-engine"></i><i id="dz-right"></i><i id="dz-rear"></i></div><div id="kmh">0<small>km/h</small></div><div id="gear">1</div></div><div id="meter"><i></i></div></div>
 <div id="top">
+  <div class="pill" id="cr">0 CR</div>
   <div class="pill" id="heads" title="Stone heads found">◉ 0/30</div>
   <button class="pill" id="bmap">Map <kbd>M</kbd></button>
   <button class="pill" id="bgarage">Garage <kbd>G</kbd></button>
@@ -96,7 +123,8 @@
 </div>
 <div id="mapsheet" class="sheet" hidden><canvas id="mapc" width="960" height="960"></canvas>
   <div id="maplegend" class="pill"><span><i style="background:#ffd23f"></i>Race</span><span><i style="background:#ff4d5a"></i>Speed trap</span><span><i style="background:#a35bff"></i>Drift zone</span><span><i style="background:#ff8c1a"></i>Jump</span><span>Click a found event to drive there. <kbd>M</kbd> closes</span></div></div>
-<div id="garage" class="sheet" hidden><div class="card"><h2>Garage</h2><p>Every two stone heads you find unlock another car.</p><div id="cars"></div><div class="acts"><button class="btn go" id="gclose">Drive</button></div></div></div>
+<div id="garage" class="sheet" hidden><div class="card wide"><div class="ghead"><h2>Garage</h2><b id="gcr"></b></div><p>Win races, find stone heads, hit speed traps, drift and jump to earn credits. Spend them on cars, upgrades and repairs.</p>
+  <div class="gcols"><div id="cars"></div><div id="gdetail"></div></div><div class="acts"><button class="btn go" id="gclose">Back to driving</button></div></div></div>
 <div id="results" class="sheet" hidden><div class="card"><h2 id="rname"></h2><div class="rows" id="rrows"></div><div id="board" hidden></div>
   <div class="acts"><button class="btn go" id="rretry">Race again</button><button class="btn" id="rdare">Challenge a friend</button><button class="btn" id="rclose">Keep driving</button></div></div></div>
 <div id="help" class="sheet" hidden><div class="card"><h2>Sunday Drive</h2><p>An island to drive around. Races, speed traps, drift zones and jumps are marked by light beams; 30 stone heads are hidden off the roads.</p>

@@ -10,7 +10,7 @@ export const CATALOG = {
   // roads
   rStraight: m(RD, 'road-straight'), rBend: m(RD, 'road-bend'), rT: m(RD, 'road-intersection'), rCross: m(RD, 'road-crossroad'),
   rEnd: m(RD, 'road-end'), light: m(RD, 'light-square'), lightDouble: m(RD, 'light-square-double'), pillar: m(RD, 'bridge-pillar-wide'),
-  cone: m(RD, 'construction-cone'), barrier: m(RD, 'construction-barrier'), signal: m(RD, 'traffic-light'),
+  cone: m(RD, 'construction-cone'), guard: m(RD, 'construction-barrier'), barrier: m(RD, 'construction-barrier'), signal: m(RD, 'traffic-light'),
   // downtown
   ...Object.fromEntries('abcde'.split('').map(c => ['sky' + c.toUpperCase(), m(CM, 'building-skyscraper-' + c)])),
   ...Object.fromEntries('abcdefghijklmn'.split('').map(c => ['com' + c.toUpperCase(), m(CM, 'building-' + c)])),

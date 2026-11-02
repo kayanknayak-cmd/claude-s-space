@@ -9,6 +9,7 @@ function frame() {
   stepTrain(performance.now());
   if (Math.random() < .01) tidyProps(car);
   poseCar(carMesh, car, dt);
+  if (race) race.cars.slice(0, race.n).forEach((c, k) => poseCar(aiMeshes[k], c, dt));
   if (ghost) {
     poseCar(ghost.mesh, ghost.c, dt);
     const d = Math.hypot(ghost.c.x - car.x, ghost.c.z - car.z), o = THREE.MathUtils.clamp((d - 3) / 10, .1, 1) * .45;
@@ -43,13 +44,14 @@ async function start() {
   buildTerrain(root); lap('terrain'); buildWorld(root); lap('instances'); buildProps(); buildEvents(); buildTrain(); lap('props+events');
   scene.add(skidMesh);
   drawMapImage(); lap('map');
-  car = makeCar(W, W.spawn, unlocked(save.car) ? save.car : 'sedan-sports');
+  if (!unlocked(save.car)) save.car = 'sedan-sports';
+  car = makeCar(W, W.spawn, save.car, setupOf(save.car));
   carMesh = carModel(car.model);
   camMode = save.cam || 0;
   camPos.set(car.x - car.hx * 10, car.y + 5, car.z - car.hz * 10); camAt.set(car.x, car.y, car.z);
   renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  uiHeads(); setupTouch();
+  uiHeads(); uiCredits(0); setupTouch();
   if (!save.helped) $('help').hidden = false;
   $('load').classList.add('gone');
   readLink(); online();

@@ -238,7 +238,9 @@ export function stepCar(W, c, inp) {
   // the respawn point: the last road position, facing along the road's axis nearest the car's heading
   if (c.onRoad && !c.air && c.steps % 30 === 0) {
     const ax = c.hx < 0 ? -c.hx : c.hx, az = c.hz < 0 ? -c.hz : c.hz;
-    c.safe = { x: c.x, z: c.z, hx: ax >= az ? (c.hx < 0 ? -1 : 1) : 0, hz: ax >= az ? 0 : (c.hz < 0 ? -1 : 1) };
+    // centred across the road tile, so a respawn never starts on the edge
+    const alongX = ax >= az, ti = Math.floor(c.x / T), tj = Math.floor(c.z / T);
+    c.safe = { x: alongX ? c.x : (ti + .5) * T, z: alongX ? (tj + .5) * T : c.z, hx: alongX ? (c.hx < 0 ? -1 : 1) : 0, hz: alongX ? 0 : (c.hz < 0 ? -1 : 1) };
   }
 
   if (c.y < WATER - .7) {
@@ -264,7 +266,7 @@ function zoneOf(c, nx, nz) {
   const af = fwd < 0 ? -fwd : fwd, as = side < 0 ? -side : side;
   return af > as ? (fwd < 0 ? 'front' : 'rear') : (side < 0 ? 'right' : 'left');
 }
-const crashDamage = (vn, m) => vn < 5 ? 0 : (vn - 5) * Math.sqrt(vn - 5) * .009 * Math.sqrt(m / 1400);
+const crashDamage = (vn, m) => vn < 6 ? 0 : (vn - 6) * Math.sqrt(vn - 6) * .0045 * Math.sqrt(m / 1400);
 
 function onCircuit(W, x, z) {
   for (const pc of W.circuit.pieces) {
@@ -351,6 +353,8 @@ export function respawn(W, c, pose = c.safe) {
   c.x = pose.x; c.z = pose.z; c.hx = pose.hx; c.hz = pose.hz;
   c.vx = c.vz = c.vy = 0; c.r = 0; c.air = 0; c.drift = 0; c.boosting = 0; c.wet = 0; c.s = 0; c.gear = 1; c.ax = 0; c.rev = 0;
   c.y = groundAt(W, c.x, c.z);
+  // a tow: a dead engine comes back limping (half power) so a wreck costs time, not the race
+  if (c.stalled) { c.stalled = 0; if (c.dmg.engine > .5) c.dmg.engine = .5; }
 }
 export function repair(c) { c.dmg = { front: 0, rear: 0, left: 0, right: 0, engine: 0 }; c.stalled = 0; }
 

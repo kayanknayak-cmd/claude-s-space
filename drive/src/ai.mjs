@@ -65,6 +65,7 @@ export function drive(d, c) {
   }
   // stay under the braking curve: brake as soon as we're over it, accelerate when comfortably under
   // (never brake at a crawl: the brake pedal turns into reverse below walking pace)
+  if (d.cap !== undefined && d.cap < target) target = d.cap > 0 ? d.cap : 0;
   const th = v > target ? (v > 3 ? -1 : 0) : v < target - 1.5 ? 1 : 0;
   // steering: aim at a point ahead, shifted sideways by this driver's preferred line
   const look = 5 + v * .4;

@@ -11,7 +11,7 @@ const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CAR_SCALE = 1.76;
 const UNLOCK = ['sedan-sports', 'hatchback-sports', 'sedan', 'taxi', 'kart-oobi', 'suv', 'van', 'truck', 'police', 'suv-luxury', 'delivery',
   'ambulance', 'firetruck', 'garbage-truck', 'tractor', 'race', 'race-future'];
-const unlocked = key => UNLOCK.indexOf(key) < 5 + Math.floor(Object.keys(save.heads).length / 2);
+const unlocked = key => !!(save.owned && save.owned[key]);
 
 let W, EV, car, carMesh, ghost = null;
 
@@ -71,13 +71,21 @@ function ac() {
   noise = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
   const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   for (const [k, b64] of Object.entries(SOUNDS)) AC.decodeAudioData(bytes(b64)).then(b => { buffers[k] = b; }, () => {});
-  // engine: a sawtooth and a sub square through a resonant lowpass; tyres and wind: filtered noise
-  const out = AC.createGain(); out.gain.value = 0; out.connect(master);
-  const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 5; lp.connect(out);
-  const o1 = AC.createOscillator(), o2 = AC.createOscillator(); o1.type = 'sawtooth'; o2.type = 'square';
-  const g2 = AC.createGain(); g2.gain.value = .45; o1.connect(lp); o2.connect(g2); g2.connect(lp); o1.start(); o2.start();
+  // engine: firing-frequency saw + half-order square, a waveshaper for grit, a lowpass that opens with load;
+  // tyres, gravel and wind: filtered noise; turbo: a whistle
+  const out = AC.createGain(); out.gain.value = 0;
+  const shaper = AC.createWaveShaper(), curve = new Float32Array(1024);
+  for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; curve[i] = Math.tanh(x * 2.6); }
+  shaper.curve = curve;
+  const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 2.5;
+  const o1 = AC.createOscillator(), o2 = AC.createOscillator(), o3 = AC.createOscillator(); o1.type = 'sawtooth'; o2.type = 'square'; o3.type = 'triangle';
+  const g2 = AC.createGain(); g2.gain.value = .5; const g3 = AC.createGain(); g3.gain.value = .35;
+  o1.connect(shaper); o2.connect(g2); g2.connect(shaper); o3.connect(g3); g3.connect(shaper); shaper.connect(lp); lp.connect(out); out.connect(master);
+  o1.start(); o2.start(); o3.start();
   const mk = (type, f, q) => { const s = AC.createBufferSource(); s.buffer = noise; s.loop = true; const fl = AC.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q; const g = AC.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(master); s.start(); return { g, fl }; };
-  eng = { out, lp, o1, o2, tyre: mk('bandpass', 1500, 7), wind: mk('lowpass', 700, .5) };
+  const intake = mk('bandpass', 600, 1.2); intake.g.disconnect(); intake.g.connect(lp);
+  const tw = AC.createOscillator(), twg = AC.createGain(); tw.type = 'sine'; twg.gain.value = 0; tw.connect(twg); twg.connect(master); tw.start();
+  eng = { out, lp, o1, o2, o3, intake, tyre: mk('bandpass', 1400, 6), gravel: mk('lowpass', 420, .7), wind: mk('lowpass', 700, .5), tw, twg, lastTh: 0, popT: 0 };
   return AC;
 }
 function play(name, vol = 1, rate = 1) {
@@ -98,20 +106,35 @@ function whoosh(vol = .3, dur = .6) {
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .05); g.gain.exponentialRampToValueAtTime(.001, t + dur);
   s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + dur + .05);
 }
+// cylinders per car, for the firing frequency (rpm / 60 * cylinders / 2)
+const CYL = { 'race': 10, 'race-future': 6, 'sedan-sports': 6, 'hatchback-sports': 4, 'sedan': 4, 'taxi': 4, 'kart-oobi': 1, 'suv': 6, 'van': 4,
+  'truck': 8, 'police': 8, 'suv-luxury': 8, 'delivery': 6, 'ambulance': 8, 'firetruck': 6, 'garbage-truck': 6, 'tractor': 3 };
 function engineSound(c, throttle) {
   if (!eng) return;
-  const t = AC.currentTime, P = CARS[c.model], v = Math.abs(c.f), top = P.vmax + 12;
-  // five gears spread over the car's speed range
-  const g = Math.min(4, Math.floor(v / top * 5.2)), lo = g * top / 5.2, frac = Math.min(1, (v - lo) / (top / 5.2));
-  const f = 38 + g * 5 + frac * 70 + (c.boosting ? 14 : 0) + (c.air ? 25 : 0);
-  eng.o1.frequency.setTargetAtTime(f, t, .04); eng.o2.frequency.setTargetAtTime(f / 2, t, .04);
-  eng.lp.frequency.setTargetAtTime(380 + frac * 700 + throttle * 500, t, .06);
-  eng.out.gain.setTargetAtTime(.05 + throttle * .05, t, .1);
-  const sk = c.air || !c.onRoad ? 0 : Math.min(1, (c.drift ? .55 : 0) + Math.max(0, c.slip - 2) / 6);
-  eng.tyre.g.gain.setTargetAtTime(sk * .09, t, .05);
-  eng.wind.g.gain.setTargetAtTime(Math.min(.12, c.speed * c.speed * .00005), t, .2);
+  const t = AC.currentTime, S = c.S, rpm = Math.max(700, Math.min(S.red * 1.02, c.rpm || 900)), load = c.throttle || 0;
+  const f = rpm / 60 * (CYL[c.model] || 4) / 2 * (c.boosting ? 1.04 : 1), r = rpm / S.red;
+  eng.o1.frequency.setTargetAtTime(f, t, .03); eng.o2.frequency.setTargetAtTime(f / 2, t, .03); eng.o3.frequency.setTargetAtTime(f * 1.5, t, .03);
+  eng.lp.frequency.setTargetAtTime(240 + r * 1300 + load * 900, t, .05);
+  eng.intake.fl.frequency.setTargetAtTime(400 + r * 900, t, .05); eng.intake.g.gain.setTargetAtTime(.2 + load * .4, t, .05);
+  const shifting = c.shiftT > 0, vol = c.stalled ? 0 : (.035 + load * .05 + r * .02) * (shifting ? .35 : 1);
+  eng.out.gain.setTargetAtTime(vol, t, shifting ? .01 : .06);
+  // lift off at high revs: a few exhaust pops; turbo blow-off
+  if (eng.lastTh && !load && r > .6) { eng.popT = .5; if (c.setup && c.setup.up && c.setup.up.turbo) whoosh(.12, .25); }
+  eng.lastTh = load;
+  if (eng.popT > 0) { eng.popT -= 1 / 60; if (Math.random() < .12) pop(); }
+  const turbo = c.setup && c.setup.up ? c.setup.up.turbo || 0 : 0;
+  eng.tw.frequency.setTargetAtTime(1500 + r * 2600, t, .1); eng.twg.gain.setTargetAtTime(turbo ? load * r * .018 * turbo : 0, t, .15);
+  const slide = c.air || !c.onRoad ? 0 : Math.min(1, (c.drift ? .6 : 0) + Math.max(0, c.slip - 2) / 6 + (c.spin ? .3 : 0));
+  eng.tyre.g.gain.setTargetAtTime(slide * .08, t, .05);
+  eng.gravel.g.gain.setTargetAtTime(!c.onRoad && !c.air ? Math.min(.14, c.speed * .006) : 0, t, .1);
+  eng.wind.g.gain.setTargetAtTime(Math.min(.12, c.speed * c.speed * .00004), t, .2);
 }
-
+function pop() {
+  const a = AC, t = a.currentTime, s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+  s.buffer = noise; f.type = 'lowpass'; f.frequency.value = 500 + Math.random() * 700;
+  g.gain.setValueAtTime(.35, t); g.gain.exponentialRampToValueAtTime(.001, t + .07);
+  s.connect(f); f.connect(g); g.connect(master); s.start(t, Math.random()); s.stop(t + .08);
+}
 // ---------- particles and skid marks ----------
 const softTex = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 64;
@@ -348,23 +371,25 @@ function nearestStart() {
   return bd < 13 ? best : null;
 }
 function tryStart() { if (mode === 'free') { const e = nearestStart(); if (e) begin(e); } }
-function begin(e, ghostRow) {
+// ---------- races: you start at the back of an AI grid ----------
+let race = null, aiMeshes = [], target = null;
+const setupOf = key => (save.owned && save.owned[key]) || {};
+function begin(e, friendRow) {
+  if (race) endRace();
   active = e; mode = 'count'; countT = 0; rec = []; recStep = 0;
-  respawn(W, car, e.start); car.steps = 0; car.meter = .3;
+  race = makeRace(W, e, save.car, setupOf(save.car));
+  // you race in a fresh, repaired car; afterwards you drive on in the one that finished
+  car = race.player; scene.remove(carMesh); carMesh = carModel(car.model);
+  aiMeshes = race.cars.slice(0, race.n).map(c => carModel(c.model));
+  gate = race.st[race.n];
   camPos.set(car.x - car.hx * 10, car.y + 4.5, car.z - car.hz * 10); camAt.set(car.x + car.hx * 5, car.y + 1.3, car.z + car.hz * 5);
-  gate = { gi: 0, done: false, time: 0, split: 0 };
-  if (ghost) { scene.remove(ghost.mesh); ghost = null; }
-  const row = ghostRow || save.best[e.id] || null;
-  if (row && row.inputs) {
-    const gc = makeCar(W, e.start, row.car || save.car);
-    ghost = { c: gc, inputs: decodeInputs(row.inputs), mesh: carModel(row.car || save.car, ghostRow ? '#ff7ab8' : '#6fd0ff'), st: { gi: 0, done: false }, splits: [], who: ghostRow ? ghostRow.who : 'Your best' };
-    // the reference splits: when the ghost reached each gate
-    const sc = makeCar(W, e.start, row.car || save.car), sst = { gi: 0, done: false };
-    for (let k = 0; k < 120 * 600 && !sst.done; k++) { stepCar(W, sc, unpackInput(ghost.inputs[Math.floor(k / IN_EVERY)] ?? 0)); const before = sst.gi; runGates(e, sc, sst); if (sst.gi > before) ghost.splits[sst.gi] = sc.steps; }
-  }
+  // splits to beat: a friend's (from the board or a link) or your own best
+  const ref = friendRow || (save.best[e.id] && save.best[e.id].v === 2 ? save.best[e.id] : null);
+  target = ref && ref.splits ? { splits: ref.splits, time: ref.time, who: friendRow ? friendRow.who : 'your best' } : null;
   uiEvent(e);
   showGates();
 }
+function endRace() { for (const m of aiMeshes) scene.remove(m); aiMeshes = []; race = null; }
 function escape() {
   if ($('mapsheet').hidden === false) return toggleMap();
   if ($('garage').hidden === false) return toggleGarage();
@@ -374,25 +399,39 @@ function escape() {
 }
 function endEvent(finished) {
   mode = finished ? 'results' : 'free';
-  if (ghost) { scene.remove(ghost.mesh); ghost = null; }
   showGates(); uiEvent(null);
-  if (!finished) active = null;
+  if (!finished) { active = null; endRace(); }
 }
 function finishEvent() {
-  const e = active, time = gate.time, prev = save.best[e.id];
-  const rle = encodeInputs(rec);
-  // keep it only if the recording replays to the same finish (it always should; this keeps ghosts honest)
-  const check = verifyRun(e, save.car, rle);
-  const isBest = check !== null && Math.abs(check - time) < 1e-9 && (!prev || time < prev.time);
-  if (isBest) { save.best[e.id] = { time, inputs: rle, car: save.car }; persist(); pushBests(); }
+  const e = active, time = gate.time, prev = save.best[e.id] && save.best[e.id].v === 2 ? save.best[e.id] : null;
+  const place = race.order.indexOf(race.n) + 1, field = race.n + 1;
+  const rle = encodeInputs(rec), setup = setupOf(save.car);
+  // keep it only if the recording replays to the same finish (it always should; this keeps records honest)
+  const check = replayRace(W, e, save.car, setup, decodeInputs(rle));
+  const ok = check !== null && Math.abs(check.time - time) < 1e-9;
+  const isBest = ok && (!prev || time < prev.time);
+  if (isBest) { save.best[e.id] = { v: 2, time, place, inputs: rle, car: save.car, setup, splits: check.splits }; persist(); pushBests(); }
+  const pay = [1, .7, .5, .38, .3, .24, .2, .16][place - 1] || .1, prize = Math.round((e.len || 4000) / 1000 * 3000 * pay / 10) * 10 + (isBest ? 500 : 0);
+  earn(prize, `P${place} in ${e.name}`);
   play('bell', .6); tone(1046, .5, .12, 'triangle', .1);
   endEvent(true);
-  showResults(e, { time, prev, isBest });
+  showResults(e, { time, prev, isBest, place, field, prize });
+  for (const m of aiMeshes) m.userData.done = 1;
 }
-function verifyRun(e, model, rle, limit = 120 * 600) {
-  const codes = decodeInputs(rle), c = makeCar(W, e.start, model), st = { gi: 0, done: false };
-  for (let k = 0; k < limit && !st.done; k++) { stepCar(W, c, unpackInput(codes[Math.floor(k / IN_EVERY)] ?? 0)); runGates(e, c, st); }
-  return st.done ? st.time : null;
+function repairMesh() { /* dents are drawn in the damage pass */ }
+function verifyRun(e, model, rle, setup) { const r = replayRace(W, e, model, setup || {}, decodeInputs(rle)); return r; }
+
+// ---------- credits and driver level ----------
+save.cr ??= 5000; save.xp ||= 0;
+save.owned ||= {};
+for (const k of Object.keys(CARS)) if (!CARS[k].price && !save.owned[k]) save.owned[k] = { up: {}, tune: {} };
+const levelOf = xp => Math.floor(Math.sqrt(xp / 1500)) + 1;
+function earn(n, why) {
+  if (n <= 0) return;
+  const lv = levelOf(save.xp);
+  save.cr += n; save.xp += n; persist();
+  uiCredits(n, why);
+  if (levelOf(save.xp) > lv) { save.cr += 2000; persist(); setTimeout(() => { toast(`Driver level ${levelOf(save.xp)}! Bonus 2,000 CR.`, 3200); tone(784, .2, .1, 'triangle'); tone(1047, .4, .1, 'triangle', .15); }, 1200); }
 }
 
 // passive events: speed traps, drift zones, jumps, heads, discovery
@@ -410,8 +449,7 @@ function passive(dt, evs) {
     const n = Object.keys(save.heads).length;
     play('bell', .7); tone(784, .3, .1, 'triangle'); tone(1175, .5, .1, 'triangle', .12);
     for (let i = 0; i < 24; i++) puff(new THREE.Vector3(h.x, car.y + 2, h.z), '#ffd96a', .8, 1, new THREE.Vector3((Math.random() - .5) * 10, Math.random() * 9, (Math.random() - .5) * 10), true, .5);
-    const un = n % 2 === 0 && UNLOCK[4 + n / 2] ? ` New car in the garage: ${CARS[UNLOCK[4 + n / 2]].name}.` : '';
-    toast(`Stone head ${n} of 30.${un}`, 3500); uiHeads();
+    toast(`Stone head ${n} of 30.`, 3000); uiHeads(); earn(3000, 'Stone head');
   }
   if (mode !== 'free') return;
   // speed traps
@@ -419,6 +457,7 @@ function passive(dt, evs) {
     lastTrap[e.id] = performance.now();
     const kmh = Math.round(car.speed * 3.6), b = save.best[e.id];
     if (!b || kmh > b.speed) { save.best[e.id] = { speed: kmh }; persist(); }
+    earn(Math.max(0, kmh - 80) * 15, e.name + ' speed trap');
     tone(1320, .08, .12, 'square'); tone(1320, .08, .12, 'square', .12);
     toast(`${e.name} speed trap: ${kmh} km/h${b ? (kmh > b.speed ? '. New best!' : ` (best ${b.speed})`) : ''}`, 3000);
   }
@@ -433,6 +472,7 @@ function passive(dt, evs) {
     const s = Math.round(drift.score), b = save.best[drift.e.id];
     if (s > 20) {
       if (!b || s > b.score) { save.best[drift.e.id] = { score: s }; persist(); }
+      earn(Math.round(s * 1.5), drift.e.name);
       toast(`${drift.e.name}: ${s} drift points${b ? (s > b.score ? '. New best!' : ` (best ${b.score})`) : ''}`, 3200);
     }
     drift = null; uiDrift(null);
@@ -443,6 +483,7 @@ function passive(dt, evs) {
       const d = Math.round(Math.hypot(car.x - takeoff.x, car.z - takeoff.z)), b = save.best[takeoff.e.id];
       if (d > 8) {
         if (!b || d > b.dist) { save.best[takeoff.e.id] = { dist: d }; persist(); }
+        earn(d * 15, takeoff.e.name);
         toast(`${takeoff.e.name}: ${d} m${b ? (d > b.dist ? '. New best!' : ` (best ${b.dist} m)`) : ''}`, 3000);
       }
       takeoff = null;
@@ -462,7 +503,7 @@ function stepWorld(dt) {
   if (mode === 'count') {
     countT += dt; uiCount(countT);
     if (countT >= 3) { mode = 'event'; tone(988, .35, .16, 'square'); }
-    car.vx = car.vz = 0;
+    if (race) for (const c of race.cars) c.vx = c.vz = 0;
     return [];
   }
   const evs = [];
@@ -472,25 +513,22 @@ function stepWorld(dt) {
     acc -= DT;
     if (mode === 'event') {
       if (recStep % IN_EVERY === 0) { rec.push(packInput(input.st, input.th, input.hb, input.bo, input.rs)); input.rs = 0; }
-      const code = rec[rec.length - 1];
       recStep++;
-      const ev = stepCar(W, car, unpackInput(code));
       const before = gate.gi;
-      runGates(active, car, gate);
+      evs.push(...stepRace(W, race, rec[rec.length - 1]));
       if (gate.gi > before) onGate();
-      evs.push(...ev);
-      if (ghost && !ghost.st.done) { stepCar(W, ghost.c, unpackInput(ghost.inputs[Math.floor((recStep - 1) / IN_EVERY)] ?? 0)); runGates(active, ghost.c, ghost.st); }
       if (gate.done) { finishEvent(); break; }
     } else {
       evs.push(...stepCar(W, car, unpackInput(packInput(input.st, input.th, input.hb, input.bo, input.rs))));
       input.rs = 0;
+      if (race && mode === 'results') stepRace(W, race, packInput(0, 0, 0, 0, 0));
     }
   }
   return evs;
 }
 function onGate() {
   tone(1568, .12, .1, 'triangle'); tone(2093, .2, .08, 'triangle', .06);
-  if (ghost && ghost.splits[gate.gi]) uiSplit((car.steps - ghost.splits[gate.gi]) / 120);
+  if (target && target.splits[gate.gi]) uiSplit((race.steps - target.splits[gate.gi]) / 120);
   showGates();
 }
 function effects(evs, dt) {

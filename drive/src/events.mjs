@@ -67,7 +67,7 @@ export function makeEvents(W) {
     const gates = [];
     for (let lap = 0; lap < 2; lap++) for (const pc of P.slice(1)) gates.push([pc.B[0], pc.B[1], pc.out[0], pc.out[1]]);
     gates.push([st.A[0] + st.D[0] * S, st.A[1] + st.D[1] * S, st.D[0], st.D[1]]);
-    const path = []; for (let lap = 0; lap < 2; lap++) for (const pc of P) { for (let k = 0; k < 6; k++) { const t = k / 6; path.push(pc.type === 'corner' ? arcPt(pc, t) : [pc.A[0] + (pc.B[0] - pc.A[0]) * t, pc.A[1] + (pc.B[1] - pc.A[1]) * t]); } }
+    const path = []; for (let lap = 0; lap < 3; lap++) for (const pc of (lap < 2 ? P : P.slice(0, 1))) { for (let k = 0; k < 6; k++) { const t = k / 6; path.push(pc.type === 'corner' ? arcPt(pc, t) : [pc.A[0] + (pc.B[0] - pc.A[0]) * t, pc.A[1] + (pc.B[1] - pc.A[1]) * t]); } }
     E.push({ path, id: 'gp', name: 'Grand Prix', type: 'sprint', x: st.A[0], z: st.A[1], start: { x: st.A[0] + st.D[0] * 4, z: st.A[1] + st.D[1] * 4, hx: st.D[0], hz: st.D[1] }, gates, r: 14, laps: 2 }); }
 
   // speed traps on the longest straights: passive, triggered by driving past

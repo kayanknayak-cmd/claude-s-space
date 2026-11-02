@@ -14,7 +14,21 @@ function uiDrift(d) {
 }
 function uiEvent(e) {
   $('event').hidden = !e; $('count').hidden = true;
-  if (e) { $('ename').textContent = e.name; $('etime').textContent = fmt(0); $('esub').textContent = `gate 0 of ${e.gates.length}`; $('esub').className = ''; }
+  if (e) { $('ename').textContent = e.name; $('etime').textContent = fmt(0); $('esub').textContent = ''; $('esub').className = ''; }
+}
+// credits: the balance top right, and a "+N" that floats up when you earn
+function uiCredits(n, why) {
+  $('cr').textContent = save.cr.toLocaleString('en') + ' CR';
+  if (!n) return;
+  const f = document.createElement('div'); f.className = 'earn'; f.textContent = `+${n.toLocaleString('en')} CR · ${why}`;
+  document.body.appendChild(f); setTimeout(() => f.remove(), 2600);
+  tone(1318, .08, .06, 'triangle');
+}
+// the car outline in the HUD: each side goes yellow, then red, as it takes damage
+function uiDamage() {
+  const D = car.dmg, col = v => v < .15 ? 'rgba(255,255,255,.25)' : v < .5 ? '#ffd23f' : v < .85 ? '#ff8c1a' : '#ff4d5a';
+  for (const z of ['front', 'rear', 'left', 'right', 'engine']) $('dz-' + z).style.background = col(D[z]);
+  $('dmg').title = `Damage: engine ${Math.round(D.engine * 100)}%`;
 }
 function uiCount(t) {
   const n = 3 - Math.floor(t);
@@ -26,10 +40,15 @@ let splitT = 0;
 function uiSplit(d) { const el = $('esub'); el.textContent = fmtD(d); el.className = d < 0 ? 'ahead' : 'behind'; splitT = performance.now() + 1800; }
 function uiTick() {
   $('kmh').firstChild.nodeValue = Math.round(car.speed * 3.6);
+  $('gear').textContent = car.rev ? 'R' : car.gear;
+  if (frame.n % 10 === 0) uiDamage();
   const m = $('meter'); m.firstChild.style.width = (car.meter * 100).toFixed(0) + '%'; m.classList.toggle('full', car.meter > .98);
-  if (mode === 'event' && active) {
-    $('etime').textContent = fmt(car.steps / 120);
-    if (performance.now() > splitT) { $('esub').textContent = `gate ${gate.gi} of ${active.gates.length}`; $('esub').className = ''; }
+  if (mode === 'event' && active && race) {
+    $('etime').textContent = fmt(race.steps / 120);
+    if (performance.now() > splitT) {
+      const pos = standings(race).indexOf(race.n) + 1;
+      $('esub').textContent = `P${pos} of ${race.n + 1} · gate ${gate.gi}/${active.gates.length}${target ? ' · vs ' + target.who : ''}`; $('esub').className = '';
+    }
   }
   // the prompt for a nearby race start
   const near = mode === 'free' ? nearestStart() : null, p = $('prompt');
@@ -119,28 +138,70 @@ function nearestRoadPose(x, z) {
 }
 
 // ---------- garage ----------
+let gSel = null;
 function toggleGarage() {
   const g = $('garage');
   if (g.hidden && mode !== 'free') { toast('Finish or leave the event first.'); return; }
   g.hidden = !g.hidden;
-  if (g.hidden) return;
-  const maxV = 55, maxA = 20;
-  $('cars').innerHTML = UNLOCK.map(k => {
-    const P = CARS[k], on = unlocked(k), need = (UNLOCK.indexOf(k) - 4) * 2;
-    return `<button class="car ${k === save.car ? 'on' : ''}" data-k="${k}" ${on ? '' : 'disabled'}>${P.name}<small>${on ? Math.round(P.vmax * 3.6) + ' km/h top' : need + ' heads to unlock'}</small>
-      <div class="bars"><em>speed</em><span style="width:${P.vmax / maxV * 100}%"></span><em>pace</em><span style="width:${P.acc / maxA * 100}%"></span><em>grip</em><span style="width:${P.grip / 13 * 100}%"></span></div></button>`;
-  }).join('');
+  if (!g.hidden) { gSel = save.car; renderGarage(); }
 }
-$('cars').addEventListener('click', e => {
-  const b = e.target.closest('.car'); if (!b || b.disabled) return;
-  save.car = b.dataset.k; persist(); setCar(save.car); toggleGarage();
+const ORDER = Object.keys(CARS).sort((a, b) => CARS[a].price - CARS[b].price || perfIndex(a).pi - perfIndex(b).pi);
+function stat(S) {
+  const kw = S.tq * S.red * .85 / 9549;
+  return { speed: Math.min(1, Math.cbrt(kw * 1000 / (S.cd + .3)) / 95), accel: Math.min(1, kw / S.mass * 3.2), grip: Math.min(1, (S.mu - .7) / .9 + S.cl * .1), brake: Math.min(1, S.brakeG * S.mu / 2.2) };
+}
+function renderGarage() {
+  const k = gSel, own = save.owned[k], S = specOf(k, own || {}), P = perfIndex(k, own || {}), st = stat(S), D = car.dmg;
+  const repair = Math.round((D.front + D.rear + D.left + D.right + D.engine * 2) * 900 / 10) * 10;
+  $('gcr').textContent = save.cr.toLocaleString('en') + ' CR';
+  $('cars').innerHTML = ORDER.map(m => {
+    const Pm = perfIndex(m, save.owned[m] || {});
+    return `<button class="car ${m === gSel ? 'on' : ''} ${m === save.car ? 'cur' : ''}" data-k="${m}"><span class="cls c${Pm.cls}">${Pm.cls} ${Pm.pi}</span>${CARS[m].name}<small>${save.owned[m] ? (m === save.car ? 'driving' : 'owned') : CARS[m].price.toLocaleString('en') + ' CR'}</small></button>`;
+  }).join('');
+  const bar = (n, v) => `<em>${n}</em><span><i style="width:${Math.round(v * 100)}%"></i></span>`;
+  let h = `<div class="ghead"><h3>${CARS[k].name}</h3><span class="cls c${P.cls}">${P.cls} ${P.pi}</span></div>
+    <div class="bars">${bar('Speed', st.speed)}${bar('Acceleration', st.accel)}${bar('Grip', st.grip)}${bar('Braking', st.brake)}</div>
+    <p class="spec">${Math.round(S.mass)} kg · ${Math.round(S.tq)} N m · ${S.gears.length}-speed · ${S.drive === 'R' ? 'rear' : S.drive === 'F' ? 'front' : 'all'}-wheel drive</p>`;
+  if (!own) h += `<button class="btn go" id="gbuy" ${save.cr < CARS[k].price ? 'disabled' : ''}>Buy for ${CARS[k].price.toLocaleString('en')} CR</button>`;
+  else {
+    if (k !== save.car) h += `<button class="btn go" id="guse">Drive this car</button>`;
+    h += '<h4>Upgrades</h4><div class="ups">' + Object.entries(UPGRADES).map(([u, U]) => {
+      const lv = own.up[u] || 0, next = lv + 1 < U.levels.length ? lv + 1 : null;
+      return `<span>${U.name}</span><b>${U.levels[lv]}</b>${next ? `<button class="btn sm" data-up="${u}" ${save.cr < U.cost[next] ? 'disabled' : ''}>${U.levels[next]} · ${U.cost[next].toLocaleString('en')}</button>` : '<i>maxed</i>'}`;
+    }).join('') + '</div><h4>Tuning</h4><div class="tune">' + [['final', 'Gearing', 'Quick', 'Top speed', true], ['balance', 'Handling', 'Loose', 'Planted'], ['brake', 'Brake balance', 'Rear', 'Front'], ['assist', 'Stability assist', 'Off', 'Full']].map(([t, n, lo, hi, inv]) => {
+      const [a, b] = TUNE[t], v = own.tune[t] ?? TDEF[t];
+      return `<label>${n}<input type="range" id="t-${t}" data-t="${t}" min="${a}" max="${b}" step="${(b - a) / 35}" value="${v}" ${inv ? 'style="direction:rtl"' : ''}><small><span>${inv ? hi : lo}</span><span>${inv ? lo : hi}</span></small></label>`;
+    }).join('') + '</div>';
+    if (k === save.car && repair > 0) h += `<button class="btn" id="grepair" ${save.cr < repair ? 'disabled' : ''}>Repair damage · ${repair.toLocaleString('en')} CR</button>`;
+  }
+  $('gdetail').innerHTML = h;
+}
+$('cars').addEventListener('click', e => { const b = e.target.closest('.car'); if (!b) return; gSel = b.dataset.k; play('tap', .3); renderGarage(); });
+$('gdetail').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t || t.disabled) return;
+  const k = gSel;
+  if (t.id === 'gbuy') { save.cr -= CARS[k].price; save.owned[k] = { up: {}, tune: {} }; persist(); play('bell', .4); toast(`${CARS[k].name} is yours.`); }
+  else if (t.id === 'guse') { save.car = k; persist(); setCar(k); }
+  else if (t.id === 'grepair') { const D = car.dmg, cost = Math.round((D.front + D.rear + D.left + D.right + D.engine * 2) * 900 / 10) * 10; save.cr -= cost; persist(); repair(car); repairMesh(); play('wood', .4); toast('Repaired.'); }
+  else if (t.dataset.up) {
+    const u = t.dataset.up, own = save.owned[k], lv = (own.up[u] || 0) + 1;
+    save.cr -= UPGRADES[u].cost[lv]; own.up[u] = lv; persist(); play('metal', .3);
+    if (k === save.car) car.S = specOf(k, own), car.setup = own;
+  }
+  uiCredits(0); renderGarage();
+});
+$('gdetail').addEventListener('input', e => {
+  const r = e.target.closest('input[type=range]'); if (!r) return;
+  const own = save.owned[gSel]; own.tune[r.dataset.t] = +r.value; persist();
+  if (gSel === save.car) car.S = specOf(gSel, own), car.setup = own;
 });
 $('gclose').onclick = toggleGarage;
 $('bgarage').onclick = () => { ac(); toggleGarage(); };
 $('bmap').onclick = () => { ac(); toggleMap(); };
 function setCar(key) {
   if (carMesh) scene.remove(carMesh);
-  car.model = key; carMesh = carModel(key);
+  const keep = { x: car.x, z: car.z, hx: car.hx, hz: car.hz };
+  car = makeCar(W, keep, key, setupOf(key)); carMesh = carModel(key);
 }
 
 // ---------- results and the friends leaderboard ----------
@@ -148,22 +209,36 @@ let lastResult = null;
 function showResults(e, r) {
   lastResult = { e, ...r };
   $('rname').textContent = e.name;
-  const rows = [`<span>Time</span><b>${fmt(r.time)}</b>`];
+  const rows = [`<span>Finished</span><b>P${r.place} of ${r.field}</b>`, `<span>Time</span><b>${fmt(r.time)}</b>`, `<span>Prize</span><b>${r.prize.toLocaleString('en')} CR</b>`];
   if (r.prev) rows.push(`<span>Your best before</span><b class="${r.time < r.prev.time ? 'ahead' : 'behind'}">${fmtD(r.time - r.prev.time)}</b>`);
   if (r.isBest) rows.push(`<span>New best</span><b>★</b>`);
   $('rrows').innerHTML = rows.join('');
   $('rdare').hidden = !save.best[e.id];
   $('results').hidden = false; renderBoard();
 }
-function closeResults() { $('results').hidden = true; mode = 'free'; active = null; }
+function closeResults() { $('results').hidden = true; mode = 'free'; active = null; endRace(); }
 $('rclose').onclick = closeResults;
 $('rretry').onclick = () => { const e = lastResult.e; $('results').hidden = true; begin(e); };
 $('rdare').onclick = () => {
   const e = lastResult.e, b = save.best[e.id];
   if (!b) return;
-  const url = `${DRIVE_URL}#e.${e.id}.${b.car}.${b.inputs}`;
+  const url = `${DRIVE_URL}#e.${e.id}.${b.car}.${packSetup(b.setup)}.${b.inputs}`;
   copyText(`Sunday Drive, ${e.name}: ${fmt(b.time)}. Race my ghost: ${url}`, () => toast('Challenge link copied.'), () => toast('Copy this link: ' + url, 9000));
 };
+// a car's upgrades and tune in 11 link-safe characters: 7 upgrade digits, then 4 tune values in base 36
+const UPK = ['engine', 'turbo', 'tires', 'susp', 'brakes', 'weight', 'armor'], TUK = ['final', 'balance', 'brake', 'assist'];
+const TDEF = { final: 1, balance: 0, brake: .62, assist: .7 };
+function packSetup(s = {}) {
+  const u = s.up || {}, t = s.tune || {};
+  return UPK.map(k => u[k] || 0).join('') + TUK.map(k => { const [a, b] = TUNE[k], v = t[k] ?? TDEF[k]; return Math.round((v - a) / (b - a) * 35).toString(36); }).join('');
+}
+function unpackSetup(str) {
+  if (!/^[0-3]{7}[0-9a-z]{4}$/.test(str)) return null;
+  const up = {}, tune = {};
+  UPK.forEach((k, i) => { up[k] = Math.min(UPGRADES[k].levels.length - 1, +str[i]); });
+  TUK.forEach((k, i) => { const [a, b] = TUNE[k]; tune[k] = a + (b - a) * parseInt(str[7 + i], 36) / 35; });
+  return { up, tune };
+}
 function copyText(text, ok, fail) {
   let done = false; const fin = f => { if (!done) { done = true; f(); } };
   try { navigator.clipboard.writeText(text).then(() => fin(ok), () => fin(fail)); } catch { fin(fail); }
@@ -190,18 +265,19 @@ function readBoard(docs) {
     if (!t || typeof t !== 'object') continue;
     for (const ev of EV.list) {
       const r = t[ev.id];
-      if (ev.type !== 'sprint' || !r || typeof r.inputs !== 'string' || r.inputs.length > 40000 || !/^[A-Z0-9a-z]+$/.test(r.inputs) || !CARS[r.car]) continue;
-      const key = ev.id + r.car + r.inputs;
-      if (!checked.has(key)) checked.set(key, verifyRun(ev, r.car, r.inputs));
-      const time = checked.get(key);
-      if (time !== null) (board[ev.id] ||= []).push({ id: doc.id, time, inputs: r.inputs, car: r.car });
+      if (ev.type !== 'sprint' || !r || r.v !== 2 || typeof r.inputs !== 'string' || r.inputs.length > 40000 || !/^[A-Z0-9a-z]+$/.test(r.inputs) || !CARS[r.car]) continue;
+      const setup = unpackSetup(r.setup || ''); if (!setup) continue;
+      const key = ev.id + r.car + r.setup + r.inputs;
+      if (!checked.has(key)) checked.set(key, verifyRun(ev, r.car, r.inputs, setup));
+      const res = checked.get(key);
+      if (res) (board[ev.id] ||= []).push({ id: doc.id, time: res.time, splits: res.splits, inputs: r.inputs, car: r.car, setup });
     }
   }
   for (const k in board) board[k].sort((a, b) => a.time - b.time);
   let changed = false;
   for (const ev of EV.list) {
-    const mine = (board[ev.id] || []).find(r => r.id === me), b = save.best[ev.id];
-    if (mine && (!b || mine.time < b.time - 1e-9)) { save.best[ev.id] = { time: mine.time, inputs: mine.inputs, car: mine.car }; changed = true; }
+    const mine = (board[ev.id] || []).find(r => r.id === me), b = save.best[ev.id] && save.best[ev.id].v === 2 ? save.best[ev.id] : null;
+    if (mine && (!b || mine.time < b.time - 1e-9)) { save.best[ev.id] = { v: 2, time: mine.time, inputs: mine.inputs, car: mine.car, setup: mine.setup, splits: mine.splits }; changed = true; }
     if (b && b.inputs && (!mine || b.time < mine.time - 1e-9)) changed = true;
   }
   if (changed) persist();
@@ -213,7 +289,7 @@ function readBoard(docs) {
 function pushBests() {
   if (!db || !me || !canPost) return;
   const e = {};
-  for (const ev of EV.list) { const b = save.best[ev.id]; if (ev.type === 'sprint' && b && b.inputs) e[ev.id] = { time: b.time, inputs: b.inputs, car: b.car }; }
+  for (const ev of EV.list) { const b = save.best[ev.id]; if (ev.type === 'sprint' && b && b.v === 2 && b.inputs) e[ev.id] = { v: 2, time: b.time, inputs: b.inputs, car: b.car, setup: packSetup(b.setup) }; }
   db.doc('runs/' + me).set({ e }).catch(err => { if (err && (err.code === 'invalid_argument' || err.code === 'not_granted')) canPost = false; });
 }
 const esc = s => String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';');
@@ -227,18 +303,18 @@ function renderBoard() {
 $('board').addEventListener('click', e => {
   const b = e.target.closest('.fr'); if (!b || b.disabled) return;
   const ev = lastResult.e, r = (board[ev.id] || []).find(x => x.id === b.dataset.id); if (!r) return;
-  $('results').hidden = true; begin(ev, { inputs: r.inputs, car: r.car, who: names[r.id] || 'Friend' });
-  toast(`Racing ${names[r.id] || 'a friend'}'s ghost: the pink car.`);
+  $('results').hidden = true; endRace(); begin(ev, { splits: r.splits, time: r.time, who: names[r.id] || 'Friend' });
+  toast(`Beat ${names[r.id] || 'a friend'}: ${fmt(r.time)}. Splits show the gap.`);
 });
 // challenge links: #e.<event>.<car>.<inputs>; the lap is replayed here, so the time can't be faked
 function readLink() {
-  const m = /^#e\.([a-z0-9-]+)\.([a-z-]+)\.([A-Z0-9a-z]+)$/.exec(location.hash);
+  const m = /^#e\.([a-z0-9-]+)\.([a-z-]+)\.([0-9a-z]{11})\.([A-Z0-9a-z]+)$/.exec(location.hash);
   if (!m) return;
-  const ev = EV.list.find(e => e.id === m[1]);
-  if (!ev || !CARS[m[2]]) return;
-  const time = verifyRun(ev, m[2], m[3]);
-  if (time === null) return;
-  setTimeout(() => { begin(ev, { inputs: m[3], car: m[2], who: 'Friend' }); toast(`A friend's ghost: ${fmt(time)} on ${ev.name}. Catch the pink car.`, 5000); }, 600);
+  const ev = EV.list.find(e => e.id === m[1]), setup = unpackSetup(m[3]);
+  if (!ev || !CARS[m[2]] || !setup) return;
+  const res = verifyRun(ev, m[2], m[4], setup);
+  if (!res) return;
+  setTimeout(() => { begin(ev, { splits: res.splits, time: res.time, who: 'your friend' }); toast(`A friend did ${ev.name} in ${fmt(res.time)} (${CARS[m[2]].name}). Beat it.`, 5000); }, 600);
 }
 
 // ---------- help ----------

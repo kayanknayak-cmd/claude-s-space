@@ -244,6 +244,20 @@ export function makeWorld() {
     [26.5 * T, 120 * T, [0, -1], 14, 3], [110.5 * T, 30 * T, [0, -1], 12, 2.8],
   ].map(([x, z, d, len, h]) => ({ x, z, d, len, h, w: 6 }));
 
+  // ---------- guard rails on causeways: a solid rail on each side that faces open water ----------
+  W.rails = [];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    if (!W.road[at(i, j)]) continue;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      // a rail wherever the ground beside the road (just past its edge) is under water
+      const ni = i + dx, nj = j + dz, ha = Math.min(HN - 1, Math.max(0, Math.round((i + .5 + dx * .75) * HG))), hb = Math.min(HN - 1, Math.max(0, Math.round((j + .5 + dz * .75) * HG)));
+      if (open(ni, nj) || W.H[hb * HN + ha] > WATER - .2) continue;
+      const x = (i + .5 + dx * .47) * T, z = (j + .5 + dz * .47) * T;
+      W.cols.push({ t: 'b', x, z, hx: dx ? .35 : T / 2, hz: dz ? .35 : T / 2, key: 'rail' });
+      W.rails.push([x, z, dx ? 1 : 0]);
+    }
+  }
+
   // ---------- collider grid ----------
   W.grid = Array.from({ length: (N / 2) * (N / 2) }, () => []);
   W.cols.forEach((c, k) => {
