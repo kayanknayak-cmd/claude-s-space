@@ -14,7 +14,7 @@ const DIR = path.dirname(fileURLToPath(import.meta.url));
 const ZIPS = path.join(DIR, '..', '..', 'assets', 'kenney'), OUT = path.join(DIR, '..', 'drive.html');
 const unzip = (zip, file) => execFileSync('unzip', ['-p', path.join(ZIPS, zip), file], { maxBuffer: 1 << 27 });
 const SOUNDS = { crash: 'impactPlate_heavy_000', bump: 'impactPlate_medium_001', metal: 'impactMetal_heavy_002', land: 'impactSoft_heavy_001',
-  soft: 'impactSoft_medium_000', wood: 'impactPlank_medium_000', bell: 'impactBell_heavy_000' };
+  soft: 'impactSoft_medium_000', wood: 'impactPlank_medium_000', bell: 'impactBell_heavy_000', glass: 'impactGlass_heavy_001', crunch: 'impactMetal_heavy_000' };
 const ICONS = { pad: 'Style C/joystick_circle_pad_a', nub: 'Style C/joystick_circle_nub_a', button: 'Style C/button_circle',
   brake: 'Icons/icon_pedal_brake', drift: 'Icons/icon_arrow_curved', boost: 'Icons/icon_fire', reset: 'Icons/icon_arrow_rotate' };
 

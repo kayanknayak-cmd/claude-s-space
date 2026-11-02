@@ -9,6 +9,7 @@ function frame() {
   stepTrain(performance.now());
   if (Math.random() < .01) tidyProps(car);
   poseCar(carMesh, car, dt);
+  engineSmoke(car, carMesh, dt); stepDebris(dt);
   if (race) race.cars.slice(0, race.n).forEach((c, k) => poseCar(aiMeshes[k], c, dt));
   if (ghost) {
     poseCar(ghost.mesh, ghost.c, dt);
@@ -61,5 +62,6 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, fal
 window.__drive = { scene, renderer, THREE, get car() { return car; }, get mode() { return mode; }, keys, begin: id => begin(EV.list.find(e => e.id === id)), get W() { return W; }, cam: v => { camMode = v; },
   // test hook: put the car just before gate n of the running event, moving through it
   go() { countT = 3; return 1; },
+  crash(zone, a) { car.dmg[zone] = Math.min(1, car.dmg[zone] + a); car.dmg.engine = Math.min(1, car.dmg.engine + a * .8); effects([{ t: 'damage', zone, a }], 0); return car.dmg; },
   toGate(n) { gate.gi = n; gate.prev = undefined; const g = active.gates[n]; Object.assign(car, { x: g[0] - g[2] * 5, z: g[1] - g[3] * 5, hx: g[2], hz: g[3], vx: g[2] * 20, vz: g[3] * 20 }); return n; } };
 start();

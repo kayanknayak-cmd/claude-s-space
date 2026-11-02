@@ -34,6 +34,8 @@ export const CATALOG = {
   // the railway
   rail: m(TK, 'railroad-straight'), loco: m(TK, 'train-locomotive-a'), wagonA: m(TK, 'train-carriage-container-red'),
   wagonB: m(TK, 'train-carriage-wood'), wagonC: m(TK, 'train-carriage-tank'),
+  // crash debris
+  ...Object.fromEntries(['bumper', 'door', 'door-window', 'tire', 'plate-a', 'plate-b', 'spoiler-a', 'bolt', 'nut'].map(k => ['deb:' + k, m(CK, 'debris-' + k)])),
   // cars
   ...Object.fromEntries(['race', 'race-future', 'sedan-sports', 'hatchback-sports', 'police', 'sedan', 'taxi', 'suv', 'suv-luxury', 'van',
     'delivery', 'truck', 'ambulance', 'firetruck', 'garbage-truck', 'tractor', 'kart-oobi'].map(k => ['car:' + k, m(CK, k)])),

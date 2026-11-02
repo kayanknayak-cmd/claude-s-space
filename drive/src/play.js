@@ -33,11 +33,22 @@ function carModel(key, ghostTint) {
     pivot.position.copy(c); parent.add(pivot); pivot.add(spin); spin.add(w); w.position.sub(c);
     wheels.push(spin); if (n.includes('front')) front.push(pivot);
   }
+  // body meshes get their own float geometry so they can be dented, with the original kept for repairs
+  const dentable = [];
+  if (!ghostTint) {
+    g.updateMatrixWorld(true);
+    o.traverse(m => {
+      if (!m.isMesh || wheels.some(w => w === m || w.getObjectById(m.id))) return;
+      m.geometry = floatGeo(m.geometry);
+      const toCar = new THREE.Matrix4().copy(g.matrixWorld).invert().multiply(m.matrixWorld);
+      dentable.push({ m, toCar, fromCar: toCar.clone().invert(), orig: m.geometry.attributes.position.array.slice() });
+    });
+  }
   o.traverse(m => {
     if (!m.isMesh) return;
     if (ghostTint) { m.material = m.material.clone(); m.material.transparent = true; m.material.opacity = .4; m.material.depthWrite = false; m.material.emissive = new THREE.Color(ghostTint); m.castShadow = false; }
   });
-  g.userData = { body, wheels, front, bob: 0, bobV: 0, pitch: 0, roll: 0 };
+  g.userData = { body, wheels, front, dentable, bob: 0, bobV: 0, pitch: 0, roll: 0 };
   scene.add(g);
   return g;
 }
@@ -418,7 +429,66 @@ function finishEvent() {
   showResults(e, { time, prev, isBest, place, field, prize });
   for (const m of aiMeshes) m.userData.done = 1;
 }
-function repairMesh() { /* dents are drawn in the damage pass */ }
+// ---------- damage you can see: dents, flying debris, smoke and fire ----------
+// where each side is hit, in the car's own space (it faces +z; its left is +x)
+const HIT = { front: [0, .7, 2.2, 0, 0, -1], rear: [0, .7, -2.2, 0, 0, 1], left: [1.15, .7, 0, -1, 0, 0], right: [-1.15, .7, 0, 1, 0, 0] };
+function dent(mesh, zone, amount) {
+  const [hx, hy, hz, nx, ny, nz] = HIT[zone], R = 1.5, depth = Math.min(.45, amount * 2.2);
+  for (const d of mesh.userData.dentable) {
+    const pos = d.m.geometry.attributes.position, a = pos.array;
+    for (let i = 0; i < pos.count; i++) {
+      V3.set(a[i * 3], a[i * 3 + 1], a[i * 3 + 2]).applyMatrix4(d.toCar);
+      // a little jitter per vertex, so a dent crumples instead of moving as one slab
+      const dx = V3.x - hx - (Math.random() - .5) * .3, dy = V3.y - hy, dz = V3.z - hz, dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist > R) continue;
+      const k = (1 - dist / R) * (1 - dist / R) * depth;
+      V3.x += nx * k; V3.y += ny * k - k * .25; V3.z += nz * k;
+      V3.applyMatrix4(d.fromCar);
+      a[i * 3] = V3.x; a[i * 3 + 1] = V3.y; a[i * 3 + 2] = V3.z;
+    }
+    pos.needsUpdate = true; d.m.geometry.computeVertexNormals();
+  }
+}
+function repairMesh() {
+  for (const d of carMesh.userData.dentable) { d.m.geometry.attributes.position.array.set(d.orig); d.m.geometry.attributes.position.needsUpdate = true; d.m.geometry.computeVertexNormals(); }
+}
+const DEBRIS = { front: ['deb:bumper', 'deb:plate-a', 'deb:bolt', 'deb:nut'], rear: ['deb:bumper', 'deb:spoiler-a', 'deb:plate-b'], left: ['deb:door', 'deb:door-window', 'deb:bolt'], right: ['deb:door', 'deb:door-window', 'deb:nut'] };
+const debris = [];
+function shed(c, zone, amount) {
+  const n = amount > .12 ? 3 : amount > .06 ? 2 : 1, [hx, , hz] = HIT[zone];
+  for (let i = 0; i < n; i++) {
+    const list = amount > .2 && i === 0 ? ['deb:tire'] : DEBRIS[zone];
+    const m = mk(list[Math.floor(Math.random() * list.length)]);
+    m.scale.setScalar(CAR_SCALE);
+    // spawn at the hit side, in world space
+    const wx = c.x + c.hx * hz + -c.hz * -hx, wz = c.z + c.hz * hz + c.hx * -hx;
+    m.position.set(wx, c.y + .6, wz);
+    m.userData = { v: new THREE.Vector3(c.vx * .6 + (Math.random() - .5) * 8, 4 + Math.random() * 5, c.vz * .6 + (Math.random() - .5) * 8), w: new THREE.Vector3(Math.random() * 9, Math.random() * 9, Math.random() * 9), t: 0 };
+    scene.add(m); debris.push(m);
+    if (debris.length > 40) scene.remove(debris.shift());
+  }
+}
+function stepDebris(dt) {
+  for (let i = debris.length - 1; i >= 0; i--) {
+    const m = debris[i], u = m.userData;
+    u.t += dt;
+    if (u.t > 25) { scene.remove(m); debris.splice(i, 1); continue; }
+    if (u.rest) continue;
+    u.v.y -= G * dt; m.position.addScaledVector(u.v, dt);
+    m.rotation.x += u.w.x * dt; m.rotation.y += u.w.y * dt; m.rotation.z += u.w.z * dt;
+    const g = groundAt(W, m.position.x, m.position.z);
+    if (m.position.y < g) { m.position.y = g; u.v.y *= -.3; u.v.x *= .55; u.v.z *= .55; u.w.multiplyScalar(.5); if (Math.abs(u.v.y) < .6 && Math.hypot(u.v.x, u.v.z) < .5) u.rest = 1; }
+  }
+}
+// a damaged engine smokes from under the bonnet: grey, then black, then it burns
+function engineSmoke(c, mesh, dt) {
+  const e = c.dmg.engine;
+  if (e < .4 || Math.random() > dt * (e > .75 ? 40 : 18)) return;
+  const p = new THREE.Vector3(c.x + c.hx * 1.5, c.y + 1.2, c.z + c.hz * 1.5);
+  const dark = e > .75 ? '#3a3a3e' : '#9a9a9a';
+  puff(p, dark, 1.2, 2.2, new THREE.Vector3((Math.random() - .5) * 1.5 - c.vx * .3, 2.2, (Math.random() - .5) * 1.5 - c.vz * .3), false, 2.8);
+  if (c.stalled || e > .9) puff(p, Math.random() < .5 ? '#ff7a1a' : '#ffcf3a', .7, .35, new THREE.Vector3((Math.random() - .5), 2.5, (Math.random() - .5)), true, .4);
+}
 function verifyRun(e, model, rle, setup) { const r = replayRace(W, e, model, setup || {}, decodeInputs(rle)); return r; }
 
 // ---------- credits and driver level ----------
@@ -537,6 +607,11 @@ function effects(evs, dt) {
       play(e.m > 9 ? 'crash' : 'bump', Math.min(1, .2 + e.m / 14)); if (e.m > 12) play('metal', .4);
       shake = Math.max(shake, Math.min(.7, e.m * .045));
       for (let i = 0; i < Math.min(16, e.m); i++) puff(new THREE.Vector3(car.x + car.hx * 2, car.y + .8, car.z + car.hz * 2), '#ffd27a', .35, .3, new THREE.Vector3((Math.random() - .5) * 9, Math.random() * 5, (Math.random() - .5) * 9), true, .2);
+    } else if (e.t === 'damage') {
+      dent(carMesh, e.zone, e.a);
+      if (e.a > .035) { shed(car, e.zone, e.a); play('glass', Math.min(.8, .3 + e.a * 3)); play('crunch', Math.min(.7, .3 + e.a * 3)); }
+      if (car.dmg.engine > .8 && !effects.warned) { effects.warned = 1; toast('Engine badly damaged. Repair it in the garage (G).', 3500); }
+    } else if (e.t === 'stall') { toast('Engine dead. Press R for a tow.', 4000); play('metal', .6);
     } else if (e.t === 'land') {
       play('land', Math.min(1, e.m / 14)); shake = Math.max(shake, Math.min(.5, e.m * .03));
       carMesh.userData.bobV -= e.m * .9;
