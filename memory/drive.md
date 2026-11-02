@@ -4,6 +4,12 @@ Built Oct 31 from the owner's answers: "mini Forza Horizon, but you can always j
 everything", computer first (keyboard, gamepad), arcade drift handling. Published:
 https://claude.ai/artifact/23nQtNRt6EDqaG6QzQrbsP (db + user capabilities, see Publish). No owner feedback yet.
 
+## Owner feedback and next direction (Nov 2)
+- Owner: "it's looking freaking awesome". Next: make it more like War Thunder / Forza. Answers: from War Thunder,
+  better graphics and sound effects plus a damage model (no tanks, no planes, no research tree); from Forza,
+  weightier handling, upgrades and tuning, credits and progression; opponents are AI bots; visuals more realistic.
+- Build order: tire/weight physics, damage, AI racers, credits/upgrades/tuning, graphics pass, sound pass.
+
 ## What it is
 - A 2.9 km island (240 x 240 road tiles of 12 m): downtown towers, suburbs with cul-de-sacs, a park, industrial docks
   with ships, farms with corn rows, windmills and a railway, forests, mountains with a pass road, beaches, a river

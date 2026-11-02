@@ -2,6 +2,10 @@
 
 Newest first. One or two lines per decision, request or lesson, so later sessions can see how things got here.
 
+## Nov 2
+- Owner loves Sunday Drive; wants it more like War Thunder/Forza: realistic graphics and sfx, damage model, weightier
+  handling, upgrades/tuning, credits/progression, AI opponents (memory/drive.md).
+
 ## Oct 31
 - Owner said "implement all changes": built Sunday Drive (all 5 phases) in `drive/`, published. A usage limit
   and a worker restart interrupted the session once; commit early on long builds.
