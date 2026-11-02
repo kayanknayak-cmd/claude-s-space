@@ -26,7 +26,8 @@ function frame() {
   stepParts(dt);
   uiTick();
   if (frame.n++ % 3 === 0) drawMini();
-  renderer.render(scene, camera);
+  stepClouds(dt); stepWater(dt); watchFps(dt);
+  render();
   requestAnimationFrame(frame);
 }
 frame.n = 0;
@@ -52,13 +53,14 @@ async function start() {
   camPos.set(car.x - car.hx * 10, car.y + 5, car.z - car.hz * 10); camAt.set(car.x, car.y, car.z);
   renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  setupPost();
   uiHeads(); uiCredits(0); setupTouch();
   if (!save.helped) $('help').hidden = false;
   $('load').classList.add('gone');
   readLink(); online();
   requestAnimationFrame(frame);
 }
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); if (composer) composer.setSize(innerWidth, innerHeight); });
 window.__drive = { scene, renderer, THREE, get car() { return car; }, get mode() { return mode; }, keys, begin: id => begin(EV.list.find(e => e.id === id)), get W() { return W; }, cam: v => { camMode = v; },
   // test hook: put the car just before gate n of the running event, moving through it
   go() { countT = 3; return 1; },

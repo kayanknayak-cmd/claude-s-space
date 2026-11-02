@@ -46,6 +46,8 @@ function carModel(key, ghostTint) {
   }
   o.traverse(m => {
     if (!m.isMesh) return;
+    // glossy clear-coat paint that reflects the sky (bodies only; wheels stay matte)
+    if (!ghostTint && quality !== 'low' && dentable.some(d => d.m === m)) m.material = new THREE.MeshPhysicalMaterial({ map: m.material.map, color: m.material.color, roughness: .42, metalness: .15, clearcoat: 1, clearcoatRoughness: .07 });
     if (ghostTint) { m.material = m.material.clone(); m.material.transparent = true; m.material.opacity = .4; m.material.depthWrite = false; m.material.emissive = new THREE.Color(ghostTint); m.castShadow = false; }
   });
   g.userData = { body, wheels, front, dentable, bob: 0, bobV: 0, pitch: 0, roll: 0 };

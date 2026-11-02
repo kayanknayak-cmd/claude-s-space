@@ -7,33 +7,103 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
 renderer.shadowMap.enabled = !LITE;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-// no tone mapping: Kenney's palette is meant to be shown as is (ACES washed it out)
+// Filmic tone mapping with a colour grade afterwards (see post below), so the sky can be physically bright and
+// Kenney's colours still come through rich.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = .7;
+const GFX = (() => { try { return localStorage.getItem('sundaydrive.gfx') || 'auto'; } catch { return 'auto'; } })();
+let quality = LITE ? 'low' : GFX === 'auto' ? 'high' : GFX;
+if (quality === 'low') { renderer.setPixelRatio(1); renderer.toneMappingExposure = 1; }
 const scene = new THREE.Scene();
-const HORIZON = new THREE.Color('#cfe6ee'), ZENITH = new THREE.Color('#4f9fd9');
-scene.fog = new THREE.Fog(HORIZON, 240, 860);
-const camera = new THREE.PerspectiveCamera(62, 1, .5, 1400);
+const HORIZON = new THREE.Color('#b8d2e2');
+scene.fog = new THREE.FogExp2(HORIZON, .0008);
+const camera = new THREE.PerspectiveCamera(62, 1, .5, 2200);
 
-// sky dome: vertical gradient and a warm glow around the sun
-const SUN_DIR = new THREE.Vector3(-.55, .62, .56).normalize();
-const sky = new THREE.Mesh(new THREE.SphereGeometry(1200, 32, 16), new THREE.ShaderMaterial({
-  side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { top: { value: ZENITH }, bot: { value: HORIZON }, sun: { value: SUN_DIR } },
-  vertexShader: 'varying vec3 v; void main(){ v = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `uniform vec3 top, bot, sun; varying vec3 v;
-    void main(){ float h = clamp(v.y * 1.6, 0.0, 1.0); vec3 c = mix(bot, top, pow(h, .7));
-      float s = max(dot(v, sun), 0.0); c += vec3(1.0, .82, .55) * (pow(s, 24.0) * .5 + pow(s, 900.0) * 2.0);
-      gl_FragColor = vec4(c, 1.0); }`,
-}));
-sky.renderOrder = -1;
+// a physically based sky (Preetham); it also lights everything through an environment map
+const SUN_DIR = new THREE.Vector3(-.55, .5, .56).normalize();
+const sky = new Sky();
+sky.scale.setScalar(1800);
+Object.assign(sky.material.uniforms.turbidity, { value: 3.2 }); sky.material.uniforms.rayleigh.value = 1.1;
+sky.material.uniforms.mieCoefficient.value = .004; sky.material.uniforms.mieDirectionalG.value = .86;
+sky.material.uniforms.sunPosition.value.copy(SUN_DIR).multiplyScalar(1000);
 scene.add(sky);
-scene.add(new THREE.HemisphereLight('#d6ecff', '#7f9468', .95));
-const sun = new THREE.DirectionalLight('#fff0d4', 2.2);
+{
+  const pm = new THREE.PMREMGenerator(renderer), env = new THREE.Scene(), s2 = new Sky();
+  s2.scale.setScalar(1000); for (const k in sky.material.uniforms) s2.material.uniforms[k].value = sky.material.uniforms[k].value;
+  env.add(s2);
+  scene.environment = pm.fromScene(env, 0, .1, 2000).texture;
+  scene.environmentIntensity = .5;
+}
+scene.add(new THREE.HemisphereLight('#fff0d8', '#8c8466', .55));
+const sun = new THREE.DirectionalLight('#ffe9cc', 3.4);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(quality === 'low' ? 1024 : 2048, quality === 'low' ? 1024 : 2048);
 const SH = 70;
 Object.assign(sun.shadow.camera, { left: -SH, right: SH, top: SH, bottom: -SH, near: 1, far: 400 });
-sun.shadow.bias = -.0005; sun.shadow.normalBias = .06;
+sun.shadow.bias = -.0005; sun.shadow.normalBias = .06; sun.shadow.radius = 3;
 scene.add(sun, sun.target);
+
+// clouds: soft procedural sprites high up, drifting slowly with the wind
+const cloudTex = (() => {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 26; i++) {
+    const cx = 40 + Math.random() * 176, cy = 64 + (Math.random() - .5) * 30, r = 18 + Math.random() * 30;
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 128);
+  }
+  return new THREE.CanvasTexture(c);
+})();
+const clouds = [];
+for (let i = 0; i < 46; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, depthWrite: false, fog: false, opacity: .85 }));
+  s.position.set(Math.random() * 4400 - 800, 380 + Math.random() * 200, Math.random() * 4400 - 800);
+  s.scale.set(380 + Math.random() * 260, 150 + Math.random() * 90, 1);
+  scene.add(s); clouds.push(s);
+}
+function stepClouds(dt) { for (const s of clouds) { s.position.x += dt * 4; if (s.position.x > 3600) s.position.x -= 4400; } }
+
+// post: ambient occlusion (high), a touch of bloom, a colour grade (saturation, contrast, warmth, vignette)
+const GRADE = {
+  uniforms: { tDiffuse: { value: null }, sat: { value: 1.15 }, con: { value: 1.06 }, vig: { value: .32 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float sat, con, vig; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(tDiffuse, vUv); float l = dot(c.rgb, vec3(.2126, .7152, .0722));
+      c.rgb = mix(vec3(l), c.rgb, sat); c.rgb = (c.rgb - .5) * con + .5; c.rgb *= vec3(1.04, 1.0, .95);
+      vec2 d = vUv - .5; c.rgb *= 1.0 - vig * dot(d, d) * 1.6; gl_FragColor = c; }`,
+};
+let composer = null, aoPass = null;
+function setupPost() {
+  if (quality === 'low') { composer = null; return; }
+  const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+  aoPass = new GTAOPass(scene, camera, innerWidth, innerHeight);
+  aoPass.updateGtaoMaterial({ radius: 1.2, distanceExponent: 1.4, thickness: 1.2, scale: 1, samples: 12 });
+  aoPass.blendIntensity = .8; aoPass.enabled = quality === 'high';
+  composer.addPass(aoPass);
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), .16, .45, .95));
+  composer.addPass(new OutputPass());
+  composer.addPass(new ShaderPass(GRADE));
+}
+function render() { if (composer) composer.render(); else renderer.render(scene, camera); }
+// keep frame rate up: step quality down after a few slow seconds (only when set to auto)
+let fpsAvg = 60, slowT = 0;
+function watchFps(dt) {
+  fpsAvg += (1 / Math.max(dt, 1e-3) - fpsAvg) * .05;
+  if (GFX !== 'auto' || LITE) return;
+  slowT = fpsAvg < (quality === 'high' ? 45 : 36) ? slowT + dt : 0;
+  if (slowT > 4 && quality !== 'low') {
+    slowT = 0;
+    if (quality === 'high') { quality = 'medium'; aoPass.enabled = false; }
+    else { quality = 'low'; composer = null; renderer.setPixelRatio(1); }
+    toast(`Graphics set to ${quality} to keep it smooth.`, 2500);
+  }
+}
+function setQuality(q) {
+  try { localStorage.setItem('sundaydrive.gfx', q); } catch {}
+  location.reload();
+}
 // The shadow box follows the car but moves in whole shadow texels, so edges don't crawl or flicker.
 const LR = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), SUN_DIR).normalize(), LU = new THREE.Vector3().crossVectors(SUN_DIR, LR);
 function aimSun(p) {
@@ -68,7 +138,8 @@ const matCache = new Map();
 function lambert(m) {
   const key = m.uuid + (m.map ? m.map.uuid : '');
   if (matCache.has(key)) return matCache.get(key);
-  const l = new THREE.MeshLambertMaterial({ color: m.color, map: m.map || null, transparent: m.transparent, opacity: m.opacity, side: m.side });
+  const l = quality === 'low' ? new THREE.MeshLambertMaterial({ color: m.color, map: m.map || null, transparent: m.transparent, opacity: m.opacity, side: m.side })
+    : new THREE.MeshStandardMaterial({ color: m.color, map: m.map || null, transparent: m.transparent, opacity: m.opacity, side: m.side, roughness: .82, metalness: 0 });
   matCache.set(key, l);
   return l;
 }
@@ -135,6 +206,24 @@ function batcher() {
   };
 }
 
+// ---------- water ----------
+let water = null;
+// a tiling normal map from summed sine ripples, drawn once
+function waterNormals() {
+  const n = 256, c = document.createElement('canvas'); c.width = c.height = n;
+  const x = c.getContext('2d'), img = x.createImageData(n, n), h = new Float32Array(n * n);
+  const waves = Array.from({ length: 9 }, () => [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6), Math.random() * 6.28, .4 + Math.random()]);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) { let v = 0; for (const [a, b, p, w] of waves) v += Math.sin((i * a + j * b) / n * 6.2832 + p) * w; h[j * n + i] = v; }
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const dx = h[j * n + (i + 1) % n] - h[j * n + (i + n - 1) % n], dz = h[((j + 1) % n) * n + i] - h[((j + n - 1) % n) * n + i], k = (j * n + i) * 4;
+    const l = Math.hypot(dx, dz, 2); img.data[k] = (-dx / l * .5 + .5) * 255; img.data[k + 1] = (-dz / l * .5 + .5) * 255; img.data[k + 2] = (2 / l * .5 + .5) * 255; img.data[k + 3] = 255;
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+function stepWater(dt) { if (water) { water.material.normalMap.offset.x += dt * .004; water.material.normalMap.offset.y += dt * .0025; } }
+
 // ---------- terrain ----------
 const TC = 8, TS = SIZE / TC;          // 8 x 8 chunks of 360 m
 const GROUND = { F: '#5f9a4e', m: '#87956a', f: '#9fb85c', b: '#e6d49c', s: '#7fb45c', d: '#a8aca2', i: '#a3a298', p: '#74b257', r: '#7eb85e', '~': '#d9c88f' };
@@ -158,7 +247,7 @@ function terrainColor(x, z, h, out) {
   return out;
 }
 function buildTerrain(root) {
-  const D = T / HG, per = TS / D, mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const D = T / HG, per = TS / D, mat = quality === 'low' ? new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: .95, metalness: 0 });
   const col = new THREE.Color();
   for (let cj = 0; cj < TC; cj++) for (let ci = 0; ci < TC; ci++) {
     const geo = new THREE.PlaneGeometry(TS, TS, per, per).rotateX(-Math.PI / 2);
@@ -179,7 +268,9 @@ function buildTerrain(root) {
   }
   // the sea, past the island in every direction; shiny enough to catch the sun
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(SIZE * 3, SIZE * 3).rotateX(-Math.PI / 2),
-    new THREE.MeshPhongMaterial({ color: '#2e8fc9', shininess: 90, specular: '#cfefff', transparent: true, opacity: .9 }));
+    new THREE.MeshStandardMaterial({ color: '#175a80', roughness: .16, metalness: 0, envMapIntensity: .55, normalMap: waterNormals(), normalScale: new THREE.Vector2(.45, .45), transparent: true, opacity: .93 }));
+  sea.material.normalMap.repeat.set(220, 220);
+  water = sea;
   sea.position.set(SIZE / 2, WATER, SIZE / 2);
   sea.receiveShadow = true;
   root.add(sea);

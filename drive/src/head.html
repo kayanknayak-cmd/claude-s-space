@@ -48,6 +48,8 @@
   .rows { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; margin: 10px 0 16px; font-weight: 700; }
   .rows b { font-family: var(--display); font-weight: normal; font-variant-numeric: tabular-nums; text-align: right; }
   .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .gfx { display: flex; gap: 6px; align-items: center; margin: 4px 0 12px; font-size: 13px; } .gfx span { margin-right: 4px; opacity: .7; }
+  .gfx button { padding: 6px 10px; border-radius: 9px; background: #ece4d2; font-weight: 700; font-size: 12px; } .gfx button.on { background: var(--sun); color: #fff; }
   .btn { padding: 11px 16px; border-radius: 12px; background: #ece4d2; font-weight: 700; box-shadow: 0 3px 0 var(--shade); }
   .btn.go { background: var(--sun); color: #fff; }
   .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--shade); }
@@ -132,6 +134,7 @@
   <span><kbd>Shift</kbd></span><span>Boost (drifting and airtime fill the meter)</span><span><kbd>E</kbd></span><span>Start an event when you're in its ring</span>
   <span><kbd>R</kbd></span><span>Back on the road</span><span><kbd>C</kbd></span><span>Camera distance</span><span><kbd>M</kbd> <kbd>G</kbd></span><span>Map, garage</span><span><kbd>Esc</kbd></span><span>Leave an event</span></div>
   <p>A gamepad works too: left stick, triggers, A for handbrake, B for boost.</p>
+  <div class="gfx" id="gfx"><span>Graphics</span><button data-q="auto">Auto</button><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
   <div class="acts"><button class="btn go" id="hclose">Let's drive</button></div></div></div>
 <div id="load">Sunday Drive<small id="loadmsg">Building the island</small></div>
 <script type="importmap">

@@ -320,6 +320,7 @@ function readLink() {
 // ---------- help ----------
 function toggleHelp() { $('help').hidden = !$('help').hidden; if ($('help').hidden) { save.helped = 1; persist(); } }
 $('hclose').onclick = () => { ac(); toggleHelp(); };
+for (const b of $('gfx').querySelectorAll('button')) { b.classList.toggle('on', b.dataset.q === GFX); b.onclick = () => { if (b.dataset.q !== GFX) setQuality(b.dataset.q); }; }
 $('bhelp').onclick = () => { ac(); toggleHelp(); };
 
 // ---------- touch controls (phones): steer with the left thumb, pedals and buttons on the right ----------

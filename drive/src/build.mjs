@@ -67,7 +67,7 @@ for (const [k, f] of Object.entries(ICONS)) icons[k] = 'data:image/svg+xml;base6
 const strip = s => s.replace(/^import .*$/mg, '').replace(/^export /mg, '');
 const read = f => fs.readFileSync(path.join(DIR, f), 'utf8');
 const code = [
-  "import * as THREE from 'three';\nimport { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';\nimport { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';",
+  "import * as THREE from 'three';\nimport { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';\nimport { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';\nimport { Sky } from 'three/addons/objects/Sky.js';\nimport { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';\nimport { RenderPass } from 'three/addons/postprocessing/RenderPass.js';\nimport { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';\nimport { OutputPass } from 'three/addons/postprocessing/OutputPass.js';\nimport { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';\nimport { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';",
   ...['world.mjs', 'car.mjs', 'events.mjs', 'ai.mjs', 'race.mjs'].map(f => strip(read(f))),
   'const MODELS = ' + JSON.stringify(models) + ';',
   'const TEX = ' + JSON.stringify(TEX) + ';',
